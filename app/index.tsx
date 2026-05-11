@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MenuButton } from "../src/presentation/components/MenuButton";
@@ -83,9 +83,10 @@ export default function HomeScreen() {
               onPress={() => router.push("/clientes")}
             />
             <MenuButton
-              title="Nueva venta"
-              icon="cart-plus"
-              color="#2ecc71"
+              title="Nueva Venta"
+              icon="plus-circle"
+              color="#2B8EF0"
+              // Esta ruta debe coincidir con el nombre del archivo que creamos arriba
               onPress={() => router.push("/nueva-venta")}
             />
             <MenuButton
