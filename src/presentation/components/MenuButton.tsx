@@ -1,39 +1,41 @@
-import { MaterialCommunityIcons } from "@expo/vector-icons"; // Expo ya lo trae
-import { StyleSheet, Text, TouchableOpacity } from "react-native";
+// MenuButton.tsx migrado
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { TouchableOpacity } from "react-native";
+import { useTheme } from "../../theme";
+import { AppText } from "./ui/AppText";
 
 interface Props {
   title: string;
   icon: string;
   onPress: () => void;
-  color?: string;
 }
 
-export const MenuButton = ({ title, icon, onPress }: Props) => (
-  <TouchableOpacity style={styles.button} onPress={onPress}>
-    <MaterialCommunityIcons name={icon as any} size={50} color="black" />
-    <Text style={styles.text}>{title}</Text>
-  </TouchableOpacity>
-);
+export const MenuButton = ({ title, icon, onPress }: Props) => {
+  const { colors, sizes, radius, shadows, spacing } = useTheme();
 
-const styles = StyleSheet.create({
-  button: {
-    width: "47%", // ← sin margin, el width controla el espacio
-    height: 130,
-    backgroundColor: "#45B5FA",
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-    shadowColor: "#1A6FC4",
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.18,
-    shadowRadius: 6,
-  },
-  text: {
-    marginTop: 8,
-    fontWeight: "700",
-    fontSize: 14,
-    color: "#0F172A",
-    textAlign: "center",
-  },
-});
+  return (
+    <TouchableOpacity
+      style={{
+        width: "47%",
+        height: sizes.menuCardHeight,
+        backgroundColor: colors.cardBlue,
+        borderRadius: radius.xl,
+        justifyContent: "center",
+        alignItems: "center",
+        gap: spacing.xs,
+        ...shadows.primary,
+      }}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <MaterialCommunityIcons
+        name={icon as any}
+        size={sizes.iconXxl}
+        color={colors.ink}
+      />
+      <AppText variant="label" color={colors.ink}>
+        {title}
+      </AppText>
+    </TouchableOpacity>
+  );
+};

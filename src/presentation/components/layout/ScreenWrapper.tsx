@@ -2,28 +2,21 @@ import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StatusBar,
+  Text,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-
-const COLORS = {
-  BLUE: "#2B8EF0",
-  GRAY_BG: "#F0F4FA",
-  GRAY_BORDER: "#DDE3EE",
-  GRAY_TEXT: "#8492A6",
-  WHITE: "#FFFFFF",
-};
+import { useTheme } from "../../../theme";
 
 interface Props {
   children: React.ReactNode;
   showBackButton?: boolean;
+  title?: string;
   labelBtnA?: string;
   labelBtnB?: string;
   onPressBtnA?: () => void;
@@ -35,6 +28,7 @@ interface Props {
 export const ScreenWrapper = ({
   children,
   showBackButton = true,
+  title,
   labelBtnA = "volver",
   labelBtnB = "continuar",
   onPressBtnA,
@@ -44,89 +38,109 @@ export const ScreenWrapper = ({
 }: Props) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { colors, typography, spacing, shadows, sizes } = useTheme();
 
   return (
-    <View style={styles.mainWrapper}>
+    <View style={{ flex: 1, backgroundColor: colors.grayBg }}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor={COLORS.WHITE}
+        backgroundColor={colors.white}
         translucent
       />
 
       {/* HEADER */}
       <View
         style={[
-          styles.header,
           {
-            paddingTop: insets.top + 8,
+            backgroundColor: colors.white,
+            paddingHorizontal: spacing.sm,
+            paddingBottom: spacing.md,
+            ...shadows.md,
           },
+          { paddingTop: insets.top + 8 },
         ]}
       >
-        <View style={styles.headerRow}>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
           {/* BOTÓN A */}
-          <View
-            style={[
-              styles.sideSlot,
-              {
-                alignItems: "flex-start",
-              },
-            ]}
-          >
+          <View style={{ width: 100, alignItems: "flex-start" }}>
             {showBackButton && showBtnA && labelBtnA ? (
               <TouchableOpacity
-                style={styles.backBtn}
+                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
                 activeOpacity={0.7}
                 onPress={onPressBtnA ?? (() => router.back())}
               >
                 <Feather
                   name="chevron-left"
-                  size={22}
-                  color={COLORS.GRAY_TEXT}
+                  size={sizes.iconMd}
+                  color={colors.grayText}
                 />
-
-                <Text style={styles.backText}>{labelBtnA}</Text>
+                <Text
+                  style={{
+                    fontSize: typography.size.lg,
+                    fontWeight: typography.weight.regular,
+                    color: colors.grayText,
+                  }}
+                >
+                  {labelBtnA}
+                </Text>
               </TouchableOpacity>
             ) : (
-              <View style={styles.spacer} />
+              <View style={{ width: 100, height: 46 }} />
             )}
           </View>
 
           {/* LOGO */}
-          <View style={styles.logoContainer}>
+          <View
+            style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
+          >
             <MaterialCommunityIcons
               name="receipt-text-check-outline"
               size={36}
-              color={COLORS.BLUE}
+              color={colors.primary}
             />
-
-            <Text style={styles.logoText}>Fácil</Text>
+            <Text
+              style={{
+                fontSize: typography.size.xxl,
+                fontWeight: typography.weight.black,
+                color: colors.primary,
+                marginTop: -4,
+              }}
+            >
+              Fácil
+            </Text>
           </View>
 
           {/* BOTÓN B */}
-          <View
-            style={[
-              styles.sideSlot,
-              {
-                alignItems: "flex-end",
-              },
-            ]}
-          >
+          <View style={{ width: 100, alignItems: "flex-end" }}>
             {showBtnB && labelBtnB ? (
               <TouchableOpacity
-                style={styles.backBtn}
+                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
                 activeOpacity={0.7}
                 onPress={onPressBtnB}
               >
-                <Text style={styles.backText}>{labelBtnB}</Text>
-
+                <Text
+                  style={{
+                    fontSize: typography.size.lg,
+                    fontWeight: typography.weight.regular,
+                    color: colors.grayText,
+                  }}
+                >
+                  {labelBtnB}
+                </Text>
                 <Feather
                   name="chevron-right"
-                  size={22}
-                  color={COLORS.GRAY_TEXT}
+                  size={sizes.iconMd}
+                  color={colors.grayText}
                 />
               </TouchableOpacity>
             ) : (
-              <View style={styles.spacer} />
+              <View style={{ width: 100, height: 46 }} />
             )}
           </View>
         </View>
@@ -138,83 +152,32 @@ export const ScreenWrapper = ({
         style={{ flex: 1 }}
       >
         <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingBottom: insets.bottom + 20,
-            },
-          ]}
+          contentContainerStyle={{
+            flexGrow: 1,
+            paddingBottom: insets.bottom + spacing.lg,
+          }}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* TÍTULO */}
+          {title && (
+            <Text
+              style={{
+                fontSize: typography.size.xxl,
+                fontWeight: typography.weight.extraBold,
+                color: colors.ink,
+                paddingHorizontal: spacing.lg,
+                paddingTop: spacing.lg,
+                paddingBottom: spacing.xs,
+              }}
+            >
+              {title}
+            </Text>
+          )}
+
           {children}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 };
-
-const styles = StyleSheet.create({
-  mainWrapper: {
-    flex: 1,
-    backgroundColor: COLORS.GRAY_BG,
-  },
-
-  header: {
-    backgroundColor: COLORS.WHITE,
-    paddingHorizontal: 12,
-    paddingBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.05,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  sideSlot: {
-    width: 100,
-  },
-
-  spacer: {
-    width: 100,
-    height: 46,
-  },
-
-  backBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 2,
-  },
-
-  backText: {
-    fontSize: 18,
-    fontWeight: "400",
-    color: COLORS.GRAY_TEXT,
-  },
-
-  logoContainer: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  logoText: {
-    fontSize: 28,
-    fontWeight: "900",
-    color: COLORS.BLUE,
-    marginTop: -4,
-  },
-
-  scrollContent: {
-    flexGrow: 1,
-  },
-});

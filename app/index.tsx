@@ -4,74 +4,139 @@ import React from "react";
 import {
   ScrollView,
   StatusBar,
-  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MenuButton } from "../src/presentation/components/MenuButton";
-
-const COLORS = {
-  BLUE: "#2B8EF0",
-  GRAY_BG: "#F0F4FA",
-  GRAY_BORDER: "#DDE3EE",
-  GRAY_TEXT: "#8492A6",
-  WHITE: "#FFFFFF",
-  INK: "#0F172A",
-};
+import { useTheme } from "../src/theme";
 
 export default function HomeScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets(); // Detecta el tamaño real del notch/barra de estado
+  const insets = useSafeAreaInsets();
+  const { colors, typography, spacing, radius, shadows, sizes } = useTheme();
 
   return (
-    <View style={styles.mainWrapper}>
-      {/* StatusBar configurada para Android e iOS */}
+    <View style={{ flex: 1, backgroundColor: colors.white }}>
       <StatusBar
         barStyle="dark-content"
-        backgroundColor={COLORS.WHITE}
+        backgroundColor={colors.white}
         translucent
       />
 
-      {/* HEADER: El padding superior se ajusta dinámicamente al dispositivo */}
-      <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-        <Text style={styles.dateText}>lun 20 oct | 10:10 am</Text>
+      {/* HEADER */}
+      <View
+        style={{
+          backgroundColor: colors.white,
+          paddingHorizontal: spacing.lg,
+          paddingBottom: spacing.md,
+          paddingTop: insets.top + 10,
+        }}
+      >
+        {/* Fecha */}
+        <Text
+          style={{
+            textAlign: "center",
+            fontSize: typography.size.xs,
+            fontWeight: typography.weight.medium,
+            color: colors.grayText,
+            letterSpacing: 0.5,
+            marginBottom: spacing.xs,
+          }}
+        >
+          lun 20 oct | 10:10 am
+        </Text>
 
-        <View style={styles.headerRow}>
-          <View style={styles.logoContainer}>
+        {/* Logo + Ajustes */}
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: spacing.xs,
+            }}
+          >
             <MaterialCommunityIcons
               name="receipt-text-check-outline"
-              size={50} // Ajustado un poco para mejor balance
-              color={COLORS.BLUE}
+              size={sizes.iconXxl}
+              color={colors.primary}
             />
-            <Text style={styles.logoText}>Fácil</Text>
+            <Text
+              style={{
+                fontSize: typography.size.hero,
+                fontWeight: typography.weight.black,
+                color: colors.primary,
+                letterSpacing: typography.letterSpacing.tight,
+              }}
+            >
+              Fácil
+            </Text>
           </View>
 
           <TouchableOpacity
-            style={styles.settingsBtn}
+            style={{
+              width: 55,
+              height: 55,
+              borderRadius: radius.md,
+              borderWidth: 1.5,
+              borderColor: colors.grayBorder,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: colors.white,
+            }}
             activeOpacity={0.7}
             onPress={() => console.log("Ajustes")}
           >
-            <Feather name="sliders" size={30} color={COLORS.INK} />
+            <Feather name="sliders" size={sizes.iconLg} color={colors.ink} />
           </TouchableOpacity>
         </View>
       </View>
 
-      <View style={styles.divider} />
+      {/* Divider */}
+      <View
+        style={{
+          height: 1,
+          backgroundColor: colors.grayBorder,
+        }}
+      />
 
-      {/* CONTENIDO: Con fondo gris y scroll suave */}
-      <View style={styles.contentWrapper}>
+      {/* CONTENIDO */}
+      <View style={{ flex: 1, backgroundColor: colors.grayBg }}>
         <ScrollView
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: insets.bottom + 20 },
-          ]}
+          contentContainerStyle={{
+            paddingHorizontal: spacing.lg,
+            paddingTop: spacing.xs,
+            paddingBottom: insets.bottom + spacing.lg,
+          }}
           showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.greeting}>Hola, 👋</Text>
+          <Text
+            style={{
+              fontSize: typography.size.xxxl,
+              fontWeight: typography.weight.bold,
+              color: colors.ink,
+              marginTop: spacing.md,
+              marginBottom: spacing.lg,
+            }}
+          >
+            Hola, 👋
+          </Text>
 
-          <View style={styles.menuGrid}>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              justifyContent: "space-between",
+              rowGap: spacing.md,
+            }}
+          >
             <MenuButton
               title="Productos"
               icon="package-variant-closed"
@@ -85,8 +150,6 @@ export default function HomeScreen() {
             <MenuButton
               title="Nueva Venta"
               icon="plus-circle"
-              color="#2B8EF0"
-              // Esta ruta debe coincidir con el nombre del archivo que creamos arriba
               onPress={() => router.push("/nueva-venta")}
             />
             <MenuButton
@@ -102,7 +165,6 @@ export default function HomeScreen() {
             <MenuButton
               title="Fiados"
               icon="hand-coin"
-              color="#e74c3c"
               onPress={() => router.push("/fiados")}
             />
           </View>
@@ -111,74 +173,3 @@ export default function HomeScreen() {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  mainWrapper: {
-    flex: 1,
-    backgroundColor: COLORS.WHITE, // Fondo base para evitar parpadeos blancos
-  },
-  header: {
-    backgroundColor: COLORS.WHITE,
-    paddingHorizontal: 20,
-    paddingBottom: 15,
-  },
-  dateText: {
-    textAlign: "center",
-    fontSize: 13,
-    fontWeight: "600",
-    color: COLORS.GRAY_TEXT,
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  logoContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-  },
-  logoText: {
-    fontSize: 50, // Reducido de 70 para evitar que "empuje" otros elementos
-    fontWeight: "900",
-    color: COLORS.BLUE,
-    letterSpacing: -1,
-  },
-  settingsBtn: {
-    width: 55,
-    height: 55,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: COLORS.GRAY_BORDER,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.WHITE,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: COLORS.GRAY_BORDER,
-  },
-  contentWrapper: {
-    flex: 1,
-    backgroundColor: COLORS.GRAY_BG, // Fondo gris solo para el área de botones
-  },
-  scrollContent: {
-    paddingHorizontal: 20,
-    paddingTop: 10,
-  },
-  greeting: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: COLORS.INK,
-    marginTop: 15,
-    marginBottom: 20,
-  },
-  menuGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    rowGap: 16,
-  },
-});
