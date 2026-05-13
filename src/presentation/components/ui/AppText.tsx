@@ -20,6 +20,7 @@ interface Props {
   color?: string;
   style?: TextStyle;
   numberOfLines?: number;
+  align?: "left" | "center" | "right";
 }
 
 export const AppText = ({
@@ -28,6 +29,7 @@ export const AppText = ({
   color,
   style,
   numberOfLines,
+  align = "left",
 }: Props) => {
   const { typography, colors } = useTheme();
 
@@ -36,11 +38,13 @@ export const AppText = ({
       fontSize: typography.size.hero,
       fontWeight: typography.weight.black,
       color: colors.primary,
+      letterSpacing: typography.letterSpacing.tight,
     },
     display: {
       fontSize: typography.size.display,
       fontWeight: typography.weight.black,
       color: colors.primary,
+      letterSpacing: typography.letterSpacing.tight,
     },
     h1: {
       fontSize: typography.size.xxxl,
@@ -86,8 +90,13 @@ export const AppText = ({
 
   return (
     <Text
-      style={[variantStyles[variant], color ? { color } : {}, style]}
       numberOfLines={numberOfLines}
+      style={[
+        variantStyles[variant],
+        { textAlign: align },
+        color ? { color } : {},
+        style,
+      ]}
     >
       {children}
     </Text>
