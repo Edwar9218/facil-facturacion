@@ -42,11 +42,11 @@ export const SlideModal = ({
             style={[
               {
                 backgroundColor: colors.white,
-                borderTopLeftRadius: radius.xxl,
-                borderTopRightRadius: radius.xxl,
+                /*} borderTopLeftRadius: radius.xxl,
+                borderTopRightRadius: radius.xxl,*/
                 padding: spacing.lg,
                 paddingBottom: spacing.xxxl,
-                maxHeight: "90%",
+                maxHeight: "100%",
               },
               modal.animatedStyle,
             ]}
