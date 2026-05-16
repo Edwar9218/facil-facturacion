@@ -1,11 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import {
-    Animated,
-    LayoutAnimation,
-    Platform,
-    ScrollView,
-    TextInput,
-    UIManager,
+  Animated,
+  LayoutAnimation,
+  Platform,
+  TextInput,
+  UIManager,
 } from "react-native";
 import { useSlideModal } from "../../../hooks/useSlideModal";
 
@@ -145,7 +144,7 @@ export const CAMPOS_PRODUCTO_VENTA: Campo[] = [
     label: "Foto del producto",
     tipo: "foto",
     obligatorio: false,
-  }, // <--- Esto activa la cámara/galería
+  },
 ];
 
 // ── Hook principal ────────────────────────────────────────────────────────────
@@ -158,7 +157,6 @@ export const useNuevaVenta = () => {
   const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
   const [clientes, setClientes] = useState(CLIENTES_MOCK);
 
-  // Formulario nuevo cliente
   const [valoresNuevoCliente, setValoresNuevoCliente] = useState({
     nombre: "",
     telefono: "",
@@ -178,13 +176,12 @@ export const useNuevaVenta = () => {
   const [modoModal, setModoModal] = useState<string | null>(null);
   const [productos, setProductos] = useState(PRODUCTOS_MOCK);
 
-  // Formulario nuevo producto
   const [valoresNuevoProducto, setValoresNuevoProducto] = useState({
     nombre: "",
     precio: "",
     unidad: "Kg",
     disponible: "",
-    imagen: "", // <--- AGREGA ESTA LÍNEA
+    imagen: "",
   });
 
   // ── Paso 3 ────────────────────────────────────────────────────────────────
@@ -192,9 +189,12 @@ export const useNuevaVenta = () => {
   const [paganCon, setPaganCon] = useState("");
 
   // ── Refs ──────────────────────────────────────────────────────────────────
-  const scrollRef = useRef<ScrollView>(null);
+  // KeyboardAwareScrollView de react-native-keyboard-controller es compatible
+  // con el mismo tipo de ref que ScrollView nativo.
+  const scrollRef = useRef<KeyboardAwareScrollView>(null);
   const filtroInputRef = useRef<TextInput>(null);
   const inputPagoRef = useRef<TextInput>(null);
+  const precioInputRef = useRef<TextInput>(null); // ← NUEVO
 
   // ── Modales reutilizables ─────────────────────────────────────────────────
   const modalNuevoCliente = useSlideModal(700);
@@ -203,8 +203,9 @@ export const useNuevaVenta = () => {
   // ── Animaciones pasos ─────────────────────────────────────────────────────
   const flexPaso1 = useRef(new Animated.Value(1)).current;
   const flexPaso2 = useRef(new Animated.Value(0)).current;
-  const minHeightPaso1 = useRef(new Animated.Value(0)).current;
-  const minHeightPaso2 = useRef(new Animated.Value(0)).current;
+
+  // ── minHeightPaso1 y minHeightPaso2 eliminados:
+  //    el dropdown ahora es position:absolute y no empuja el layout.
 
   // ── Lógica pasos ──────────────────────────────────────────────────────────
   const animarPasos = (nuevoStep: number) => {
@@ -222,22 +223,6 @@ export const useNuevaVenta = () => {
     ]).start();
   };
 
-  useEffect(() => {
-    Animated.timing(minHeightPaso1, {
-      toValue: filtroClienteActivo ? 400 : 400,
-      duration: 250,
-      useNativeDriver: false,
-    }).start();
-  }, [filtroClienteActivo]);
-
-  useEffect(() => {
-    Animated.timing(minHeightPaso2, {
-      toValue: filtroActivo ? 400 : 400,
-      duration: 250,
-      useNativeDriver: false,
-    }).start();
-  }, [filtroActivo]);
-
   const limpiarPaso2 = () => {
     smoothLayout();
     setProductoActivo(null);
@@ -248,7 +233,10 @@ export const useNuevaVenta = () => {
   };
 
   const scrollAlTop = () => {
-    setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 80);
+    setTimeout(
+      () => (scrollRef.current as any)?.scrollTo({ y: 0, animated: true }),
+      80,
+    );
   };
 
   const siguiente = () => {
@@ -267,6 +255,17 @@ export const useNuevaVenta = () => {
     setStep(nuevoStep);
     animarPasos(nuevoStep);
     scrollAlTop();
+  };
+
+  // ── scrollAlFiltro simplificado ───────────────────────────────────────────
+  // Ya NO necesita measureLayout, requestAnimationFrame ni setTimeout.
+  // KeyboardAwareScrollView (react-native-keyboard-controller) hace el scroll
+  // automáticamente al TextInput enfocado, tanto en celular como en tablet.
+  const scrollAlFiltro = (conLoader = true) => {
+    if (conLoader) {
+      setCargandoGlobal(true);
+      setTimeout(() => setCargandoGlobal(false), 400);
+    }
   };
 
   // ── Lógica cliente ────────────────────────────────────────────────────────
@@ -308,25 +307,6 @@ export const useNuevaVenta = () => {
 
   const idsEnCarrito = carrito.map((i) => i.id);
 
-  const scrollAlFiltro = (conLoader = true) => {
-    if (conLoader) setCargandoGlobal(true);
-    setTimeout(() => {
-      requestAnimationFrame(() => {
-        filtroInputRef.current?.measureLayout(
-          scrollRef.current as any,
-          (_x: number, y: number) => {
-            const targetY = Math.max(0, y - FILTRO_SCROLL_OFFSET);
-            scrollRef.current?.scrollTo({ y: targetY, animated: true });
-            if (conLoader) setTimeout(() => setCargandoGlobal(false), 200);
-          },
-          () => {
-            if (conLoader) setCargandoGlobal(false);
-          },
-        );
-      });
-    }, 300);
-  };
-
   const abrirModal = (producto: any) => {
     smoothLayout();
     setProductoActivo(producto);
@@ -335,7 +315,9 @@ export const useNuevaVenta = () => {
     setModoModal("agregar");
     setFiltroProducto("");
     setFiltroActivo(false);
-    scrollAlFiltro();
+    // ← dar foco al input de precio para que KeyboardAwareScrollView
+    //   haga el scroll automáticamente
+    setTimeout(() => precioInputRef.current?.focus(), 120);
   };
 
   const cerrarModal = () => {
@@ -378,7 +360,8 @@ export const useNuevaVenta = () => {
     setModoModal("editar");
     setFiltroProducto("");
     setFiltroActivo(false);
-    scrollAlFiltro();
+    // ← idem
+    setTimeout(() => precioInputRef.current?.focus(), 120);
   };
 
   const eliminarConMenu = (id: string) => {
@@ -396,22 +379,20 @@ export const useNuevaVenta = () => {
     const nuevo = {
       id: String(Date.now()),
       nombre: valoresNuevoProducto.nombre.trim(),
-      // Quita los puntos del precio antes de guardar como número
       precio: Number(valoresNuevoProducto.precio.replace(/\./g, "")),
       unidad: valoresNuevoProducto.unidad || "Kg",
       disponible: Number(valoresNuevoProducto.disponible) || 0,
-      imagen: valoresNuevoProducto.imagen || undefined, // <--- GUARDA LA FOTO AQUÍ
+      imagen: valoresNuevoProducto.imagen || undefined,
     };
 
     setProductos((prev) => [nuevo, ...prev]);
 
-    // Limpiar el formulario completo, incluyendo la imagen
     setValoresNuevoProducto({
       nombre: "",
       precio: "",
       unidad: "Kg",
       disponible: "",
-      imagen: "", // <--- LIMPIA LA FOTO
+      imagen: "",
     });
 
     modalNuevoProducto.cerrar();
@@ -433,7 +414,6 @@ export const useNuevaVenta = () => {
     const soloNumeros = texto.replace(/[^0-9]/g, "");
     const formateado = soloNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     setPaganCon(formateado);
-    scrollRef.current?.scrollToEnd({ animated: true });
   };
 
   const finalizarVenta = () => {
@@ -450,8 +430,7 @@ export const useNuevaVenta = () => {
     retroceder,
     flexPaso1,
     flexPaso2,
-    minHeightPaso1,
-    minHeightPaso2,
+    // minHeightPaso1 y minHeightPaso2 ya no se exportan
 
     // Paso 1 — Cliente
     filtroCliente,
@@ -500,6 +479,7 @@ export const useNuevaVenta = () => {
     scrollAlFiltro,
     subtotalModal,
     totalCarrito,
+    precioInputRef,
 
     // Paso 3 — Cobro
     metodoPago,

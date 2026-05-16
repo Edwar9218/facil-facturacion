@@ -3,6 +3,7 @@ import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useCallback } from "react";
+import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 SplashScreen.preventAutoHideAsync();
@@ -25,7 +26,9 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider onLayout={onLayoutRootView}>
-      <Stack screenOptions={{ headerShown: false }} />
+      <KeyboardProvider>
+        <Stack screenOptions={{ headerShown: false }} />
+      </KeyboardProvider>
     </SafeAreaProvider>
   );
 }

@@ -1,20 +1,22 @@
 import {
-    Feather,
-    Ionicons,
-    MaterialCommunityIcons,
-    MaterialIcons,
+  Feather,
+  Ionicons,
+  MaterialCommunityIcons,
+  MaterialIcons,
 } from "@expo/vector-icons";
-import React, { useEffect } from "react";
+import React from "react";
 import {
-    ActivityIndicator,
-    Animated,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../../theme";
 import { AppText } from "../../components/ui/AppText";
@@ -22,15 +24,15 @@ import { FormularioModal } from "../../components/ui/FormularioModal";
 import { ClienteCard } from "../clientes/components/ClienteCard";
 import { ProductoCard } from "../productos/components/ProductoCard";
 import {
-    CAMPOS_CLIENTE_VENTA,
-    CAMPOS_PRODUCTO_VENTA,
-    EMOJIS,
-    fmt,
-    smoothLayout,
-    useNuevaVenta,
+  CAMPOS_CLIENTE_VENTA,
+  CAMPOS_PRODUCTO_VENTA,
+  EMOJIS,
+  fmt,
+  smoothLayout,
+  useNuevaVenta,
 } from "./hooks/useNuevaVenta";
 
-// ── Design tokens semánticos del dominio — se mantienen para no romper estilos ─
+// ── Design tokens semánticos del dominio ─────────────────────────────────────
 const GREEN = "#2EAA6E";
 const GREEN_LIGHT = "#E6F7EF";
 const RED = "#E03E3E";
@@ -64,27 +66,17 @@ const T = StyleSheet.create({
 
 export default function NuevaVentaScreen() {
   const insets = useSafeAreaInsets();
+  const { height: screenHeight } = useWindowDimensions();
   const { colors, spacing, radius, typography, shadows, sizes } = useTheme();
 
-  const scrollAlPago = () => {
-    // Un pequeño retraso para permitir que el teclado empiece a desplazarse
-    setTimeout(() => {
-      requestAnimationFrame(() => {
-        inputPagoRef.current?.measureLayout(
-          scrollRef.current as any,
-          (_x: number, y: number) => {
-            // Calculamos la posición para que el input quede en la parte superior o media
-            // Usamos un offset mayor para que "suba un poco más" como quieres
-            const targetY = Math.max(0, y - 50);
-            scrollRef.current?.scrollTo({ y: targetY, animated: true });
-          },
-          () => {},
-        );
-      });
-    }, 150); // Un delay más corto que el de filtros para mayor velocidad
-  };
+  // Altura máxima del dropdown: pantalla - header (~110px) - input (~56px) - pasos de abajo (~120px) - teclado estimado (~300px)
+  const dropdownMaxHeight = Math.max(160, screenHeight * 0.49);
 
-  // Alias cortos para usar inline (igual que ClientesScreen)
+  // Alturas dinámicas de los inputs para posicionar el dropdown correctamente en Android
+  const [alturaInputCliente, setAlturaInputCliente] = React.useState(56);
+  const [alturaInputProducto, setAlturaInputProducto] = React.useState(56);
+
+  // Alias cortos
   const BLUE = colors.primary;
   const BLUE_LIGHT = colors.primaryLight;
 
@@ -94,8 +86,6 @@ export default function NuevaVentaScreen() {
     retroceder,
     flexPaso1,
     flexPaso2,
-    minHeightPaso1,
-    minHeightPaso2,
     filtroCliente,
     setFiltroCliente,
     filtroClienteActivo,
@@ -151,21 +141,6 @@ export default function NuevaVentaScreen() {
     scrollRef,
   } = useNuevaVenta();
 
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(flexPaso1, {
-        toValue: step === 1 ? 1 : 0,
-        duration: 280,
-        useNativeDriver: false,
-      }),
-      Animated.timing(flexPaso2, {
-        toValue: step === 2 ? 1 : 0,
-        duration: 280,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [step]);
-
   // ── Step indicator ──────────────────────────────────────────────────────────
   const CircleStep = ({ num, active }: { num: number; active: boolean }) => (
     <View style={[s.circle, active ? s.circleActive : s.circleInactive]}>
@@ -173,7 +148,7 @@ export default function NuevaVentaScreen() {
     </View>
   );
 
-  // ── Input de búsqueda reutilizable (patrón ClientesScreen) ──────────────────
+  // ── Input de búsqueda reutilizable ──────────────────────────────────────────
   const renderInputBusqueda = ({
     value,
     onChangeText,
@@ -212,7 +187,12 @@ export default function NuevaVentaScreen() {
       />
       <TextInput
         ref={inputRef}
-        style={{ flex: 1, fontSize: typography.size.md, color: colors.ink }}
+        style={{
+          flex: 1,
+          fontSize: typography.size.md,
+          color: colors.ink,
+          paddingVertical: 0,
+        }}
         placeholder={placeholder}
         placeholderTextColor={colors.grayText}
         value={value}
@@ -232,19 +212,17 @@ export default function NuevaVentaScreen() {
     </View>
   );
 
-  // ── Botón "Crear nuevo" reutilizable (patrón ClientesScreen) ───────────────
+  // ── Botón "Crear nuevo" reutilizable ────────────────────────────────────────
   const renderCrearCard = ({
     iconName,
     label,
     sublabel,
     onPress,
-    highlight,
   }: {
     iconName: string;
     label: React.ReactNode;
     sublabel?: string;
     onPress: () => void;
-    highlight?: string;
   }) => (
     <TouchableOpacity
       style={{
@@ -286,7 +264,7 @@ export default function NuevaVentaScreen() {
     </TouchableOpacity>
   );
 
-  // ── Modal opciones carrito ───────────────────────────────────────────────────
+  // ── Modal opciones carrito ──────────────────────────────────────────────────
   const renderMenuOpciones = () => {
     if (!menuAbierto) return null;
     return (
@@ -360,7 +338,8 @@ export default function NuevaVentaScreen() {
   //  PASO 1 — Cliente
   // ════════════════════════════════════════════════════════════════════════════
   const renderPaso1 = () => (
-    <Animated.View style={[s.stepRow, { flex: flexPaso1 }]}>
+    // zIndex: 60 para que el dropdown flote sobre el paso 2 y 3
+    <Animated.View style={[s.stepRow, { flex: flexPaso1, zIndex: 60 }]}>
       <View style={s.timelineCol}>
         <CircleStep num={1} active={step >= 1} />
         <View style={s.line} />
@@ -379,91 +358,133 @@ export default function NuevaVentaScreen() {
         </View>
 
         {step === 1 && (
-          <Animated.View style={[s.activeBlock, { minHeight: minHeightPaso1 }]}>
+          <View style={s.activeBlock}>
             {!clienteSeleccionado ? (
               <>
-                {/* Contador — igual que ClientesScreen */}
                 <AppText variant="label" style={{ marginBottom: spacing.xs }}>
                   Busca o crea un cliente
                 </AppText>
 
-                {/* Input búsqueda — patrón ClientesScreen */}
-                {renderInputBusqueda({
-                  value: filtroCliente,
-                  onChangeText: setFiltroCliente,
-                  placeholder: "Buscar cliente...",
-                  onFocus: () => {
-                    smoothLayout();
-                    setFiltroClienteActivo(true);
-                  },
-                  onBlur: () => {
-                    if (filtroCliente.trim() === "") {
-                      smoothLayout();
-                      setFiltroClienteActivo(false);
+                {/* Mismo patrón que paso 2: un solo dropdown, foco O texto */}
+                <View
+                  style={[
+                    s.inputDropdownWrapper,
+                    (filtroClienteActivo || filtroCliente.trim() !== "") && {
+                      paddingBottom: dropdownMaxHeight + 0,
+                    },
+                  ]}
+                >
+                  {/* Mide altura real del input para posicionar el dropdown correctamente en Android */}
+                  <View
+                    onLayout={(e) =>
+                      setAlturaInputCliente(e.nativeEvent.layout.height)
                     }
-                  },
-                  onClear: () => setFiltroCliente(""),
-                })}
+                  >
+                    {renderInputBusqueda({
+                      value: filtroCliente,
+                      onChangeText: setFiltroCliente,
+                      placeholder: "Buscar cliente...",
+                      onFocus: () => {
+                        smoothLayout();
+                        setFiltroClienteActivo(true);
+                      },
+                      onBlur: () => {
+                        if (filtroCliente.trim() === "") {
+                          smoothLayout();
+                          setFiltroClienteActivo(false);
+                        }
+                      },
+                      onClear: () => {
+                        setFiltroCliente("");
+                      },
+                    })}
+                  </View>
 
-                {filtroClienteActivo ? (
-                  filtroCliente.trim() === "" ? (
-                    <View style={s.guiaBox}>
-                      <Text style={{ fontSize: 28, marginBottom: 8 }}>🔍</Text>
-                      <Text style={T.body}>Escribe para buscar un cliente</Text>
-                    </View>
-                  ) : clientesFiltrados.length === 0 ? (
-                    <View>
-                      <AppText
-                        variant="caption"
-                        color={colors.grayText}
-                        style={{
-                          marginBottom: spacing.sm,
-                          textAlign: "center",
-                        }}
-                      >
-                        No se encontró ningún cliente con ese nombre
-                      </AppText>
-                      {renderCrearCard({
-                        iconName: "person-add",
-                        label: (
-                          <>
-                            Crear{" "}
-                            <Text style={{ color: BLUE }}>
-                              "{filtroCliente.trim()}"
-                            </Text>
-                          </>
-                        ),
-                        onPress: () => {
-                          setValoresNuevoCliente((prev) => ({
-                            ...prev,
-                            nombre: filtroCliente.trim(),
-                          }));
-                          modalNuevoCliente.abrir();
+                  {/* UN SOLO dropdown — aparece si hay foco O si hay texto */}
+                  {(filtroClienteActivo || filtroCliente.trim() !== "") && (
+                    <ScrollView
+                      style={[
+                        s.dropdownFloat,
+                        {
+                          maxHeight: dropdownMaxHeight,
+                          top: alturaInputCliente,
                         },
-                      })}
-                    </View>
-                  ) : (
-                    <>
-                      {/* Contador de resultados — patrón ClientesScreen */}
-                      <AppText
-                        variant="label"
-                        style={{ marginBottom: spacing.xs }}
-                      >
-                        {clientesFiltrados.length} cliente
-                        {clientesFiltrados.length !== 1 ? "s" : ""}
-                      </AppText>
-                      {clientesFiltrados.map((c) => (
-                        <ClienteCard
-                          key={c.id}
-                          cliente={c}
-                          enMora={false}
-                          totalDeuda={0}
-                          onPress={() => seleccionarCliente(c)}
-                        />
-                      ))}
-                    </>
-                  )
-                ) : filtroCliente.trim() === "" ? (
+                      ]}
+                      contentContainerStyle={{ paddingBottom: 4 }}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled={true}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {filtroCliente.trim() === "" ? (
+                        <View style={s.guiaBox}>
+                          <MaterialIcons
+                            name="search"
+                            size={36}
+                            color={GRAY_TEXT}
+                            style={{ marginBottom: 8 }}
+                          />
+                          <Text style={T.body}>
+                            Escribe para buscar un cliente
+                          </Text>
+                        </View>
+                      ) : clientesFiltrados.length === 0 ? (
+                        <View>
+                          <AppText
+                            variant="caption"
+                            color={colors.grayText}
+                            style={{
+                              marginBottom: spacing.sm,
+                              textAlign: "center",
+                            }}
+                          >
+                            No se encontró ningún cliente con ese nombre
+                          </AppText>
+                          {renderCrearCard({
+                            iconName: "person-add",
+                            label: (
+                              <>
+                                Crear{" "}
+                                <Text style={{ color: BLUE }}>
+                                  "{filtroCliente.trim()}"
+                                </Text>
+                              </>
+                            ),
+                            onPress: () => {
+                              setValoresNuevoCliente((prev) => ({
+                                ...prev,
+                                nombre: filtroCliente.trim(),
+                              }));
+                              modalNuevoCliente.abrir();
+                            },
+                          })}
+                        </View>
+                      ) : (
+                        <>
+                          <AppText
+                            variant="label"
+                            style={{ marginBottom: spacing.xs }}
+                          >
+                            {clientesFiltrados.length} cliente
+                            {clientesFiltrados.length !== 1 ? "s" : ""}
+                          </AppText>
+                          {clientesFiltrados.map((c) => (
+                            <ClienteCard
+                              key={c.id}
+                              cliente={c}
+                              enMora={false}
+                              totalDeuda={0}
+                              onPress={() => seleccionarCliente(c)}
+                            />
+                          ))}
+                        </>
+                      )}
+                    </ScrollView>
+                  )}
+                </View>
+
+                {/* Botón crear — solo visible cuando no hay foco ni texto */}
+                {!filtroClienteActivo &&
+                  filtroCliente.trim() === "" &&
                   renderCrearCard({
                     iconName: "person-add",
                     label: "Crear cliente nuevo",
@@ -476,58 +497,10 @@ export default function NuevaVentaScreen() {
                       });
                       modalNuevoCliente.abrir();
                     },
-                  })
-                ) : clientesFiltrados.length === 0 ? (
-                  <View>
-                    <AppText
-                      variant="caption"
-                      color={colors.grayText}
-                      style={{ marginBottom: spacing.sm, textAlign: "center" }}
-                    >
-                      No se encontró ningún cliente con ese nombre
-                    </AppText>
-                    {renderCrearCard({
-                      iconName: "person-add",
-                      label: (
-                        <>
-                          Crear{" "}
-                          <Text style={{ color: BLUE }}>
-                            "{filtroCliente.trim()}"
-                          </Text>
-                        </>
-                      ),
-                      onPress: () => {
-                        setValoresNuevoCliente((prev) => ({
-                          ...prev,
-                          nombre: filtroCliente.trim(),
-                        }));
-                        modalNuevoCliente.abrir();
-                      },
-                    })}
-                  </View>
-                ) : (
-                  <>
-                    <AppText
-                      variant="label"
-                      style={{ marginBottom: spacing.xs }}
-                    >
-                      {clientesFiltrados.length} cliente
-                      {clientesFiltrados.length !== 1 ? "s" : ""}
-                    </AppText>
-                    {clientesFiltrados.map((c) => (
-                      <ClienteCard
-                        key={c.id}
-                        cliente={c}
-                        enMora={false}
-                        totalDeuda={0}
-                        onPress={() => seleccionarCliente(c)}
-                      />
-                    ))}
-                  </>
-                )}
+                  })}
               </>
             ) : (
-              // ── Cliente seleccionado ──────────────────────────────────────
+              // ── Cliente seleccionado ────────────────────────────────────────
               <View
                 style={{
                   backgroundColor: colors.white,
@@ -593,7 +566,7 @@ export default function NuevaVentaScreen() {
                 </TouchableOpacity>
               </View>
             )}
-          </Animated.View>
+          </View>
         )}
       </View>
     </Animated.View>
@@ -603,7 +576,7 @@ export default function NuevaVentaScreen() {
   //  PASO 2 — Productos
   // ════════════════════════════════════════════════════════════════════════════
   const renderPaso2 = () => (
-    <Animated.View style={[s.stepRow, { flex: flexPaso2 }]}>
+    <Animated.View style={[s.stepRow, { flex: flexPaso2, zIndex: 40 }]}>
       <View style={s.timelineCol}>
         <CircleStep num={2} active={step >= 2} />
         <View style={s.line} />
@@ -622,7 +595,7 @@ export default function NuevaVentaScreen() {
         </View>
 
         {step === 2 && (
-          <Animated.View style={[s.activeBlock, { minHeight: minHeightPaso2 }]}>
+          <View style={s.activeBlock}>
             {productoActivo ? (
               <View>
                 <View
@@ -690,7 +663,6 @@ export default function NuevaVentaScreen() {
                         keyboardType="numeric"
                         value={cantidadModal}
                         onChangeText={setCantidadModal}
-                        onFocus={scrollAlFiltro}
                       />
                     </View>
                   </View>
@@ -726,119 +698,156 @@ export default function NuevaVentaScreen() {
               </View>
             ) : (
               <View>
-                {/* Input búsqueda productos — patrón ClientesScreen */}
                 <AppText variant="label" style={{ marginBottom: spacing.xs }}>
                   Busca o crea un producto
                 </AppText>
 
-                {renderInputBusqueda({
-                  value: filtroProducto,
-                  onChangeText: setFiltroProducto,
-                  placeholder: "Buscar producto...",
-                  inputRef: filtroInputRef,
-                  onFocus: () => {
-                    smoothLayout();
-                    setFiltroActivo(true);
-                    scrollAlFiltro(false);
-                  },
-                  onBlur: () => {
-                    if (filtroProducto.trim() === "") {
-                      smoothLayout();
-                      setFiltroActivo(false);
+                <View
+                  style={[
+                    s.inputDropdownWrapper,
+                    (filtroActivo || filtroProducto.trim() !== "") && {
+                      paddingBottom: dropdownMaxHeight + 0,
+                    },
+                  ]}
+                >
+                  {/* Mide altura real del input para posicionar el dropdown correctamente en Android */}
+                  <View
+                    onLayout={(e) =>
+                      setAlturaInputProducto(e.nativeEvent.layout.height)
                     }
-                  },
-                  onClear: () => {
-                    setFiltroProducto("");
-                    filtroInputRef.current?.focus();
-                  },
-                })}
+                  >
+                    {renderInputBusqueda({
+                      value: filtroProducto,
+                      onChangeText: setFiltroProducto,
+                      placeholder: "Buscar producto...",
+                      inputRef: filtroInputRef,
+                      onFocus: () => {
+                        smoothLayout();
+                        setFiltroActivo(true);
+                        scrollAlFiltro(false);
+                      },
+                      onBlur: () => {
+                        if (filtroProducto.trim() === "") {
+                          smoothLayout();
+                          setFiltroActivo(false);
+                        }
+                      },
+                      onClear: () => {
+                        setFiltroProducto("");
+                        filtroInputRef.current?.focus();
+                      },
+                    })}
+                  </View>
 
-                {filtroActivo ? (
-                  filtroProducto.trim() === "" ? (
-                    <View style={s.guiaBox}>
-                      <Text style={{ fontSize: 28, marginBottom: 8 }}>🔍</Text>
-                      <Text style={T.body}>
-                        Escribe para buscar un producto
-                      </Text>
-                    </View>
-                  ) : productosFiltrados.length === 0 ? (
-                    <View>
-                      <AppText
-                        variant="caption"
-                        color={colors.grayText}
-                        style={{
-                          textAlign: "center",
-                          marginBottom: spacing.sm,
-                        }}
-                      >
-                        No se encontró ese producto
-                      </AppText>
-                      {renderCrearCard({
-                        iconName: "add-shopping-cart",
-                        label: (
-                          <>
-                            Crear{" "}
-                            <Text style={{ color: BLUE }}>
-                              "{filtroProducto.trim()}"
-                            </Text>
-                          </>
-                        ),
-                        onPress: () => {
-                          setValoresNuevoProducto((prev) => ({
-                            ...prev,
-                            nombre: filtroProducto.trim(),
-                            imagen: prev.imagen ?? "",
-                          }));
-                          modalNuevoProducto.abrir();
+                  {/* CAMBIO 2: View → ScrollView para permitir scroll interno */}
+                  {(filtroActivo || filtroProducto.trim() !== "") && (
+                    <ScrollView
+                      style={[
+                        s.dropdownFloat,
+                        {
+                          maxHeight: dropdownMaxHeight,
+                          top: alturaInputProducto,
                         },
-                      })}
-                    </View>
-                  ) : (
-                    (() => {
-                      const disponibles = productosFiltrados.filter(
-                        (p) => !idsEnCarrito.includes(p.id),
-                      );
-                      const yaEnPedido = productosFiltrados.filter((p) =>
-                        idsEnCarrito.includes(p.id),
-                      );
-                      const renderCard = (p: any) => {
-                        const enCarrito = idsEnCarrito.includes(p.id);
-                        const itemCarrito = enCarrito
-                          ? carrito.find((i: any) => i.id === p.id)
-                          : null;
-                        return (
-                          <ProductoCard
-                            key={p.id}
-                            producto={p}
-                            enCarrito={enCarrito}
-                            itemCarrito={itemCarrito}
-                            onPress={() => {
-                              if (!enCarrito) abrirModal(p);
-                            }}
-                            onPressMenu={() => abrirMenu(itemCarrito)}
+                      ]}
+                      contentContainerStyle={{ paddingBottom: 4 }}
+                      keyboardShouldPersistTaps="handled"
+                      nestedScrollEnabled={true}
+                      showsVerticalScrollIndicator={true}
+                    >
+                      {filtroProducto.trim() === "" ? (
+                        <View style={s.guiaBox}>
+                          <MaterialIcons
+                            name="search"
+                            size={36}
+                            color={GRAY_TEXT}
+                            style={{ marginBottom: 8 }}
                           />
-                        );
-                      };
-                      return (
-                        <>
-                          {disponibles.map(renderCard)}
-                          {yaEnPedido.length > 0 && (
-                            <>
-                              <View style={s.separadorYaAgregado}>
-                                <View style={s.separadorLinea} />
-                                <Text style={s.separadorTexto}>
-                                  Ya en el pedido
+                          <Text style={T.body}>
+                            Escribe para buscar un producto
+                          </Text>
+                        </View>
+                      ) : productosFiltrados.length === 0 ? (
+                        <View>
+                          <AppText
+                            variant="caption"
+                            color={colors.grayText}
+                            style={{
+                              textAlign: "center",
+                              marginBottom: spacing.sm,
+                            }}
+                          >
+                            No se encontró ese producto
+                          </AppText>
+                          {renderCrearCard({
+                            iconName: "add-shopping-cart",
+                            label: (
+                              <>
+                                Crear{" "}
+                                <Text style={{ color: BLUE }}>
+                                  "{filtroProducto.trim()}"
                                 </Text>
-                                <View style={s.separadorLinea} />
-                              </View>
-                              {yaEnPedido.map(renderCard)}
+                              </>
+                            ),
+                            onPress: () => {
+                              setValoresNuevoProducto((prev) => ({
+                                ...prev,
+                                nombre: filtroProducto.trim(),
+                                imagen: prev.imagen ?? "",
+                              }));
+                              modalNuevoProducto.abrir();
+                            },
+                          })}
+                        </View>
+                      ) : (
+                        (() => {
+                          const disponibles = productosFiltrados.filter(
+                            (p) => !idsEnCarrito.includes(p.id),
+                          );
+                          const yaEnPedido = productosFiltrados.filter((p) =>
+                            idsEnCarrito.includes(p.id),
+                          );
+                          const renderCard = (p: any) => {
+                            const enCarrito = idsEnCarrito.includes(p.id);
+                            const itemCarrito = enCarrito
+                              ? carrito.find((i: any) => i.id === p.id)
+                              : null;
+                            return (
+                              <ProductoCard
+                                key={p.id}
+                                producto={p}
+                                enCarrito={enCarrito}
+                                itemCarrito={itemCarrito}
+                                onPress={() => {
+                                  if (!enCarrito) abrirModal(p);
+                                }}
+                                onPressMenu={() => abrirMenu(itemCarrito)}
+                              />
+                            );
+                          };
+                          return (
+                            <>
+                              {disponibles.map(renderCard)}
+                              {yaEnPedido.length > 0 && (
+                                <>
+                                  <View style={s.separadorYaAgregado}>
+                                    <View style={s.separadorLinea} />
+                                    <Text style={s.separadorTexto}>
+                                      Ya en el pedido
+                                    </Text>
+                                    <View style={s.separadorLinea} />
+                                  </View>
+                                  {yaEnPedido.map(renderCard)}
+                                </>
+                              )}
                             </>
-                          )}
-                        </>
-                      );
-                    })()
-                  )
-                ) : (
+                          );
+                        })()
+                      )}
+                    </ScrollView>
+                  )}
+                </View>
+
+                {!filtroActivo &&
                   renderCrearCard({
                     iconName: "add-shopping-cart",
                     label: "Crear producto nuevo",
@@ -853,8 +862,7 @@ export default function NuevaVentaScreen() {
                       });
                       modalNuevoProducto.abrir();
                     },
-                  })
-                )}
+                  })}
               </View>
             )}
 
@@ -1040,7 +1048,7 @@ export default function NuevaVentaScreen() {
                 </TouchableOpacity>
               </View>
             )}
-          </Animated.View>
+          </View>
         )}
       </View>
     </Animated.View>
@@ -1050,7 +1058,7 @@ export default function NuevaVentaScreen() {
   //  PASO 3 — Cobro
   // ════════════════════════════════════════════════════════════════════════════
   const renderPaso3 = () => (
-    <View style={s.stepRow}>
+    <View style={[s.stepRow, { zIndex: 30 }]}>
       <View style={s.timelineCol}>
         <CircleStep num={3} active={step >= 3} />
       </View>
@@ -1143,13 +1151,7 @@ export default function NuevaVentaScreen() {
                     borderColor: BLUE,
                   },
                 ]}
-                onPress={() => {
-                  setMetodoPago("contado");
-                  setTimeout(() => {
-                    inputPagoRef.current?.focus();
-                    scrollRef.current?.scrollToEnd({ animated: true });
-                  }, 100);
-                }}
+                onPress={() => setMetodoPago("contado")}
               >
                 <View
                   style={[
@@ -1238,7 +1240,10 @@ export default function NuevaVentaScreen() {
                   onChangeText={manejarCambioDinero}
                   placeholder="$ 0"
                   placeholderTextColor={GRAY_TEXT}
-                  onFocus={scrollAlPago}
+                  onFocus={() =>
+                    // ✅ solo al enfocar
+                    (scrollRef.current as any)?.scrollToEnd({ animated: true })
+                  }
                 />
                 {paganConNum > 0 && (
                   <View
@@ -1260,10 +1265,10 @@ export default function NuevaVentaScreen() {
                         <Text
                           style={[T.captionMd, { color: RED, marginTop: 4 }]}
                         >
-                          Pago insuficiente
+                          Pago insuficiente, falta saldo
                         </Text>
                         <Text style={[T.number, { color: RED }]}>
-                          Faltan {fmt(totalCarrito - paganConNum)}
+                          {fmt(totalCarrito - paganConNum)}
                         </Text>
                       </>
                     ) : (
@@ -1337,7 +1342,7 @@ export default function NuevaVentaScreen() {
   return (
     <>
       <View style={{ flex: 1, backgroundColor: colors.grayBg }}>
-        {/* HEADER — idéntico a ScreenWrapper */}
+        {/* HEADER */}
         <View
           style={{
             backgroundColor: colors.white,
@@ -1354,7 +1359,6 @@ export default function NuevaVentaScreen() {
               alignItems: "center",
             }}
           >
-            {/* Botón volver — izquierda */}
             <View style={{ width: 100, alignItems: "flex-start" }}>
               <TouchableOpacity
                 style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
@@ -1378,7 +1382,6 @@ export default function NuevaVentaScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Logo — centro */}
             <View
               style={{
                 flex: 1,
@@ -1403,13 +1406,13 @@ export default function NuevaVentaScreen() {
               </Text>
             </View>
 
-            {/* Placeholder derecha — para centrar el logo */}
             <View style={{ width: 100, height: 46 }} />
           </View>
         </View>
 
-        <ScrollView
+        <KeyboardAwareScrollView
           ref={scrollRef}
+          bottomOffset={250}
           contentContainerStyle={{
             flexGrow: 1,
             paddingHorizontal: spacing.lg,
@@ -1418,7 +1421,6 @@ export default function NuevaVentaScreen() {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* TÍTULO — dentro del scroll, se mueve con el contenido */}
           <Text
             style={{
               fontSize: typography.size.xxl,
@@ -1435,7 +1437,7 @@ export default function NuevaVentaScreen() {
           {renderPaso2()}
           {renderPaso3()}
           <View style={{ height: 60 }} />
-        </ScrollView>
+        </KeyboardAwareScrollView>
       </View>
 
       {renderMenuOpciones()}
@@ -1455,12 +1457,12 @@ export default function NuevaVentaScreen() {
         esEdicion={false}
       />
 
-      {/* Modal nuevo producto — igual que ProductosScreen */}
+      {/* Modal nuevo producto */}
       <FormularioModal
         modal={modalNuevoProducto}
         titulo="Nuevo producto"
         subtitulo="Completa los datos del producto"
-        campos={CAMPOS_PRODUCTO_VENTA} // <--- Este ya tiene el campo 'imagen'
+        campos={CAMPOS_PRODUCTO_VENTA}
         valores={valoresNuevoProducto}
         onChange={(id, valor) =>
           setValoresNuevoProducto((prev) => ({ ...prev, [id]: valor }))
@@ -1480,10 +1482,8 @@ export default function NuevaVentaScreen() {
   );
 }
 
-// ── Estilos que no dependen del tema — se mantienen en StyleSheet ─────────────
+// ── Estilos que no dependen del tema ─────────────────────────────────────────
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: GRAY_BG },
-  scroll: { paddingHorizontal: 20, paddingTop: 20 },
   stepRow: { flexDirection: "row", minHeight: 0 },
   timelineCol: { width: 20, alignItems: "center" },
   contentCol: { flex: 1, paddingLeft: 14, paddingBottom: 20 },
@@ -1495,7 +1495,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     zIndex: 2,
   },
-  circleActive: { backgroundColor: "#0077EE" }, // se pinta inline si quieres usar colors.primary
+  circleActive: { backgroundColor: "#0077EE" },
   circleInactive: { backgroundColor: "#D1D5DB" },
   circleText: { color: "#fff", fontWeight: "700", fontSize: 16 },
   line: {
@@ -1512,6 +1512,32 @@ const s = StyleSheet.create({
     gap: 8,
   },
   activeBlock: { marginTop: 10 },
+
+  // ── Dropdown flotante ─────────────────────────────────────────────────────
+  inputDropdownWrapper: {
+    position: "relative",
+    zIndex: 100,
+    marginBottom: 0,
+  },
+  dropdownFloat: {
+    position: "absolute",
+    top: 56,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: GRAY_BORDER,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 8,
+    zIndex: 20,
+    padding: 8,
+    // maxHeight se pasa dinámicamente via useWindowDimensions
+  },
+
   btnRemove: {
     width: 36,
     height: 36,
@@ -1521,48 +1547,6 @@ const s = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: "#FECACA",
-  },
-  productoCard: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: GRAY_BORDER,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 8,
-    gap: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 1,
-  },
-  productoCardDisabled: {
-    backgroundColor: GRAY_LIGHT,
-    borderColor: GRAY_BORDER,
-    opacity: 0.65,
-  },
-  productoEmoji: {
-    width: 50,
-    height: 50,
-    borderRadius: 12,
-    backgroundColor: GRAY_LIGHT,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuDotBtn: {
-    width: 30,
-    height: 30,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  addCircle: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: "center",
-    justifyContent: "center",
   },
   modoBadge: {
     alignSelf: "flex-start",
@@ -1787,6 +1771,8 @@ const s = StyleSheet.create({
     padding: 16,
     marginTop: 12,
     alignItems: "center",
+    justifyContent: "center", // ✅ agrega esto
+    minHeight: 130, // ✅ agrega esto
     borderWidth: 1,
     borderColor: "#A7F3D0",
     gap: 2,
