@@ -3,6 +3,7 @@ import * as ImagePicker from "expo-image-picker";
 import React from "react";
 import {
   Image,
+  Keyboard,
   Pressable,
   ScrollView,
   TouchableOpacity,
@@ -222,7 +223,10 @@ export const FormularioModal = ({
                         paddingVertical: spacing.xxs,
                         borderRadius: radius.full,
                       }}
-                      onPress={() => setFotoVisible(true)}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setFotoVisible(true);
+                      }}
                     >
                       <Feather name="edit-2" size={14} color={colors.white} />
                       <AppText
@@ -262,7 +266,10 @@ export const FormularioModal = ({
                       marginBottom: spacing.lg,
                       gap: spacing.xxs,
                     }}
-                    onPress={() => setFotoVisible(true)}
+                    onPress={() => {
+                      Keyboard.dismiss();
+                      setFotoVisible(true);
+                    }}
                   >
                     <View
                       style={{
@@ -301,7 +308,10 @@ export const FormularioModal = ({
                 label={campo.label}
                 tipo="selector"
                 valorSelector={valores[campo.id]}
-                onPressSelector={() => setSelectorActivo(campo)}
+                onPressSelector={() => {
+                  Keyboard.dismiss();
+                  setSelectorActivo(campo);
+                }}
               />
             );
           }
