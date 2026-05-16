@@ -1,17 +1,22 @@
 import { Feather } from "@expo/vector-icons";
 import * as ImagePicker from "expo-image-picker";
 import React from "react";
-import { Image, ScrollView, TouchableOpacity, View } from "react-native";
+import {
+  Image,
+  Pressable,
+  ScrollView,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useTheme } from "../../../theme";
 import { SlideModalType, useSlideModal } from "../../hooks/useSlideModal";
 import { AppButton } from "./AppButton";
 import { AppInput } from "./AppInput";
 import { AppText } from "./AppText";
 import { FotoModal } from "./FotoModal";
-import { SelectorModal } from "./SelectorModal";
 import { SlideModal } from "./SlideModal";
 
-// ── Tipos de campo ───────────────────────────────────────────────────────────
 export type TipoCampo =
   | "texto"
   | "numero"
@@ -25,11 +30,10 @@ export interface Campo {
   label: string;
   placeholder?: string;
   tipo: TipoCampo;
-  opciones?: string[]; // para tipo "selector"
+  opciones?: string[];
   obligatorio?: boolean;
 }
 
-// ── Valores del formulario ───────────────────────────────────────────────────
 export type ValoresCampo = Record<string, string>;
 
 interface Props {
@@ -57,26 +61,17 @@ export const FormularioModal = ({
   labelGuardarEditar = "Guardar cambios",
   esEdicion = false,
 }: Props) => {
-  const { colors, spacing, radius, sizes, shadows } = useTheme();
+  const { colors, spacing, radius, sizes } = useTheme();
 
-  // ── Modales internos ──────────────────────────────────────────────────────
   const [selectorActivo, setSelectorActivo] = React.useState<Campo | null>(
     null,
   );
-  const [modalSelectorVisible, setModalSelectorVisible] = React.useState(false);
-  const modalFotoInterno = React.useRef<SlideModalType | null>(null);
-  const [fotoModalKey, setFotoModalKey] = React.useState(0);
-
-  // Hook para modal foto interno
   const modalFoto = useSlideModal(30);
-  const modalSelector = useSlideModal(480);
 
-  // ── Validación ─────────────────────────────────────────────────────────────
   const formularioValido = campos
     .filter((c) => c.obligatorio !== false)
     .every((c) => valores[c.id]?.trim());
 
-  // ── Handlers foto ──────────────────────────────────────────────────────────
   const campoFoto = campos.find((c) => c.tipo === "foto");
 
   const tomarFoto = () => {
@@ -113,9 +108,10 @@ export const FormularioModal = ({
   return (
     <>
       <SlideModal modal={modal}>
-        <ScrollView
+        <KeyboardAwareScrollView
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
+          bottomOffset={10}
         >
           {/* Header */}
           <View
@@ -151,7 +147,7 @@ export const FormularioModal = ({
 
           {/* Campos dinámicos */}
           {campos.map((campo) => {
-            // ── Foto ────────────────────────────────────────────────────────
+            // ── Foto ──────────────────────────────────────────────────────
             if (campo.tipo === "foto") {
               const uri = valores[campo.id];
               return (
@@ -166,13 +162,9 @@ export const FormularioModal = ({
                       (opcional)
                     </AppText>
                   </AppText>
-
                   {uri ? (
                     <View
-                      style={{
-                        position: "relative",
-                        marginBottom: spacing.lg,
-                      }}
+                      style={{ position: "relative", marginBottom: spacing.lg }}
                     >
                       <Image
                         source={{ uri }}
@@ -266,7 +258,7 @@ export const FormularioModal = ({
               );
             }
 
-            // ── Selector ────────────────────────────────────────────────────
+            // ── Selector ──────────────────────────────────────────────────
             if (campo.tipo === "selector") {
               return (
                 <AppInput
@@ -276,13 +268,12 @@ export const FormularioModal = ({
                   valorSelector={valores[campo.id]}
                   onPressSelector={() => {
                     setSelectorActivo(campo);
-                    setModalSelectorVisible(true);
                   }}
                 />
               );
             }
 
-            // ── Precio ──────────────────────────────────────────────────────
+            // ── Precio ────────────────────────────────────────────────────
             if (campo.tipo === "precio") {
               return (
                 <AppInput
@@ -304,7 +295,7 @@ export const FormularioModal = ({
               );
             }
 
-            // ── Texto / Número / Teléfono ────────────────────────────────────
+            // ── Texto / Número / Teléfono ──────────────────────────────────
             return (
               <AppInput
                 key={campo.id}
@@ -317,7 +308,6 @@ export const FormularioModal = ({
             );
           })}
 
-          {/* Botón guardar */}
           <AppButton
             label={esEdicion ? labelGuardarEditar : labelGuardar}
             onPress={onGuardar}
@@ -335,37 +325,99 @@ export const FormularioModal = ({
           >
             * Campos obligatorios
           </AppText>
-        </ScrollView>
+        </KeyboardAwareScrollView>
+
+        {/* ── Selector inline — dentro del mismo Modal, sin Modal anidado ── */}
+        {selectorActivo && (
+          <Pressable
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.4)",
+              justifyContent: "flex-end",
+            }}
+            onPress={() => setSelectorActivo(null)}
+          >
+            <Pressable onPress={() => {}}>
+              <View
+                style={{
+                  backgroundColor: colors.white,
+                  borderTopLeftRadius: radius.xl,
+                  borderTopRightRadius: radius.xl,
+                  padding: spacing.lg,
+                  paddingBottom: spacing.xxxl,
+                }}
+              >
+                {/* Handle */}
+                <View
+                  style={{
+                    width: 36,
+                    height: 4,
+                    backgroundColor: colors.grayBorder,
+                    borderRadius: radius.full,
+                    alignSelf: "center",
+                    marginBottom: spacing.md,
+                  }}
+                />
+                <AppText variant="h3" style={{ marginBottom: spacing.md }}>
+                  {selectorActivo.label}
+                </AppText>
+                <ScrollView keyboardShouldPersistTaps="handled">
+                  {selectorActivo.opciones?.map((opcion) => {
+                    const activa = valores[selectorActivo.id] === opcion;
+                    return (
+                      <TouchableOpacity
+                        key={opcion}
+                        style={{
+                          flexDirection: "row",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          paddingVertical: spacing.md,
+                          paddingHorizontal: spacing.md,
+                          borderRadius: radius.md,
+                          marginBottom: spacing.xxs,
+                          backgroundColor: activa
+                            ? colors.primaryLight
+                            : "transparent",
+                        }}
+                        onPress={() => {
+                          onChange(selectorActivo.id, opcion);
+                          setSelectorActivo(null);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <AppText
+                          variant={activa ? "bodyBold" : "body"}
+                          color={activa ? colors.primary : colors.ink}
+                        >
+                          {opcion}
+                        </AppText>
+                        {activa && (
+                          <Feather
+                            name="check"
+                            size={sizes.iconSm}
+                            color={colors.primary}
+                          />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              </View>
+            </Pressable>
+          </Pressable>
+        )}
       </SlideModal>
 
-      {/* Modal foto interno */}
+      {/* Modal foto */}
       <FotoModal
         modal={modalFoto}
         onTomarFoto={tomarFoto}
         onElegirGaleria={elegirGaleria}
       />
-
-      {/* Modal selector interno */}
-      {selectorActivo && (
-        <SelectorModal
-          modal={{
-            visible: modalSelectorVisible,
-            abrir: () => setModalSelectorVisible(true),
-            cerrar: (cb) => {
-              setModalSelectorVisible(false);
-              cb?.();
-            },
-            animatedStyle: { transform: [] },
-          }}
-          titulo={selectorActivo.label}
-          opciones={selectorActivo.opciones ?? []}
-          valorActual={valores[selectorActivo.id] ?? ""}
-          onSeleccionar={(valor) => {
-            onChange(selectorActivo.id, valor);
-            setModalSelectorVisible(false);
-          }}
-        />
-      )}
     </>
   );
 };

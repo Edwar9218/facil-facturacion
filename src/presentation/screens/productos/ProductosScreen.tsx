@@ -331,7 +331,7 @@ export const ProductosScreen = () => {
       {/* Modal formulario */}
       <FormularioModal
         modal={modalFormulario}
-        titulo={esEdicion ? "Editar producto" : "Agregar producto"}
+        titulo={esEdicion ? "Editar producto" : "Nuevo producto"}
         subtitulo={
           esEdicion ? "Modifica los datos" : "Completa los datos del producto"
         }

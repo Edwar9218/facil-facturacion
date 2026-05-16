@@ -175,7 +175,7 @@ export const ClientesScreen = () => {
       {/* Modal formulario */}
       <FormularioModal
         modal={modalFormulario}
-        titulo={esEdicion ? "Editar cliente" : "Agregar cliente"}
+        titulo={esEdicion ? "Editar cliente" : "Nuevo cliente"}
         subtitulo={
           esEdicion ? "Modifica los datos" : "Completa los datos del cliente"
         }
