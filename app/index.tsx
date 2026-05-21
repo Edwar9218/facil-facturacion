@@ -9,13 +9,102 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { MenuButton } from "../src/presentation/components/MenuButton";
 import { useTheme } from "../src/theme";
+
+// ─────────────────────────────────────────────────────────────
+// CONFIGURACIÓN GLOBAL DEL MENÚ
+// TODO se controla desde aquí
+// ─────────────────────────────────────────────────────────────
+
+const MENU_STYLES = {
+  cardRadius: 26,
+  cardPadding: 18,
+  cardMinHeight: 190,
+
+  iconContainerSize: 72,
+  iconSize: 34,
+  iconRadius: 22,
+
+  arrowSize: 34,
+  arrowIconSize: 18,
+
+  titleSize: 20,
+  titleWeight: "800" as const,
+
+  descriptionSize: 14,
+  descriptionLineHeight: 21,
+
+  borderBottomWidth: 3,
+
+  shadowOpacity: 0.06,
+  shadowRadius: 12,
+  elevation: 4,
+};
+
+// ─────────────────────────────────────────────────────────────
+// ITEMS DEL MENÚ
+// ─────────────────────────────────────────────────────────────
+
+const MENU_ITEMS = [
+  {
+    title: "Productos",
+    description: "Gestiona tu inventario de productos",
+    icon: "package-variant-closed",
+    route: "/productos",
+    color: "#2F80FF",
+    light: "#EEF4FF",
+  },
+  {
+    title: "Clientes",
+    description: "Administra tus clientes y contactos",
+    icon: "account-group",
+    route: "/clientes",
+    color: "#27C56D",
+    light: "#ECFFF4",
+  },
+  {
+    title: "Nueva Venta",
+    description: "Crea una nueva venta rápidamente",
+    icon: "cart-plus",
+    route: "/nueva-venta",
+    color: "#8B5CF6",
+    light: "#F5EFFF",
+  },
+  {
+    title: "Venta del día",
+    description: "Consulta el resumen de ventas",
+    icon: "calendar-check",
+    route: "/venta-dia",
+    color: "#F59E0B",
+    light: "#FFF7EA",
+  },
+  {
+    title: "Historial",
+    description: "Revisa ventas anteriores y reportes",
+    icon: "chart-line",
+    route: "/historial",
+    color: "#14B8A6",
+    light: "#E9FFFC",
+  },
+  {
+    title: "Fiados",
+    description: "Gestiona pagos pendientes y créditos",
+    icon: "hand-coin",
+    route: "/fiados",
+    color: "#FF4D8D",
+    light: "#FFF0F6",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────
+// COMPONENTE PRINCIPAL
+// ─────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { colors, typography, spacing, radius, shadows, sizes } = useTheme();
+
+  const { colors, typography, spacing, radius, sizes } = useTheme();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.white }}>
@@ -48,7 +137,7 @@ export default function HomeScreen() {
           lun 20 oct | 10:10 am
         </Text>
 
-        {/* Logo + Ajustes */}
+        {/* Logo */}
         <View
           style={{
             flexDirection: "row",
@@ -68,6 +157,7 @@ export default function HomeScreen() {
               size={sizes.iconXxl}
               color={colors.primary}
             />
+
             <Text
               style={{
                 fontSize: typography.size.hero,
@@ -80,6 +170,7 @@ export default function HomeScreen() {
             </Text>
           </View>
 
+          {/* AJUSTES */}
           <TouchableOpacity
             style={{
               width: 55,
@@ -91,15 +182,14 @@ export default function HomeScreen() {
               justifyContent: "center",
               backgroundColor: colors.white,
             }}
-            activeOpacity={0.7}
-            onPress={() => console.log("Ajustes")}
+            activeOpacity={0.8}
           >
             <Feather name="sliders" size={sizes.iconLg} color={colors.ink} />
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Divider */}
+      {/* DIVIDER */}
       <View
         style={{
           height: 1,
@@ -108,65 +198,155 @@ export default function HomeScreen() {
       />
 
       {/* CONTENIDO */}
-      <View style={{ flex: 1, backgroundColor: colors.grayBg }}>
+      <View
+        style={{
+          flex: 1,
+          backgroundColor: "#F6F8FC",
+        }}
+      >
         <ScrollView
+          showsVerticalScrollIndicator={false}
           contentContainerStyle={{
             paddingHorizontal: spacing.lg,
-            paddingTop: spacing.xs,
-            paddingBottom: insets.bottom + spacing.lg,
+            paddingTop: spacing.md,
+            paddingBottom: insets.bottom + spacing.xl,
           }}
-          showsVerticalScrollIndicator={false}
         >
-          <Text
-            style={{
-              fontSize: typography.size.xxxl,
-              fontWeight: typography.weight.bold,
-              color: colors.ink,
-              marginTop: spacing.md,
-              marginBottom: spacing.lg,
-            }}
-          >
-            Hola, 👋
-          </Text>
+          {/* SALUDO */}
+          <View style={{ marginBottom: spacing.xl }}>
+            <Text
+              style={{
+                fontSize: 18,
+                color: colors.grayText,
+                fontWeight: "600",
+                marginBottom: 6,
+              }}
+            >
+              ¡Bienvenido!
+            </Text>
 
+            <Text
+              style={{
+                fontSize: 30,
+                fontWeight: "900",
+                color: colors.ink,
+              }}
+            >
+              Hola, 👋
+            </Text>
+          </View>
+
+          {/* GRID */}
           <View
             style={{
               flexDirection: "row",
               flexWrap: "wrap",
               justifyContent: "space-between",
-              rowGap: spacing.md,
+              rowGap: spacing.lg,
             }}
           >
-            <MenuButton
-              title="Productos"
-              icon="package-variant-closed"
-              onPress={() => router.push("/productos")}
-            />
-            <MenuButton
-              title="Clientes"
-              icon="account-group"
-              onPress={() => router.push("/clientes")}
-            />
-            <MenuButton
-              title="Nueva Venta"
-              icon="plus-circle"
-              onPress={() => router.push("/nueva-venta")}
-            />
-            <MenuButton
-              title="Venta del día"
-              icon="calendar-check"
-              onPress={() => router.push("/venta-dia")}
-            />
-            <MenuButton
-              title="Historial"
-              icon="chart-line"
-              onPress={() => router.push("/historial")}
-            />
-            <MenuButton
-              title="Fiados"
-              icon="hand-coin"
-              onPress={() => router.push("/fiados")}
-            />
+            {MENU_ITEMS.map((item) => (
+              <TouchableOpacity
+                key={item.title}
+                activeOpacity={0.9}
+                onPress={() => router.push(item.route as any)}
+                style={{
+                  width: "48%",
+                  backgroundColor: colors.white,
+
+                  borderRadius: MENU_STYLES.cardRadius,
+                  padding: MENU_STYLES.cardPadding,
+                  minHeight: MENU_STYLES.cardMinHeight,
+
+                  justifyContent: "space-between",
+
+                  borderBottomWidth: MENU_STYLES.borderBottomWidth,
+                  borderBottomColor: item.color,
+
+                  shadowColor: "#000",
+                  shadowOffset: {
+                    width: 0,
+                    height: 6,
+                  },
+                  shadowOpacity: MENU_STYLES.shadowOpacity,
+                  shadowRadius: MENU_STYLES.shadowRadius,
+                  elevation: MENU_STYLES.elevation,
+                }}
+              >
+                {/* FLECHA */}
+                <View
+                  style={{
+                    position: "absolute",
+                    top: 18,
+                    right: 18,
+
+                    width: MENU_STYLES.arrowSize,
+                    height: MENU_STYLES.arrowSize,
+                    borderRadius: MENU_STYLES.arrowSize / 2,
+
+                    backgroundColor: item.light,
+
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Feather
+                    name="chevron-right"
+                    size={MENU_STYLES.arrowIconSize}
+                    color={item.color}
+                  />
+                </View>
+
+                {/* ICONO */}
+                <View
+                  style={{
+                    width: MENU_STYLES.iconContainerSize,
+                    height: MENU_STYLES.iconContainerSize,
+
+                    borderRadius: MENU_STYLES.iconRadius,
+
+                    backgroundColor: item.color,
+
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name={item.icon as any}
+                    size={MENU_STYLES.iconSize}
+                    color="#fff"
+                  />
+                </View>
+
+                {/* TEXTOS */}
+                <View style={{ marginTop: spacing.md }}>
+                  <Text
+                    numberOfLines={1}
+                    style={{
+                      fontSize: MENU_STYLES.titleSize,
+                      fontWeight: MENU_STYLES.titleWeight,
+                      color: colors.ink,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {item.title}
+                  </Text>
+
+                  <Text
+                    style={{
+                      fontSize: MENU_STYLES.descriptionSize,
+
+                      lineHeight: MENU_STYLES.descriptionLineHeight,
+
+                      color: colors.grayText,
+                      fontWeight: "500",
+                    }}
+                  >
+                    {item.description}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
           </View>
         </ScrollView>
       </View>

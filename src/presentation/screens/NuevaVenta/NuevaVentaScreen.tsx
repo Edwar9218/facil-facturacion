@@ -307,7 +307,7 @@ export default function NuevaVentaScreen() {
           <TouchableOpacity
             style={[s.opcionBtn, s.opcionBtnRojo]}
             activeOpacity={0.8}
-            onPress={() => eliminarConMenu(menuAbierto.id)}
+            onPress={() => eliminarConMenu(menuAbierto)}
           >
             <View style={[s.opcionIconBox, { backgroundColor: RED_LIGHT }]}>
               <MaterialIcons name="delete-outline" size={24} color={RED} />

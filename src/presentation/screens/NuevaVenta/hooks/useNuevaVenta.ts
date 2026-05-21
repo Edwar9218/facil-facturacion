@@ -1,10 +1,10 @@
 import { useRef, useState } from "react";
 import {
-  Animated,
+  Alert, Animated,
   LayoutAnimation,
   Platform,
   TextInput,
-  UIManager,
+  UIManager
 } from "react-native";
 import { useSlideModal } from "../../../hooks/useSlideModal";
 
@@ -364,9 +364,26 @@ export const useNuevaVenta = () => {
     setTimeout(() => precioInputRef.current?.focus(), 120);
   };
 
-  const eliminarConMenu = (id: string) => {
+  const eliminarConMenu = (item: any) => {
     cerrarMenu();
-    eliminarDelCarrito(id);
+
+    setTimeout(() => {
+      Alert.alert(
+        "Eliminar producto",
+        `¿Seguro que quieres eliminar "${item.nombre}" del carrito?`,
+        [
+          {
+            text: "Cancelar",
+            style: "cancel",
+          },
+          {
+            text: "Eliminar",
+            style: "destructive",
+            onPress: () => eliminarDelCarrito(item.id),
+          },
+        ],
+      );
+    }, 150);
   };
 
   const guardarNuevoProducto = () => {
