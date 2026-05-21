@@ -1,191 +1,38 @@
+// src/presentation/screens/productos/ProductosScreen.tsx
+
 import { Feather } from "@expo/vector-icons";
-import React, { useState } from "react";
-import {
-  Alert,
-  FlatList,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React from "react";
+import { FlatList, TextInput, TouchableOpacity, View } from "react-native";
 import { Producto } from "../../../domain/entities/Producto";
 import { useTheme } from "../../../theme";
 import { ScreenWrapper } from "../../components/layout/ScreenWrapper";
 import { AppText } from "../../components/ui/AppText";
-import {
-  Campo,
-  FormularioModal,
-  ValoresCampo,
-} from "../../components/ui/FormularioModal";
+import { FormularioModal } from "../../components/ui/FormularioModal";
 import { Opcion, OpcionesModal } from "../../components/ui/OpcionesModal";
-import { useSlideModal } from "../../hooks/useSlideModal";
 import { ProductoCard } from "./components/ProductoCard";
-
-// ── Mock ─────────────────────────────────────────────────────────────────────
-const PRODUCTOS_MOCK: Producto[] = [
-  { id: "1", nombre: "Mango", precio: 5000, unidad: "Kg", disponible: 50 },
-  { id: "2", nombre: "Limón", precio: 3000, unidad: "Kg", disponible: 80 },
-  { id: "3", nombre: "Naranja", precio: 4000, unidad: "Kg", disponible: 60 },
-  { id: "4", nombre: "Banano", precio: 2500, unidad: "Kg", disponible: 100 },
-  { id: "5", nombre: "Piña", precio: 6000, unidad: "Und", disponible: 25 },
-  { id: "6", nombre: "Fresa", precio: 8000, unidad: "Kg", disponible: 15 },
-];
-
-const fmt = (n: number) =>
-  "$ " + Number(n).toLocaleString("es-CO", { minimumFractionDigits: 0 });
-
-// ── Campos del formulario de producto ────────────────────────────────────────
-const CAMPOS_PRODUCTO: Campo[] = [
-  {
-    id: "nombre",
-    label: "Nombre del producto",
-    placeholder: "Ej: Mango, Limón, etc.",
-    tipo: "texto",
-    obligatorio: true,
-  },
-  {
-    id: "precio",
-    label: "Precio por unidad",
-    placeholder: "0",
-    tipo: "precio",
-    obligatorio: true,
-  },
-  {
-    id: "unidad",
-    label: "Unidad de medida",
-    tipo: "selector",
-    opciones: ["Kg", "Und", "Lt", "g", "ml", "Lb", "Caja", "Bolsa"],
-    obligatorio: true,
-  },
-  {
-    id: "disponible",
-    label: "Cantidad disponible",
-    placeholder: "0",
-    tipo: "numero",
-    obligatorio: false,
-  },
-  {
-    id: "imagen",
-    label: "Foto del producto",
-    tipo: "foto",
-    obligatorio: false,
-  },
-];
-
-// ── Valores vacíos ────────────────────────────────────────────────────────────
-const valoresVacios = (): ValoresCampo => ({
-  nombre: "",
-  precio: "",
-  unidad: "Kg",
-  disponible: "",
-  imagen: "",
-});
+import { CAMPOS_PRODUCTO, useProductos } from "./hooks/useProductos";
 
 export const ProductosScreen = () => {
   const { colors, typography, spacing, radius, sizes, shadows } = useTheme();
 
-  // ── Estado ────────────────────────────────────────────────────────────────
-  const [productos, setProductos] = useState<Producto[]>(PRODUCTOS_MOCK);
-  const [busqueda, setBusqueda] = useState("");
-  const [productoSeleccionado, setProductoSeleccionado] =
-    useState<Producto | null>(null);
-  const [esEdicion, setEsEdicion] = useState(false);
-  const [valores, setValores] = useState<ValoresCampo>(valoresVacios());
+  const {
+    productosFiltrados,
+    busqueda,
+    setBusqueda,
+    esEdicion,
+    valores,
+    handleChange,
+    productoSeleccionado,
+    modalOpciones,
+    modalFormulario,
+    abrirCrear,
+    abrirOpciones,
+    abrirEditar,
+    guardar,
+    confirmarEliminar,
+  } = useProductos();
 
-  // ── Modales ───────────────────────────────────────────────────────────────
-  const modalOpciones = useSlideModal(20);
-  const modalFormulario = useSlideModal(300);
-
-  // ── Filtrado ──────────────────────────────────────────────────────────────
-  const productosFiltrados = productos.filter((p) =>
-    p.nombre.toLowerCase().includes(busqueda.toLowerCase().trim()),
-  );
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleChange = (id: string, valor: string) => {
-    setValores((prev) => ({ ...prev, [id]: valor }));
-  };
-
-  const abrirCrear = () => {
-    setEsEdicion(false);
-    setProductoSeleccionado(null);
-    setValores(valoresVacios());
-    modalFormulario.abrir();
-  };
-
-  const abrirEditar = (producto: Producto) => {
-    modalOpciones.cerrar(() => {
-      setTimeout(() => {
-        setEsEdicion(true);
-        setProductoSeleccionado(producto);
-        setValores({
-          nombre: producto.nombre,
-          precio: String(producto.precio).replace(/\B(?=(\d{3})+(?!\d))/g, "."),
-          unidad: producto.unidad,
-          disponible: String(producto.disponible),
-          imagen: producto.imagen ?? "",
-        });
-        modalFormulario.abrir();
-      }, 300);
-    });
-  };
-
-  const guardar = () => {
-    if (!valores.nombre.trim() || !valores.precio.trim()) return;
-
-    const precioNum = Number(valores.precio.replace(/\./g, ""));
-
-    if (esEdicion && productoSeleccionado) {
-      setProductos((prev) =>
-        prev.map((p) =>
-          p.id === productoSeleccionado.id
-            ? {
-                ...p,
-                nombre: valores.nombre.trim(),
-                precio: precioNum,
-                unidad: valores.unidad,
-                disponible: Number(valores.disponible) || 0,
-                imagen: valores.imagen || undefined,
-              }
-            : p,
-        ),
-      );
-    } else {
-      const nuevo: Producto = {
-        id: String(Date.now()),
-        nombre: valores.nombre.trim(),
-        precio: precioNum,
-        unidad: valores.unidad,
-        disponible: Number(valores.disponible) || 0,
-        imagen: valores.imagen || undefined,
-      };
-      setProductos((prev) => [nuevo, ...prev]);
-    }
-    modalFormulario.cerrar();
-  };
-
-  const confirmarEliminar = (producto: Producto) => {
-    modalOpciones.cerrar(() => {
-      setTimeout(() => {
-        Alert.alert(
-          "Eliminar producto",
-          `¿Seguro que quieres eliminar "${producto.nombre}"?`,
-          [
-            { text: "Cancelar", style: "cancel" },
-            {
-              text: "Eliminar",
-              style: "destructive",
-              onPress: () =>
-                setProductos((prev) =>
-                  prev.filter((p) => p.id !== producto.id),
-                ),
-            },
-          ],
-        );
-      }, 150);
-    });
-  };
-
-  // ── Opciones del modal ────────────────────────────────────────────────────
+  // ── Opciones del modal 3 puntos ───────────────────────────────────────────
   const opcionesModal = (producto: Producto): Opcion[] => [
     {
       label: "Editar producto",
@@ -207,7 +54,6 @@ export const ProductosScreen = () => {
     },
   ];
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <>
       <ScreenWrapper showBtnB={false} title="Productos">
@@ -256,6 +102,7 @@ export const ProductosScreen = () => {
             )}
           </View>
 
+          {/* Contador */}
           <AppText variant="label" style={{ marginBottom: spacing.xs }}>
             {productosFiltrados.length} producto
             {productosFiltrados.length !== 1 ? "s" : ""}
@@ -267,13 +114,7 @@ export const ProductosScreen = () => {
           data={productosFiltrados}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <ProductoCard
-              producto={item}
-              onPress={(producto) => {
-                setProductoSeleccionado(producto);
-                modalOpciones.abrir();
-              }}
-            />
+            <ProductoCard producto={item} onPress={abrirOpciones} />
           )}
           scrollEnabled={false}
           contentContainerStyle={{
@@ -282,10 +123,7 @@ export const ProductosScreen = () => {
           }}
           ListEmptyComponent={
             <View
-              style={{
-                alignItems: "center",
-                paddingVertical: spacing.xxxl,
-              }}
+              style={{ alignItems: "center", paddingVertical: spacing.xxxl }}
             >
               <AppText style={{ fontSize: 40, marginBottom: spacing.xs }}>
                 📦
