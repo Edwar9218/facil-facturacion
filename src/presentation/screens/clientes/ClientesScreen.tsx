@@ -114,8 +114,8 @@ export const ClientesScreen = () => {
           renderItem={({ item }) => (
             <ClienteCard
               cliente={item}
-              enMora={false} // ← después conectamos con fiados
-              totalDeuda={0} // ← después conectamos con fiados
+              enMora={false} // ← después conectamos con creditos
+              totalDeuda={0} // ← después conectamos con creditos
               onPress={abrirOpciones}
             />
           )}

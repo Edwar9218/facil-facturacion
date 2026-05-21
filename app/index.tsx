@@ -87,10 +87,10 @@ const MENU_ITEMS = [
     light: "#E9FFFC",
   },
   {
-    title: "Fiados",
+    title: "Creditos",
     description: "Gestiona pagos pendientes y créditos",
     icon: "hand-coin",
-    route: "/fiados",
+    route: "/creditos",
     color: "#FF4D8D",
     light: "#FFF0F6",
   },

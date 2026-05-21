@@ -1173,7 +1173,7 @@ export default function NuevaVentaScreen() {
                     metodoPago === "contado" && s.metodoBtnLabelActive,
                   ]}
                 >
-                  Efectivo
+                  Contado
                 </Text>
                 <Text
                   style={[
@@ -1190,34 +1190,34 @@ export default function NuevaVentaScreen() {
               <TouchableOpacity
                 style={[
                   s.metodoBtn,
-                  metodoPago === "fiado" && s.metodoBtnFiado,
+                  metodoPago === "credito" && s.metodoBtnCredito,
                 ]}
-                onPress={() => setMetodoPago("fiado")}
+                onPress={() => setMetodoPago("credito")}
               >
                 <View
                   style={[
                     s.metodoIconBox,
-                    metodoPago === "fiado" && s.metodoIconBoxFiado,
+                    metodoPago === "credito" && s.metodoIconBoxCredito,
                   ]}
                 >
                   <MaterialIcons
                     name="schedule"
                     size={32}
-                    color={metodoPago === "fiado" ? "#fff" : "#F59E0B"}
+                    color={metodoPago === "credito" ? "#fff" : "#F59E0B"}
                   />
                 </View>
                 <Text
                   style={[
                     s.metodoBtnLabel,
-                    metodoPago === "fiado" && { color: "#fff" },
+                    metodoPago === "credito" && { color: "#fff" },
                   ]}
                 >
-                  Fiado
+                  Credito
                 </Text>
                 <Text
                   style={[
                     T.caption,
-                    metodoPago === "fiado" && {
+                    metodoPago === "credito" && {
                       color: "rgba(255,255,255,0.75)",
                     },
                   ]}
@@ -1293,8 +1293,8 @@ export default function NuevaVentaScreen() {
               </View>
             )}
 
-            {metodoPago === "fiado" && (
-              <View style={s.fiadoInfo}>
+            {metodoPago === "credito" && (
+              <View style={s.CreditoInfo}>
                 <MaterialIcons name="info-outline" size={16} color="#F59E0B" />
                 <Text
                   style={[
@@ -1724,7 +1724,7 @@ const s = StyleSheet.create({
     shadowRadius: 8,
     elevation: 4,
   },
-  metodoBtnFiado: {
+  metodoBtnCredito: {
     backgroundColor: "#F59E0B",
     borderColor: "#F59E0B",
     shadowColor: "#F59E0B",
@@ -1741,7 +1741,7 @@ const s = StyleSheet.create({
     justifyContent: "center",
   },
   metodoIconBoxActive: { backgroundColor: "rgba(255,255,255,0.2)" },
-  metodoIconBoxFiado: { backgroundColor: "rgba(255,255,255,0.2)" },
+  metodoIconBoxCredito: { backgroundColor: "rgba(255,255,255,0.2)" },
   metodoBtnLabel: { fontSize: 18, fontWeight: "700", color: INK },
   metodoBtnLabelActive: { color: "#fff" },
   calculadoraCard: {
@@ -1777,7 +1777,7 @@ const s = StyleSheet.create({
     borderColor: "#A7F3D0",
     gap: 2,
   },
-  fiadoInfo: {
+  CreditoInfo: {
     flexDirection: "row",
     alignItems: "flex-start",
     backgroundColor: "#FFFBEB",
