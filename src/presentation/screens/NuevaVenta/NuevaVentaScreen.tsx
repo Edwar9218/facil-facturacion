@@ -4,6 +4,7 @@ import {
   MaterialCommunityIcons,
   MaterialIcons,
 } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
@@ -81,6 +82,7 @@ export default function NuevaVentaScreen() {
   const BLUE_LIGHT = colors.primaryLight;
 
   const {
+    cargarDatos,
     step,
     siguiente,
     retroceder,
@@ -130,6 +132,7 @@ export default function NuevaVentaScreen() {
     scrollAlFiltro,
     subtotalModal,
     totalCarrito,
+    precioInputRef,
     metodoPago,
     setMetodoPago,
     paganCon,
@@ -140,6 +143,12 @@ export default function NuevaVentaScreen() {
     inputPagoRef,
     scrollRef,
   } = useNuevaVenta();
+
+  React.useEffect(() => {
+    cargarDatos();
+  }, []);
+
+  const router = useRouter();
 
   // ── Step indicator ──────────────────────────────────────────────────────────
   const CircleStep = ({ num, active }: { num: number; active: boolean }) => (
@@ -1360,26 +1369,28 @@ export default function NuevaVentaScreen() {
             }}
           >
             <View style={{ width: 100, alignItems: "flex-start" }}>
-              <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
-                activeOpacity={0.7}
-                onPress={retroceder}
-              >
-                <Feather
-                  name="chevron-left"
-                  size={sizes.iconMd}
-                  color={colors.grayText}
-                />
-                <Text
-                  style={{
-                    fontSize: typography.size.lg,
-                    fontWeight: typography.weight.regular,
-                    color: colors.grayText,
-                  }}
+              {step > 1 && (
+                <TouchableOpacity
+                  style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
+                  activeOpacity={0.7}
+                  onPress={retroceder}
                 >
-                  volver
-                </Text>
-              </TouchableOpacity>
+                  <Feather
+                    name="chevron-left"
+                    size={sizes.iconMd}
+                    color={colors.grayText}
+                  />
+                  <Text
+                    style={{
+                      fontSize: typography.size.lg,
+                      fontWeight: typography.weight.regular,
+                      color: colors.grayText,
+                    }}
+                  >
+                    volver
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
 
             <View
@@ -1406,7 +1417,28 @@ export default function NuevaVentaScreen() {
               </Text>
             </View>
 
-            <View style={{ width: 100, height: 46 }} />
+            <View style={{ width: 100, alignItems: "flex-end" }}>
+              <TouchableOpacity
+                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
+                activeOpacity={0.7}
+                onPress={() => router.back()}
+              >
+                <Text
+                  style={{
+                    fontSize: typography.size.lg,
+                    fontWeight: typography.weight.regular,
+                    color: colors.grayText,
+                  }}
+                >
+                  salir
+                </Text>
+                <MaterialCommunityIcons
+                  name="logout-variant"
+                  size={sizes.iconMd}
+                  color={colors.grayText}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
 

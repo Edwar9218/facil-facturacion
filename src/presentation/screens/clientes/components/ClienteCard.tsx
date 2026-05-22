@@ -27,7 +27,7 @@ export const ClienteCard = ({
   return (
     <AppCard
       onPress={() => onPress(cliente)}
-      style={{ marginBottom: spacing.md }}
+      style={{ marginBottom: spacing.md, minHeight: 100 }}
     >
       <View
         style={{ flexDirection: "row", alignItems: "center", gap: spacing.md }}
@@ -50,7 +50,11 @@ export const ClienteCard = ({
 
         {/* Info */}
         <View style={{ flex: 1 }}>
-          <AppText variant="bodyBold">{cliente.nombre}</AppText>
+          <AppText variant="bodyBold" numberOfLines={1}>
+            {cliente.nombre.length > 20
+              ? cliente.nombre.substring(0, 20) + "…"
+              : cliente.nombre}
+          </AppText>
 
           {/* Teléfono */}
           <View
@@ -86,7 +90,11 @@ export const ClienteCard = ({
                 size={sizes.iconXs}
                 color={colors.grayText}
               />
-              <AppText variant="caption">{cliente.direccion}</AppText>
+              <AppText variant="caption" numberOfLines={1}>
+                {cliente.direccion.length > 24
+                  ? cliente.direccion.substring(0, 24) + "…"
+                  : cliente.direccion}
+              </AppText>
             </View>
           )}
         </View>

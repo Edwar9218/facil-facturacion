@@ -1,20 +1,11 @@
-// src/presentation/screens/productos/hooks/useProductos.ts
-
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
+import { ProductoRepositoryImpl } from "../../../../data/repositories/ProductoRepositoryImpl";
 import { Producto } from "../../../../domain/entities/Producto";
 import { Campo, ValoresCampo } from "../../../components/ui/FormularioModal";
 import { useSlideModal } from "../../../hooks/useSlideModal";
 
-// ── Mock ──────────────────────────────────────────────────────────────────────
-const PRODUCTOS_MOCK: Producto[] = [
-  { id: "1", nombre: "Mango", precio: 5000, unidad: "Kg", disponible: 50 },
-  { id: "2", nombre: "Limón", precio: 3000, unidad: "Kg", disponible: 80 },
-  { id: "3", nombre: "Naranja", precio: 4000, unidad: "Kg", disponible: 60 },
-  { id: "4", nombre: "Banano", precio: 2500, unidad: "Kg", disponible: 100 },
-  { id: "5", nombre: "Piña", precio: 6000, unidad: "Und", disponible: 25 },
-  { id: "6", nombre: "Fresa", precio: 8000, unidad: "Kg", disponible: 15 },
-];
+const repo = new ProductoRepositoryImpl();
 
 // ── Campos formulario ─────────────────────────────────────────────────────────
 export const CAMPOS_PRODUCTO: Campo[] = [
@@ -63,29 +54,43 @@ export const valoresVaciosProducto = (): ValoresCampo => ({
   imagen: "",
 });
 
+// ── Normalizar nombre ─────────────────────────────────────────────────────────
+const normalizarNombre = (nombre: string) =>
+  nombre.trim().toLowerCase().replace(/\s+/g, " ");
+
 // ── Hook principal ────────────────────────────────────────────────────────────
 export const useProductos = () => {
-  // ── Estado ───────────────────────────────────────────────────────────────────
-  const [productos, setProductos] = useState<Producto[]>(PRODUCTOS_MOCK);
+  const [productos, setProductos] = useState<Producto[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [productoSeleccionado, setProductoSeleccionado] =
     useState<Producto | null>(null);
   const [esEdicion, setEsEdicion] = useState(false);
   const [valores, setValores] = useState<ValoresCampo>(valoresVaciosProducto());
 
-  // ── Modales ───────────────────────────────────────────────────────────────────
   const modalOpciones = useSlideModal(20);
   const modalFormulario = useSlideModal(300);
 
-  // ── Filtrado ──────────────────────────────────────────────────────────────────
+  // ── Cargar BD ─────────────────────────────────────────────────────────────
+  const cargarProductos = useCallback(async () => {
+    setCargando(true);
+    const data = await repo.getAll();
+    setProductos(data);
+    setCargando(false);
+  }, []);
+
+  useEffect(() => {
+    cargarProductos();
+  }, [cargarProductos]);
+
+  // ── Filtrado ──────────────────────────────────────────────────────────────
   const productosFiltrados = productos.filter((p) =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase().trim()),
   );
 
-  // ── Handlers ──────────────────────────────────────────────────────────────────
-  const handleChange = (id: string, valor: string) => {
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleChange = (id: string, valor: string) =>
     setValores((prev) => ({ ...prev, [id]: valor }));
-  };
 
   const abrirCrear = () => {
     setEsEdicion(false);
@@ -116,35 +121,48 @@ export const useProductos = () => {
     });
   };
 
-  const guardar = () => {
+  const guardar = async () => {
     if (!valores.nombre.trim() || !valores.precio.trim()) return;
+
+    // ── Validar duplicado solo al crear ──────────────────────────────────────
+    if (!esEdicion) {
+      const nombreNuevo = normalizarNombre(valores.nombre);
+      const existe = productos.some(
+        (p) => normalizarNombre(p.nombre) === nombreNuevo,
+      );
+      if (existe) {
+        Alert.alert(
+          "Producto duplicado",
+          `"${valores.nombre.trim()}" ya existe. Usa un nombre diferente.`,
+          [{ text: "Entendido", style: "cancel" }],
+        );
+        return;
+      }
+    }
 
     const precioNum = Number(valores.precio.replace(/\./g, ""));
 
     if (esEdicion && productoSeleccionado) {
-      setProductos((prev) =>
-        prev.map((p) =>
-          p.id === productoSeleccionado.id
-            ? {
-                ...p,
-                nombre: valores.nombre.trim(),
-                precio: precioNum,
-                unidad: valores.unidad,
-                disponible: Number(valores.disponible) || 0,
-                imagen: valores.imagen || undefined,
-              }
-            : p,
-        ),
-      );
-    } else {
-      const nuevo: Producto = {
-        id: String(Date.now()),
+      const actualizado: Producto = {
+        id: productoSeleccionado.id,
         nombre: valores.nombre.trim(),
         precio: precioNum,
         unidad: valores.unidad,
         disponible: Number(valores.disponible) || 0,
         imagen: valores.imagen || undefined,
       };
+      await repo.update(actualizado);
+      setProductos((prev) =>
+        prev.map((p) => (p.id === actualizado.id ? actualizado : p)),
+      );
+    } else {
+      const nuevo = await repo.create({
+        nombre: valores.nombre.trim(),
+        precio: precioNum,
+        unidad: valores.unidad,
+        disponible: Number(valores.disponible) || 0,
+        imagen: valores.imagen || undefined,
+      });
       setProductos((prev) => [nuevo, ...prev]);
     }
     modalFormulario.cerrar();
@@ -161,10 +179,12 @@ export const useProductos = () => {
             {
               text: "Eliminar",
               style: "destructive",
-              onPress: () =>
+              onPress: async () => {
+                await repo.delete(producto.id);
                 setProductos((prev) =>
                   prev.filter((p) => p.id !== producto.id),
-                ),
+                );
+              },
             },
           ],
         );
@@ -172,25 +192,18 @@ export const useProductos = () => {
     });
   };
 
-  // ── Return ─────────────────────────────────────────────────────────────────────
   return {
-    // Lista
     productos,
+    cargando,
     busqueda,
     setBusqueda,
     productosFiltrados,
-
-    // Formulario
     esEdicion,
     valores,
     handleChange,
     productoSeleccionado,
-
-    // Modales
     modalOpciones,
     modalFormulario,
-
-    // Acciones
     abrirCrear,
     abrirOpciones,
     abrirEditar,

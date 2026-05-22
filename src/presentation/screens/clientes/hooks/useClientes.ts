@@ -1,29 +1,10 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
+import { ClienteRepositoryImpl } from "../../../../data/repositories/ClienteRepositoryImpl";
 import { Cliente } from "../../../../domain/entities/Cliente";
 import { useSlideModal } from "../../../hooks/useSlideModal";
 
-// ── Mock ─────────────────────────────────────────────────────────────────────
-const CLIENTES_MOCK: Cliente[] = [
-  {
-    id: "1",
-    nombre: "Luis Perez",
-    telefono: "3142567894",
-    direccion: "Cr 15 #11-56",
-  },
-  {
-    id: "2",
-    nombre: "Amilo Suares",
-    telefono: "3142567894",
-    direccion: "Cr 15 #11-56",
-  },
-  {
-    id: "3",
-    nombre: "Luisa Perez",
-    telefono: "3142567894",
-    direccion: "Cr 15 #11-56",
-  },
-];
+const repo = new ClienteRepositoryImpl();
 
 // ── Campos formulario ─────────────────────────────────────────────────────────
 export const CAMPOS_CLIENTE = [
@@ -32,6 +13,7 @@ export const CAMPOS_CLIENTE = [
     label: "Nombre del cliente",
     tipo: "texto" as const,
     obligatorio: true,
+    maxLength: 22,
   },
   {
     id: "telefono",
@@ -54,29 +36,43 @@ export const valoresVaciosCliente = () => ({
   direccion: "",
 });
 
+// ── Normalizar ────────────────────────────────────────────────────────────────
+const normalizarNombre = (nombre: string) =>
+  nombre.trim().toLowerCase().replace(/\s+/g, " ");
+
 // ── Hook principal ────────────────────────────────────────────────────────────
 export const useClientes = () => {
-  // ── Estado ──────────────────────────────────────────────────────────────────
-  const [clientes, setClientes] = useState<Cliente[]>(CLIENTES_MOCK);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [clienteSeleccionado, setClienteSeleccionado] =
     useState<Cliente | null>(null);
   const [esEdicion, setEsEdicion] = useState(false);
   const [valores, setValores] = useState(valoresVaciosCliente());
 
-  // ── Modales ──────────────────────────────────────────────────────────────────
   const modalOpciones = useSlideModal(350);
   const modalFormulario = useSlideModal(900);
 
-  // ── Filtrado ─────────────────────────────────────────────────────────────────
+  // ── Cargar BD ─────────────────────────────────────────────────────────────
+  const cargarClientes = useCallback(async () => {
+    setCargando(true);
+    const data = await repo.getAll();
+    setClientes(data);
+    setCargando(false);
+  }, []);
+
+  useEffect(() => {
+    cargarClientes();
+  }, [cargarClientes]);
+
+  // ── Filtrado ──────────────────────────────────────────────────────────────
   const clientesFiltrados = clientes.filter((c) =>
     c.nombre.toLowerCase().includes(busqueda.toLowerCase().trim()),
   );
 
-  // ── Handlers ─────────────────────────────────────────────────────────────────
-  const handleChange = (id: string, valor: string) => {
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const handleChange = (id: string, valor: string) =>
     setValores((prev) => ({ ...prev, [id]: valor }));
-  };
 
   const abrirCrear = () => {
     setEsEdicion(false);
@@ -105,29 +101,42 @@ export const useClientes = () => {
     });
   };
 
-  const guardar = () => {
+  const guardar = async () => {
     if (!valores.nombre.trim() || !valores.telefono.trim()) return;
 
-    if (esEdicion && clienteSeleccionado) {
-      setClientes((prev) =>
-        prev.map((c) =>
-          c.id === clienteSeleccionado.id
-            ? {
-                ...c,
-                nombre: valores.nombre.trim(),
-                telefono: valores.telefono.trim(),
-                direccion: valores.direccion.trim() || undefined,
-              }
-            : c,
-        ),
+    // ── Validar duplicado solo al crear ──────────────────────────────────────
+    if (!esEdicion) {
+      const nombreNuevo = normalizarNombre(valores.nombre);
+      const existe = clientes.some(
+        (c) => normalizarNombre(c.nombre) === nombreNuevo,
       );
-    } else {
-      const nuevo: Cliente = {
-        id: String(Date.now()),
+      if (existe) {
+        Alert.alert(
+          "Cliente duplicado",
+          `"${valores.nombre.trim()}" ya existe. Usa un nombre diferente.`,
+          [{ text: "Entendido", style: "cancel" }],
+        );
+        return;
+      }
+    }
+
+    if (esEdicion && clienteSeleccionado) {
+      const actualizado: Cliente = {
+        id: clienteSeleccionado.id,
         nombre: valores.nombre.trim(),
         telefono: valores.telefono.trim(),
         direccion: valores.direccion.trim() || undefined,
       };
+      await repo.update(actualizado);
+      setClientes((prev) =>
+        prev.map((c) => (c.id === actualizado.id ? actualizado : c)),
+      );
+    } else {
+      const nuevo = await repo.create({
+        nombre: valores.nombre.trim(),
+        telefono: valores.telefono.trim(),
+        direccion: valores.direccion.trim() || undefined,
+      });
       setClientes((prev) => [nuevo, ...prev]);
     }
     modalFormulario.cerrar();
@@ -144,8 +153,10 @@ export const useClientes = () => {
             {
               text: "Eliminar",
               style: "destructive",
-              onPress: () =>
-                setClientes((prev) => prev.filter((c) => c.id !== cliente.id)),
+              onPress: async () => {
+                await repo.delete(cliente.id);
+                setClientes((prev) => prev.filter((c) => c.id !== cliente.id));
+              },
             },
           ],
         );
@@ -153,25 +164,18 @@ export const useClientes = () => {
     });
   };
 
-  // ── Return ────────────────────────────────────────────────────────────────────
   return {
-    // Lista
     clientes,
+    cargando,
     busqueda,
     setBusqueda,
     clientesFiltrados,
-
-    // Formulario
     esEdicion,
     valores,
     handleChange,
     clienteSeleccionado,
-
-    // Modales
     modalOpciones,
     modalFormulario,
-
-    // Acciones
     abrirCrear,
     abrirOpciones,
     abrirEditar,

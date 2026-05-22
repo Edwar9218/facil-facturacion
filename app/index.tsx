@@ -13,7 +13,6 @@ import { useTheme } from "../src/theme";
 
 // ─────────────────────────────────────────────────────────────
 // CONFIGURACIÓN GLOBAL DEL MENÚ
-// TODO se controla desde aquí
 // ─────────────────────────────────────────────────────────────
 
 const MENU_STYLES = {
@@ -123,7 +122,6 @@ export default function HomeScreen() {
           paddingTop: insets.top + 10,
         }}
       >
-        {/* Fecha */}
         <Text
           style={{
             textAlign: "center",
@@ -137,7 +135,6 @@ export default function HomeScreen() {
           lun 20 oct | 10:10 am
         </Text>
 
-        {/* Logo */}
         <View
           style={{
             flexDirection: "row",
@@ -172,6 +169,7 @@ export default function HomeScreen() {
 
           {/* AJUSTES */}
           <TouchableOpacity
+            onPress={() => router.push("/ajustes")}
             style={{
               width: 55,
               height: 55,
@@ -253,16 +251,12 @@ export default function HomeScreen() {
                 style={{
                   width: "48%",
                   backgroundColor: colors.white,
-
                   borderRadius: MENU_STYLES.cardRadius,
                   padding: MENU_STYLES.cardPadding,
                   minHeight: MENU_STYLES.cardMinHeight,
-
                   justifyContent: "space-between",
-
                   borderBottomWidth: MENU_STYLES.borderBottomWidth,
                   borderBottomColor: item.color,
-
                   shadowColor: "#000",
                   shadowOffset: {
                     width: 0,
@@ -273,19 +267,15 @@ export default function HomeScreen() {
                   elevation: MENU_STYLES.elevation,
                 }}
               >
-                {/* FLECHA */}
                 <View
                   style={{
                     position: "absolute",
                     top: 18,
                     right: 18,
-
                     width: MENU_STYLES.arrowSize,
                     height: MENU_STYLES.arrowSize,
                     borderRadius: MENU_STYLES.arrowSize / 2,
-
                     backgroundColor: item.light,
-
                     alignItems: "center",
                     justifyContent: "center",
                   }}
@@ -297,16 +287,12 @@ export default function HomeScreen() {
                   />
                 </View>
 
-                {/* ICONO */}
                 <View
                   style={{
                     width: MENU_STYLES.iconContainerSize,
                     height: MENU_STYLES.iconContainerSize,
-
                     borderRadius: MENU_STYLES.iconRadius,
-
                     backgroundColor: item.color,
-
                     alignItems: "center",
                     justifyContent: "center",
                   }}
@@ -318,7 +304,6 @@ export default function HomeScreen() {
                   />
                 </View>
 
-                {/* TEXTOS */}
                 <View style={{ marginTop: spacing.md }}>
                   <Text
                     numberOfLines={1}
@@ -331,13 +316,10 @@ export default function HomeScreen() {
                   >
                     {item.title}
                   </Text>
-
                   <Text
                     style={{
                       fontSize: MENU_STYLES.descriptionSize,
-
                       lineHeight: MENU_STYLES.descriptionLineHeight,
-
                       color: colors.grayText,
                       fontWeight: "500",
                     }}

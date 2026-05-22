@@ -5,6 +5,10 @@ import * as SplashScreen from "expo-splash-screen";
 import { useCallback } from "react";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { initDatabase } from "../src/data/database/database";
+
+SplashScreen.preventAutoHideAsync();
+initDatabase();
 
 SplashScreen.preventAutoHideAsync();
 

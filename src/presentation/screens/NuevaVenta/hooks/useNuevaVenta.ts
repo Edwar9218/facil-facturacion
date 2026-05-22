@@ -1,14 +1,19 @@
 import { useRef, useState } from "react";
 import {
-  Alert, Animated,
+  Alert,
+  Animated,
   LayoutAnimation,
   Platform,
   TextInput,
-  UIManager
+  UIManager,
 } from "react-native";
+import { ClienteRepositoryImpl } from "../../../../data/repositories/ClienteRepositoryImpl";
+import { ProductoRepositoryImpl } from "../../../../data/repositories/ProductoRepositoryImpl";
+import { VentaRepositoryImpl } from "../../../../data/repositories/VentaRepositoryImpl";
+import { Cliente } from "../../../../domain/entities/Cliente";
+import { Producto } from "../../../../domain/entities/Producto";
 import { useSlideModal } from "../../../hooks/useSlideModal";
 
-// Habilitar LayoutAnimation en Android
 if (
   Platform.OS === "android" &&
   UIManager.setLayoutAnimationEnabledExperimental
@@ -16,6 +21,12 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+// ── Repos ─────────────────────────────────────────────────────────────────────
+const clienteRepo = new ClienteRepositoryImpl();
+const productoRepo = new ProductoRepositoryImpl();
+const ventaRepo = new VentaRepositoryImpl();
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 export const smoothLayout = () =>
   LayoutAnimation.configureNext(
     LayoutAnimation.create(
@@ -24,28 +35,6 @@ export const smoothLayout = () =>
       LayoutAnimation.Properties.opacity,
     ),
   );
-
-// ── Mocks ────────────────────────────────────────────────────────────────────
-export const CLIENTES_MOCK = [
-  {
-    id: "1",
-    nombre: "Luis Perez",
-    direccion: "cr 15 #11-56",
-    telefono: "3142567894",
-  },
-  {
-    id: "2",
-    nombre: "Amilo Suares",
-    direccion: "cr 15 #11-56",
-    telefono: "3142567894",
-  },
-  {
-    id: "3",
-    nombre: "Luisa Perez",
-    direccion: "cr 15 #11-56",
-    telefono: "3142567894",
-  },
-];
 
 export const EMOJIS: Record<string, string> = {
   Mango: "🥭",
@@ -62,39 +51,19 @@ export const EMOJIS: Record<string, string> = {
   Uva: "🍇",
 };
 
-export const PRODUCTOS_MOCK = [
-  { id: "1", nombre: "Mango", unidad: "Kg", precio: 5000, disponible: 50 },
-  { id: "2", nombre: "Limón", unidad: "Kg", precio: 3000, disponible: 80 },
-  { id: "3", nombre: "Naranja", unidad: "Kg", precio: 4000, disponible: 60 },
-  { id: "4", nombre: "Banano", unidad: "Kg", precio: 2500, disponible: 100 },
-  { id: "5", nombre: "Mandarina", unidad: "Kg", precio: 4500, disponible: 45 },
-  { id: "6", nombre: "Papaya", unidad: "Kg", precio: 3500, disponible: 30 },
-  { id: "7", nombre: "Piña", unidad: "Und", precio: 6000, disponible: 25 },
-  { id: "8", nombre: "Guayaba", unidad: "Kg", precio: 3000, disponible: 40 },
-  { id: "9", nombre: "Maracuyá", unidad: "Kg", precio: 5500, disponible: 20 },
-  {
-    id: "10",
-    nombre: "Tomate de árbol",
-    unidad: "Kg",
-    precio: 4000,
-    disponible: 35,
-  },
-  { id: "11", nombre: "Fresa", unidad: "Kg", precio: 8000, disponible: 15 },
-  { id: "12", nombre: "Uva", unidad: "Kg", precio: 9000, disponible: 10 },
-];
-
-export const FILTRO_SCROLL_OFFSET = 200;
-
 export const fmt = (n: number) =>
   "$ " + Number(n).toLocaleString("es-CO", { minimumFractionDigits: 0 });
 
-// ── Campos formularios reutilizables ─────────────────────────────────────────
+export const FILTRO_SCROLL_OFFSET = 200;
+
+// ── Campos formularios ────────────────────────────────────────────────────────
 export const CAMPOS_CLIENTE_VENTA = [
   {
     id: "nombre",
     label: "Nombre completo",
     tipo: "texto" as const,
     obligatorio: true,
+    maxLength: 22,
   },
   {
     id: "telefono",
@@ -110,7 +79,7 @@ export const CAMPOS_CLIENTE_VENTA = [
   },
 ];
 
-export const CAMPOS_PRODUCTO_VENTA: Campo[] = [
+export const CAMPOS_PRODUCTO_VENTA = [
   {
     id: "nombre",
     label: "Nombre del producto",
@@ -151,31 +120,30 @@ export const CAMPOS_PRODUCTO_VENTA: Campo[] = [
 export const useNuevaVenta = () => {
   const [step, setStep] = useState(1);
 
-  // ── Paso 1 ────────────────────────────────────────────────────────────────
+  // ── Paso 1 — Cliente ──────────────────────────────────────────────────────
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroClienteActivo, setFiltroClienteActivo] = useState(false);
-  const [clienteSeleccionado, setClienteSeleccionado] = useState<any>(null);
-  const [clientes, setClientes] = useState(CLIENTES_MOCK);
-
+  const [clienteSeleccionado, setClienteSeleccionado] =
+    useState<Cliente | null>(null);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [valoresNuevoCliente, setValoresNuevoCliente] = useState({
     nombre: "",
     telefono: "",
     direccion: "",
   });
 
-  // ── Paso 2 ────────────────────────────────────────────────────────────────
+  // ── Paso 2 — Productos ────────────────────────────────────────────────────
   const [filtroProducto, setFiltroProducto] = useState("");
   const [filtroActivo, setFiltroActivo] = useState(false);
   const [carrito, setCarrito] = useState<any[]>([]);
   const [carritoExpandido, setCarritoExpandido] = useState(false);
-  const [productoActivo, setProductoActivo] = useState<any>(null);
+  const [productoActivo, setProductoActivo] = useState<Producto | null>(null);
   const [cantidadModal, setCantidadModal] = useState("1");
   const [precioModal, setPrecioModal] = useState("");
   const [menuAbierto, setMenuAbierto] = useState<any>(null);
   const [cargandoGlobal, setCargandoGlobal] = useState(false);
   const [modoModal, setModoModal] = useState<string | null>(null);
-  const [productos, setProductos] = useState(PRODUCTOS_MOCK);
-
+  const [productos, setProductos] = useState<Producto[]>([]);
   const [valoresNuevoProducto, setValoresNuevoProducto] = useState({
     nombre: "",
     precio: "",
@@ -184,30 +152,26 @@ export const useNuevaVenta = () => {
     imagen: "",
   });
 
-  // ── Paso 3 ────────────────────────────────────────────────────────────────
-  const [metodoPago, setMetodoPago] = useState("contado");
+  // ── Paso 3 — Cobro ────────────────────────────────────────────────────────
+  const [metodoPago, setMetodoPago] = useState<"contado" | "credito">(
+    "contado",
+  );
   const [paganCon, setPaganCon] = useState("");
 
   // ── Refs ──────────────────────────────────────────────────────────────────
-  // KeyboardAwareScrollView de react-native-keyboard-controller es compatible
-  // con el mismo tipo de ref que ScrollView nativo.
-  const scrollRef = useRef<KeyboardAwareScrollView>(null);
+  const scrollRef = useRef<any>(null);
   const filtroInputRef = useRef<TextInput>(null);
   const inputPagoRef = useRef<TextInput>(null);
-  const precioInputRef = useRef<TextInput>(null); // ← NUEVO
+  const precioInputRef = useRef<TextInput>(null);
 
-  // ── Modales reutilizables ─────────────────────────────────────────────────
+  // ── Modales ───────────────────────────────────────────────────────────────
   const modalNuevoCliente = useSlideModal(700);
   const modalNuevoProducto = useSlideModal(700);
 
-  // ── Animaciones pasos ─────────────────────────────────────────────────────
+  // ── Animaciones ───────────────────────────────────────────────────────────
   const flexPaso1 = useRef(new Animated.Value(1)).current;
   const flexPaso2 = useRef(new Animated.Value(0)).current;
 
-  // ── minHeightPaso1 y minHeightPaso2 eliminados:
-  //    el dropdown ahora es position:absolute y no empuja el layout.
-
-  // ── Lógica pasos ──────────────────────────────────────────────────────────
   const animarPasos = (nuevoStep: number) => {
     Animated.parallel([
       Animated.timing(flexPaso1, {
@@ -223,6 +187,19 @@ export const useNuevaVenta = () => {
     ]).start();
   };
 
+  // ── Cargar BD al montar ───────────────────────────────────────────────────
+  const cargarDatos = async () => {
+    setCargandoGlobal(true);
+    const [cs, ps] = await Promise.all([
+      clienteRepo.getAll(),
+      productoRepo.getAll(),
+    ]);
+    setClientes(cs);
+    setProductos(ps);
+    setCargandoGlobal(false);
+  };
+
+  // ── Pasos ─────────────────────────────────────────────────────────────────
   const limpiarPaso2 = () => {
     smoothLayout();
     setProductoActivo(null);
@@ -233,10 +210,7 @@ export const useNuevaVenta = () => {
   };
 
   const scrollAlTop = () => {
-    setTimeout(
-      () => (scrollRef.current as any)?.scrollTo({ y: 0, animated: true }),
-      80,
-    );
+    setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 80);
   };
 
   const siguiente = () => {
@@ -257,10 +231,6 @@ export const useNuevaVenta = () => {
     scrollAlTop();
   };
 
-  // ── scrollAlFiltro simplificado ───────────────────────────────────────────
-  // Ya NO necesita measureLayout, requestAnimationFrame ni setTimeout.
-  // KeyboardAwareScrollView (react-native-keyboard-controller) hace el scroll
-  // automáticamente al TextInput enfocado, tanto en celular como en tablet.
   const scrollAlFiltro = (conLoader = true) => {
     if (conLoader) {
       setCargandoGlobal(true);
@@ -268,46 +238,44 @@ export const useNuevaVenta = () => {
     }
   };
 
-  // ── Lógica cliente ────────────────────────────────────────────────────────
+  // ── Clientes ──────────────────────────────────────────────────────────────
   const norm = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
 
   const clientesFiltrados = clientes.filter((c) =>
     norm(c.nombre).includes(norm(filtroCliente)),
   );
 
-  const seleccionarCliente = (cliente: any) => {
+  const seleccionarCliente = (cliente: Cliente) => {
     setClienteSeleccionado(cliente);
-    const nuevoStep = 2;
-    setStep(nuevoStep);
-    animarPasos(nuevoStep);
+    setStep(2);
+    animarPasos(2);
   };
 
-  const guardarNuevoCliente = () => {
+  const guardarNuevoCliente = async () => {
     if (
       !valoresNuevoCliente.nombre.trim() ||
       !valoresNuevoCliente.telefono.trim()
     )
       return;
-    const nuevo = {
-      id: String(Date.now()),
+    const nuevo = await clienteRepo.create({
       nombre: valoresNuevoCliente.nombre.trim(),
       telefono: valoresNuevoCliente.telefono.trim(),
-      direccion: valoresNuevoCliente.direccion.trim() || "Sin dirección",
-    };
+      direccion: valoresNuevoCliente.direccion.trim() || undefined,
+    });
     setClientes((prev) => [nuevo, ...prev]);
     setClienteSeleccionado(nuevo);
     setValoresNuevoCliente({ nombre: "", telefono: "", direccion: "" });
     modalNuevoCliente.cerrar();
   };
 
-  // ── Lógica producto ───────────────────────────────────────────────────────
+  // ── Productos ─────────────────────────────────────────────────────────────
   const productosFiltrados = productos.filter((p) =>
     norm(p.nombre).includes(norm(filtroProducto)),
   );
 
   const idsEnCarrito = carrito.map((i) => i.id);
 
-  const abrirModal = (producto: any) => {
+  const abrirModal = (producto: Producto) => {
     smoothLayout();
     setProductoActivo(producto);
     setCantidadModal("1");
@@ -315,8 +283,6 @@ export const useNuevaVenta = () => {
     setModoModal("agregar");
     setFiltroProducto("");
     setFiltroActivo(false);
-    // ← dar foco al input de precio para que KeyboardAwareScrollView
-    //   haga el scroll automáticamente
     setTimeout(() => precioInputRef.current?.focus(), 120);
   };
 
@@ -360,22 +326,17 @@ export const useNuevaVenta = () => {
     setModoModal("editar");
     setFiltroProducto("");
     setFiltroActivo(false);
-    // ← idem
     setTimeout(() => precioInputRef.current?.focus(), 120);
   };
 
   const eliminarConMenu = (item: any) => {
     cerrarMenu();
-
     setTimeout(() => {
       Alert.alert(
         "Eliminar producto",
         `¿Seguro que quieres eliminar "${item.nombre}" del carrito?`,
         [
-          {
-            text: "Cancelar",
-            style: "cancel",
-          },
+          { text: "Cancelar", style: "cancel" },
           {
             text: "Eliminar",
             style: "destructive",
@@ -386,24 +347,20 @@ export const useNuevaVenta = () => {
     }, 150);
   };
 
-  const guardarNuevoProducto = () => {
+  const guardarNuevoProducto = async () => {
     if (
       !valoresNuevoProducto.nombre.trim() ||
       !valoresNuevoProducto.precio.trim()
     )
       return;
-
-    const nuevo = {
-      id: String(Date.now()),
+    const nuevo = await productoRepo.create({
       nombre: valoresNuevoProducto.nombre.trim(),
       precio: Number(valoresNuevoProducto.precio.replace(/\./g, "")),
       unidad: valoresNuevoProducto.unidad || "Kg",
       disponible: Number(valoresNuevoProducto.disponible) || 0,
       imagen: valoresNuevoProducto.imagen || undefined,
-    };
-
+    });
     setProductos((prev) => [nuevo, ...prev]);
-
     setValoresNuevoProducto({
       nombre: "",
       precio: "",
@@ -411,11 +368,10 @@ export const useNuevaVenta = () => {
       disponible: "",
       imagen: "",
     });
-
     modalNuevoProducto.cerrar();
   };
 
-  // ── Lógica cobro ──────────────────────────────────────────────────────────
+  // ── Cobro ─────────────────────────────────────────────────────────────────
   const totalCarrito = carrito.reduce((a, i) => a + i.precio * i.qty, 0);
 
   const subtotalModal = productoActivo
@@ -429,27 +385,61 @@ export const useNuevaVenta = () => {
 
   const manejarCambioDinero = (texto: string) => {
     const soloNumeros = texto.replace(/[^0-9]/g, "");
-    const formateado = soloNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-    setPaganCon(formateado);
+    setPaganCon(soloNumeros.replace(/\B(?=(\d{3})+(?!\d))/g, "."));
   };
 
-  const finalizarVenta = () => {
-    alert(
-      `Venta registrada!\nCliente: ${clienteSeleccionado?.nombre}\nTotal: ${fmt(totalCarrito)}`,
-    );
+  // ── Finalizar venta ───────────────────────────────────────────────────────
+  const finalizarVenta = async () => {
+    if (!clienteSeleccionado || carrito.length === 0) return;
+
+    try {
+      await ventaRepo.create({
+        clienteId: clienteSeleccionado.id,
+        nombreCliente: clienteSeleccionado.nombre,
+        items: carrito.map((i) => ({
+          productoId: i.id,
+          nombreProducto: i.nombre,
+          precioUnitario: i.precio,
+          cantidad: i.qty,
+          subtotal: i.precio * i.qty,
+        })),
+        total: totalCarrito,
+        tipo: metodoPago,
+        fecha: new Date()
+          .toLocaleString("sv-SE", { timeZone: "America/Bogota" })
+          .replace(" ", "T"),
+      });
+
+      Alert.alert(
+        "✅ Venta registrada",
+        `Cliente: ${clienteSeleccionado.nombre}\nTotal: ${fmt(totalCarrito)}\nTipo: ${metodoPago === "contado" ? "Contado" : "Crédito"}`,
+        [{ text: "Listo", onPress: resetVenta }],
+      );
+    } catch (e) {
+      Alert.alert("Error", "No se pudo guardar la venta.");
+    }
+  };
+
+  // ── Reset completo ────────────────────────────────────────────────────────
+  const resetVenta = () => {
+    setStep(1);
+    animarPasos(1);
+    setClienteSeleccionado(null);
+    setCarrito([]);
+    setFiltroCliente("");
+    setFiltroProducto("");
+    setMetodoPago("contado");
+    setPaganCon("");
+    scrollAlTop();
   };
 
   // ── Return ────────────────────────────────────────────────────────────────
   return {
-    // Pasos
     step,
     siguiente,
     retroceder,
     flexPaso1,
     flexPaso2,
-    // minHeightPaso1 y minHeightPaso2 ya no se exportan
-
-    // Paso 1 — Cliente
     filtroCliente,
     setFiltroCliente,
     filtroClienteActivo,
@@ -462,8 +452,6 @@ export const useNuevaVenta = () => {
     setValoresNuevoCliente,
     guardarNuevoCliente,
     modalNuevoCliente,
-
-    // Paso 2 — Productos
     filtroProducto,
     setFiltroProducto,
     filtroActivo,
@@ -497,8 +485,6 @@ export const useNuevaVenta = () => {
     subtotalModal,
     totalCarrito,
     precioInputRef,
-
-    // Paso 3 — Cobro
     metodoPago,
     setMetodoPago,
     paganCon,
@@ -508,5 +494,6 @@ export const useNuevaVenta = () => {
     finalizarVenta,
     inputPagoRef,
     scrollRef,
+    cargarDatos,
   };
 };

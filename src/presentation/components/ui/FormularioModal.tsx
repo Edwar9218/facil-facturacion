@@ -32,6 +32,7 @@ export interface Campo {
   tipo: TipoCampo;
   opciones?: string[];
   obligatorio?: boolean;
+  maxLength?: number;
 }
 
 export type ValoresCampo = Record<string, string>;
@@ -347,6 +348,7 @@ export const FormularioModal = ({
               placeholder={campo.placeholder}
               value={valores[campo.id] ?? ""}
               onChangeText={(v) => onChange(campo.id, v)}
+              maxLength={campo.maxLength}
             />
           );
         })}
