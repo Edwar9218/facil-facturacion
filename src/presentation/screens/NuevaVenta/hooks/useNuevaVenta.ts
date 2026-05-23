@@ -393,7 +393,7 @@ export const useNuevaVenta = () => {
     if (!clienteSeleccionado || carrito.length === 0) return;
 
     try {
-      await ventaRepo.create({
+      const venta = await ventaRepo.create({
         clienteId: clienteSeleccionado.id,
         nombreCliente: clienteSeleccionado.nombre,
         items: carrito.map((i) => ({
@@ -412,7 +412,7 @@ export const useNuevaVenta = () => {
 
       Alert.alert(
         "✅ Venta registrada",
-        `Cliente: ${clienteSeleccionado.nombre}\nTotal: ${fmt(totalCarrito)}\nTipo: ${metodoPago === "contado" ? "Contado" : "Crédito"}`,
+        `Factura: ${venta.numeroFactura}\nCliente: ${clienteSeleccionado.nombre}\nTotal: ${fmt(totalCarrito)}\nTipo: ${metodoPago === "contado" ? "Contado" : "Crédito"}`,
         [{ text: "Listo", onPress: resetVenta }],
       );
     } catch (e) {

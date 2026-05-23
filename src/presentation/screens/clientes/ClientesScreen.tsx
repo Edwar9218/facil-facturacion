@@ -28,6 +28,7 @@ export const ClientesScreen = () => {
     abrirEditar,
     guardar,
     confirmarEliminar,
+    getMora,
   } = useClientes();
 
   // ── Opciones del modal 3 puntos ───────────────────────────────────────────
@@ -114,8 +115,8 @@ export const ClientesScreen = () => {
           renderItem={({ item }) => (
             <ClienteCard
               cliente={item}
-              enMora={false} // ← después conectamos con creditos
-              totalDeuda={0} // ← después conectamos con creditos
+              enMora={getMora(item.id).enMora}
+              totalDeuda={getMora(item.id).saldo}
               onPress={abrirOpciones}
             />
           )}

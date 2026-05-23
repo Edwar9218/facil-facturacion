@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
 import { ClienteRepositoryImpl } from "../../../../data/repositories/ClienteRepositoryImpl";
+import { CreditoRepositoryImpl } from "../../../../data/repositories/CreditoRepositoryImpl";
 import { Cliente } from "../../../../domain/entities/Cliente";
+import { ResumenCredito } from "../../../../domain/entities/Credito";
 import { useSlideModal } from "../../../hooks/useSlideModal";
 
 const repo = new ClienteRepositoryImpl();
+const creditoRepo = new CreditoRepositoryImpl();
 
 // ── Campos formulario ─────────────────────────────────────────────────────────
 export const CAMPOS_CLIENTE = [
@@ -43,6 +46,7 @@ const normalizarNombre = (nombre: string) =>
 // ── Hook principal ────────────────────────────────────────────────────────────
 export const useClientes = () => {
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [resumenes, setResumenes] = useState<ResumenCredito[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [clienteSeleccionado, setClienteSeleccionado] =
@@ -56,8 +60,12 @@ export const useClientes = () => {
   // ── Cargar BD ─────────────────────────────────────────────────────────────
   const cargarClientes = useCallback(async () => {
     setCargando(true);
-    const data = await repo.getAll();
+    const [data, creds] = await Promise.all([
+      repo.getAll(),
+      creditoRepo.getResumenes(),
+    ]);
     setClientes(data);
+    setResumenes(creds);
     setCargando(false);
   }, []);
 
@@ -164,6 +172,14 @@ export const useClientes = () => {
     });
   };
 
+  // ── Mora por cliente ─────────────────────────────────────────────────────
+  const getMora = (clienteId: string) => {
+    const r = resumenes.find((r) => r.clienteId === clienteId);
+    return r
+      ? { enMora: r.saldoActual > 0, saldo: r.saldoActual }
+      : { enMora: false, saldo: 0 };
+  };
+
   return {
     clientes,
     cargando,
@@ -181,5 +197,6 @@ export const useClientes = () => {
     abrirEditar,
     guardar,
     confirmarEliminar,
+    getMora,
   };
 };

@@ -14,4 +14,5 @@ export interface Venta {
   total: number;
   tipo: "contado" | "credito";
   fecha: string;
+  numeroFactura?: string; // ← agregar
 }

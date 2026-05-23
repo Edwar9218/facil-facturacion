@@ -21,15 +21,30 @@ export const initDatabase = (): void => {
     );
 
     CREATE TABLE IF NOT EXISTS ventas (
-      id            TEXT PRIMARY KEY NOT NULL,
-      clienteId     TEXT NOT NULL,
-      nombreCliente TEXT NOT NULL,
-      items         TEXT NOT NULL,
-      total         REAL NOT NULL,
-      tipo          TEXT NOT NULL,
-      fecha         TEXT NOT NULL
+      id              TEXT PRIMARY KEY NOT NULL,
+      clienteId       TEXT NOT NULL,
+      nombreCliente   TEXT NOT NULL,
+      items           TEXT NOT NULL,
+      total           REAL NOT NULL,
+      tipo            TEXT NOT NULL,
+      fecha           TEXT NOT NULL,
+      numeroFactura   TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS abonos (
+      id        TEXT PRIMARY KEY NOT NULL,
+      clienteId TEXT NOT NULL,
+      monto     REAL NOT NULL,
+      fecha     TEXT NOT NULL
     );
   `);
+
+  // Migración segura: agrega la columna si la BD ya existía sin ella
+  try {
+    db.execSync(`ALTER TABLE ventas ADD COLUMN numeroFactura TEXT;`);
+  } catch (_) {
+    // La columna ya existe — ignorar
+  }
 };
 
 export default db;

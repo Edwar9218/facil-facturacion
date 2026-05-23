@@ -120,12 +120,12 @@ export const ClienteCard = ({
             </AppText>
           </View>
 
-          {/* Deuda si está en mora */}
+          {/* Deuda si está en mora 
           {enMora && (
             <AppText variant="captionBold" color={colors.danger}>
               {fmt(totalDeuda)}
             </AppText>
-          )}
+          )}*/}
 
           {/* 3 puntos visual */}
           <MaterialIcons

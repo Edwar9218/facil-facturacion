@@ -19,6 +19,8 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
+import { ResumenCredito } from "../../../domain/entities/Credito";
 import { useTheme } from "../../../theme";
 import { AppText } from "../../components/ui/AppText";
 import { FormularioModal } from "../../components/ui/FormularioModal";
@@ -146,7 +148,21 @@ export default function NuevaVentaScreen() {
 
   React.useEffect(() => {
     cargarDatos();
+    creditoRepo.getResumenes().then(setResumenesMora);
   }, []);
+
+  // ── Créditos para badge de mora ───────────────────────────────────────────
+  const creditoRepo = React.useMemo(() => new CreditoRepositoryImpl(), []);
+  const [resumenesMora, setResumenesMora] = React.useState<ResumenCredito[]>(
+    [],
+  );
+
+  const getMora = (clienteId: string) => {
+    const r = resumenesMora.find((r) => r.clienteId === clienteId);
+    return r
+      ? { enMora: r.saldoActual > 0, saldo: r.saldoActual }
+      : { enMora: false, saldo: 0 };
+  };
 
   const router = useRouter();
 
@@ -480,8 +496,8 @@ export default function NuevaVentaScreen() {
                             <ClienteCard
                               key={c.id}
                               cliente={c}
-                              enMora={false}
-                              totalDeuda={0}
+                              enMora={getMora(c.id).enMora}
+                              totalDeuda={getMora(c.id).saldo}
                               onPress={() => seleccionarCliente(c)}
                             />
                           ))}
