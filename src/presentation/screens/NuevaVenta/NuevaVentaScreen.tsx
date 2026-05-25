@@ -189,9 +189,12 @@ export default function NuevaVentaScreen() {
   const router = useRouter();
 
   // ── Logger teclado ──────────────────────────────────────────────────────────
-  const logAbierto = (h: number) =>
-    // console.log("⌨️ Teclado ABIERTO — altura:", h);
-  const logCerrado = () => {} // console.log("⌨️ Teclado CERRADO");
+  const logAbierto = (h: number) => {
+    /* console.log("⌨️ Teclado ABIERTO — altura:", h) */
+  };
+  const logCerrado = () => {
+    /* console.log("⌨️ Teclado CERRADO") */
+  };
 
   const KEYBOARD_HEIGHT_THRESHOLD = 100; // ignora eventos menores a 100px
 
@@ -383,11 +386,10 @@ export default function NuevaVentaScreen() {
             style={s.opcionBtn}
             activeOpacity={0.8}
             onPress={() => {
-              // console.log(
+              /* console.log(
                 "✏️ Editar producto del carrito:",
                 (menuAbierto as any)?.nombre,
-              );
-              editarProducto(menuAbierto);
+              ) */ editarProducto(menuAbierto);
             }}
           >
             <View style={[s.opcionIconBox, { backgroundColor: BLUE_LIGHT }]}>
@@ -406,11 +408,10 @@ export default function NuevaVentaScreen() {
             style={[s.opcionBtn, s.opcionBtnRojo]}
             activeOpacity={0.8}
             onPress={() => {
-              // console.log(
+              /* console.log(
                 "🗑️ Eliminar producto del carrito:",
                 (menuAbierto as any)?.nombre,
-              );
-              eliminarConMenu(menuAbierto);
+              ) */ eliminarConMenu(menuAbierto);
             }}
           >
             <View style={[s.opcionIconBox, { backgroundColor: RED_LIGHT }]}>
@@ -550,11 +551,10 @@ export default function NuevaVentaScreen() {
                               </>
                             ),
                             onPress: () => {
-                              // console.log(
+                              /* console.log(
                                 "➕ Abrir modal NUEVO CLIENTE con nombre:",
                                 filtroCliente.trim(),
-                              );
-                              setValoresNuevoCliente((prev) => ({
+                              ) */ setValoresNuevoCliente((prev) => ({
                                 ...prev,
                                 nombre: filtroCliente.trim(),
                               }));
@@ -578,13 +578,12 @@ export default function NuevaVentaScreen() {
                               enMora={getMora(c.id).enMora}
                               totalDeuda={getMora(c.id).saldo}
                               onPress={() => {
-                                // console.log(
+                                /* console.log(
                                   "👤 Cliente seleccionado:",
                                   c.nombre,
                                   "| id:",
                                   c.id,
-                                );
-                                seleccionarCliente(c);
+                                ) */ seleccionarCliente(c);
                               }}
                             />
                           ))}
@@ -667,11 +666,10 @@ export default function NuevaVentaScreen() {
                   <TouchableOpacity
                     style={s.btnRemove}
                     onPress={() => {
-                      // console.log(
+                      /* console.log(
                         "❌ Quitar cliente seleccionado:",
                         clienteSeleccionado.nombre,
-                      );
-                      setClienteSeleccionado(null);
+                      ) */ setClienteSeleccionado(null);
                     }}
                   >
                     <MaterialIcons name="person-remove" size={16} color={RED} />
@@ -680,11 +678,10 @@ export default function NuevaVentaScreen() {
                 <TouchableOpacity
                   style={s.btnPrimary}
                   onPress={() => {
-                    // console.log(
+                    /* console.log(
                       "➡️ Continuar paso 1 → 2 | cliente:",
                       clienteSeleccionado.nombre,
-                    );
-                    siguiente();
+                    ) */ siguiente();
                   }}
                 >
                   <Text style={s.btnPrimaryText}>Continuar</Text>
@@ -759,11 +756,10 @@ export default function NuevaVentaScreen() {
                     </View>
                     <TouchableOpacity
                       onPress={() => {
-                        // console.log(
+                        /* console.log(
                           "❌ Cerrar modal producto:",
                           productoActivo.nombre,
-                        );
-                        cerrarModal();
+                        ) */ cerrarModal();
                       }}
                       style={s.closeBtnRed}
                     >
@@ -780,23 +776,22 @@ export default function NuevaVentaScreen() {
                         value={precioModal}
                         onChangeText={(txt) => {
                           const limpio = txt.replace(/[^0-9]/g, "");
-                          // console.log(
+                          /* console.log(
                             "💲 Precio modificado:",
                             limpio,
                             "| producto:",
                             productoActivo.nombre,
-                          );
-                          setPrecioModal(limpio);
+                          ) */ setPrecioModal(limpio);
                         }}
-                        onFocus={() =>
-                          // console.log(
+                        onFocus={() => {
+                          /* console.log(
                             "🔍 FOCO en input: Precio unitario | producto:",
                             productoActivo.nombre,
-                          )
-                        }
-                        onBlur={() =>
-                          // console.log("👋 BLUR en input: Precio unitario")
-                        }
+                          ) */
+                        }}
+                        onBlur={() => {
+                          /* console.log("👋 BLUR en input: Precio unitario") */
+                        }}
                         placeholder="0"
                         placeholderTextColor={GRAY_TEXT}
                       />
@@ -811,21 +806,22 @@ export default function NuevaVentaScreen() {
                         keyboardType="numeric"
                         value={cantidadModal}
                         onChangeText={(txt) => {
-                          // console.log(
+                          /* console.log(
                             "🔢 Cantidad modificada:",
                             txt,
                             "| producto:",
                             productoActivo.nombre,
-                          );
-                          setCantidadModal(txt);
+                          ) */ setCantidadModal(txt);
                         }}
-                        onFocus={() =>
-                          // console.log(
+                        onFocus={() => {
+                          /* console.log(
                             "🔍 FOCO en input: Cantidad | producto:",
                             productoActivo.nombre,
-                          )
-                        }
-                        onBlur={() => {} // console.log("👋 BLUR en input: Cantidad")}
+                          ) */
+                        }}
+                        onBlur={() => {
+                          /* console.log("👋 BLUR en input: Cantidad") */
+                        }}
                       />
                     </View>
                   </View>
@@ -844,10 +840,9 @@ export default function NuevaVentaScreen() {
                     modoModal === "editar" && { backgroundColor: BLUE },
                   ]}
                   onPress={() => {
-                    // console.log(
+                    /* console.log(
                       `🛒 ${modoModal === "editar" ? "Guardar cambios" : "Agregar al carrito"} | producto: ${productoActivo.nombre} | cantidad: ${cantidadModal} | precio: ${precioModal}`,
-                    );
-                    agregarAlCarrito();
+                    ) */ agregarAlCarrito();
                   }}
                 >
                   <Text style={s.btnPrimaryText}>
@@ -954,11 +949,10 @@ export default function NuevaVentaScreen() {
                               </>
                             ),
                             onPress: () => {
-                              // console.log(
+                              /* console.log(
                                 "➕ Abrir modal NUEVO PRODUCTO con nombre:",
                                 filtroProducto.trim(),
-                              );
-                              setValoresNuevoProducto((prev) => ({
+                              ) */ setValoresNuevoProducto((prev) => ({
                                 ...prev,
                                 nombre: filtroProducto.trim(),
                                 imagen: prev.imagen ?? "",
@@ -988,19 +982,17 @@ export default function NuevaVentaScreen() {
                                 itemCarrito={itemCarrito}
                                 onPress={() => {
                                   if (!enCarrito) {
-                                    // console.log(
+                                    /* console.log(
                                       "📦 Abrir modal producto:",
                                       p.nombre,
-                                    );
-                                    abrirModal(p);
+                                    ) */ abrirModal(p);
                                   }
                                 }}
                                 onPressMenu={() => {
-                                  // console.log(
+                                  /* console.log(
                                     "⚙️ Menú opciones abierto para:",
                                     itemCarrito?.nombre,
-                                  );
-                                  abrirMenu(itemCarrito);
+                                  ) */ abrirMenu(itemCarrito);
                                 }}
                               />
                             );
@@ -1104,11 +1096,10 @@ export default function NuevaVentaScreen() {
                           },
                         ]}
                         onPress={() => {
-                          // console.log(
+                          /* console.log(
                             "⚙️ Abrir menú desde resumen carrito:",
                             item.nombre,
-                          );
-                          abrirMenu(item);
+                          ) */ abrirMenu(item);
                         }}
                         activeOpacity={0.6}
                         delayPressIn={50}
@@ -1167,11 +1158,10 @@ export default function NuevaVentaScreen() {
                   <TouchableOpacity
                     style={s.totalRow}
                     onPress={() => {
-                      // console.log(
+                      /* console.log(
                         "📋 Toggle carrito expandido:",
                         !carritoExpandido,
-                      );
-                      setCarritoExpandido((v) => !v);
+                      ) */ setCarritoExpandido((v) => !v);
                     }}
                     activeOpacity={0.7}
                   >
@@ -1235,11 +1225,10 @@ export default function NuevaVentaScreen() {
                   onPress={
                     carrito.length > 0
                       ? () => {
-                          // console.log(
+                          /* console.log(
                             "➡️ Continuar paso 2 → 3 | productos en carrito:",
                             carrito.length,
-                          );
-                          siguiente();
+                          ) */ siguiente();
                         }
                       : undefined
                   }
@@ -1460,13 +1449,12 @@ export default function NuevaVentaScreen() {
                   keyboardType="numeric"
                   value={paganCon}
                   onChangeText={(txt) => {
-                    // console.log(
+                    /* console.log(
                       "💵 Monto ingresado:",
                       txt,
                       "| total venta:",
                       fmt(totalCarrito),
-                    );
-                    manejarCambioDinero(txt);
+                    ) */ manejarCambioDinero(txt);
                   }}
                   placeholder="$ 0"
                   placeholderTextColor={GRAY_TEXT}
@@ -1474,7 +1462,9 @@ export default function NuevaVentaScreen() {
                     // console.log("🔍 FOCO en input: Monto de pago");
                     scrollRef.current?.scrollTo({ y: 99999, animated: true });
                   }}
-                  onBlur={() => {} // console.log("👋 BLUR en input: Monto de pago")}
+                  onBlur={() => {
+                    /* console.log("👋 BLUR en input: Monto de pago") */
+                  }}
                 />
                 {paganConNum > 0 && (
                   <View
@@ -1561,7 +1551,7 @@ export default function NuevaVentaScreen() {
                     s.btnDisabled,
                 ]}
                 onPress={() => {
-                  // console.log(
+                  /* console.log(
                     "✅ FINALIZAR VENTA | cliente:",
                     clienteSeleccionado?.nombre,
                     "| total:",
@@ -1570,8 +1560,7 @@ export default function NuevaVentaScreen() {
                     metodoPago,
                     "| productos:",
                     carrito.length,
-                  );
-                  finalizarVenta();
+                  ) */ finalizarVenta();
                 }}
                 activeOpacity={0.85}
               >
@@ -1665,12 +1654,11 @@ export default function NuevaVentaScreen() {
                 style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
                 activeOpacity={0.7}
                 onPress={() => {
-                  // console.log(
+                  /* console.log(
                     "🚪 Salir de NuevaVentaScreen (paso actual:",
                     step,
                     ")",
-                  );
-                  router.back();
+                  ) */ router.back();
                 }}
               >
                 <Text
