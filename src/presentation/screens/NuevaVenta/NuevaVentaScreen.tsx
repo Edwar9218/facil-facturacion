@@ -9,6 +9,9 @@ import React from "react";
 import {
   ActivityIndicator,
   Animated,
+  AppState,
+  AppStateStatus,
+  Keyboard,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,7 +20,11 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import {
+  KeyboardAwareScrollView,
+  useKeyboardHandler,
+} from "react-native-keyboard-controller";
+import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
 import { ResumenCredito } from "../../../domain/entities/Credito";
@@ -72,14 +79,11 @@ export default function NuevaVentaScreen() {
   const { height: screenHeight } = useWindowDimensions();
   const { colors, spacing, radius, typography, shadows, sizes } = useTheme();
 
-  // Altura máxima del dropdown: pantalla - header (~110px) - input (~56px) - pasos de abajo (~120px) - teclado estimado (~300px)
   const dropdownMaxHeight = Math.max(160, screenHeight * 0.49);
 
-  // Alturas dinámicas de los inputs para posicionar el dropdown correctamente en Android
   const [alturaInputCliente, setAlturaInputCliente] = React.useState(56);
   const [alturaInputProducto, setAlturaInputProducto] = React.useState(56);
 
-  // Alias cortos
   const BLUE = colors.primary;
   const BLUE_LIGHT = colors.primaryLight;
 
@@ -151,6 +155,24 @@ export default function NuevaVentaScreen() {
     creditoRepo.getResumenes().then(setResumenesMora);
   }, []);
 
+  React.useEffect(() => {
+    const subscription = AppState.addEventListener(
+      "change",
+      (nextState: AppStateStatus) => {
+        if (nextState === "active") {
+          // console.log("📱 App ACTIVA — usuario volvió a la app");
+        } else if (nextState === "background" || nextState === "inactive") {
+          // console.log("📴 App en FONDO o INACTIVA — Limpiando teclado");
+
+          // 1. Forzamos al teclado nativo a cerrarse por completo
+          Keyboard.dismiss();
+        }
+      },
+    );
+
+    return () => subscription.remove();
+  }, []);
+
   // ── Créditos para badge de mora ───────────────────────────────────────────
   const creditoRepo = React.useMemo(() => new CreditoRepositoryImpl(), []);
   const [resumenesMora, setResumenesMora] = React.useState<ResumenCredito[]>(
@@ -165,6 +187,28 @@ export default function NuevaVentaScreen() {
   };
 
   const router = useRouter();
+
+  // ── Logger teclado ──────────────────────────────────────────────────────────
+  const logAbierto = (h: number) =>
+    // console.log("⌨️ Teclado ABIERTO — altura:", h);
+  const logCerrado = () => {} // console.log("⌨️ Teclado CERRADO");
+
+  const KEYBOARD_HEIGHT_THRESHOLD = 100; // ignora eventos menores a 100px
+
+  useKeyboardHandler(
+    {
+      onEnd: (e) => {
+        "worklet";
+        if (e.height > KEYBOARD_HEIGHT_THRESHOLD) {
+          runOnJS(logAbierto)(e.height);
+        } else if (e.height === 0) {
+          runOnJS(logCerrado)();
+        }
+        // altura entre 0 y 100 → evento falso de Android, se ignora
+      },
+    },
+    [],
+  );
 
   // ── Step indicator ──────────────────────────────────────────────────────────
   const CircleStep = ({ num, active }: { num: number; active: boolean }) => (
@@ -221,12 +265,26 @@ export default function NuevaVentaScreen() {
         placeholder={placeholder}
         placeholderTextColor={colors.grayText}
         value={value}
-        onChangeText={onChangeText}
-        onFocus={onFocus}
-        onBlur={onBlur}
+        onChangeText={(txt) => {
+          // console.log(`✏️ Escribiendo en "${placeholder}":`, txt);
+          onChangeText(txt);
+        }}
+        onFocus={() => {
+          // console.log(`🔍 FOCO en input: "${placeholder}"`);
+          onFocus?.();
+        }}
+        onBlur={() => {
+          // console.log(`👋 BLUR en input: "${placeholder}"`);
+          onBlur?.();
+        }}
       />
       {value.length > 0 && (
-        <TouchableOpacity onPress={onClear}>
+        <TouchableOpacity
+          onPress={() => {
+            // console.log(`🗑️ Limpiar input: "${placeholder}"`);
+            onClear();
+          }}
+        >
           <MaterialIcons
             name="cancel"
             size={sizes.iconSm}
@@ -296,7 +354,10 @@ export default function NuevaVentaScreen() {
       <TouchableOpacity
         style={s.overlay}
         activeOpacity={1}
-        onPress={cerrarMenu}
+        onPress={() => {
+          // console.log("❌ Cerrar menú opciones (tap overlay)");
+          cerrarMenu();
+        }}
       >
         <TouchableOpacity activeOpacity={1} style={s.bottomSheet}>
           <View style={s.sheetHandle} />
@@ -307,7 +368,13 @@ export default function NuevaVentaScreen() {
                 Selecciona una acción para este producto
               </Text>
             </View>
-            <TouchableOpacity style={s.closeGray} onPress={cerrarMenu}>
+            <TouchableOpacity
+              style={s.closeGray}
+              onPress={() => {
+                // console.log("❌ Cerrar menú opciones (botón X)");
+                cerrarMenu();
+              }}
+            >
               <MaterialIcons name="close" size={16} color="#fff" />
             </TouchableOpacity>
           </View>
@@ -315,7 +382,13 @@ export default function NuevaVentaScreen() {
           <TouchableOpacity
             style={s.opcionBtn}
             activeOpacity={0.8}
-            onPress={() => editarProducto(menuAbierto)}
+            onPress={() => {
+              // console.log(
+                "✏️ Editar producto del carrito:",
+                (menuAbierto as any)?.nombre,
+              );
+              editarProducto(menuAbierto);
+            }}
           >
             <View style={[s.opcionIconBox, { backgroundColor: BLUE_LIGHT }]}>
               <MaterialIcons name="edit" size={24} color={BLUE} />
@@ -332,7 +405,13 @@ export default function NuevaVentaScreen() {
           <TouchableOpacity
             style={[s.opcionBtn, s.opcionBtnRojo]}
             activeOpacity={0.8}
-            onPress={() => eliminarConMenu(menuAbierto)}
+            onPress={() => {
+              // console.log(
+                "🗑️ Eliminar producto del carrito:",
+                (menuAbierto as any)?.nombre,
+              );
+              eliminarConMenu(menuAbierto);
+            }}
           >
             <View style={[s.opcionIconBox, { backgroundColor: RED_LIGHT }]}>
               <MaterialIcons name="delete-outline" size={24} color={RED} />
@@ -363,7 +442,6 @@ export default function NuevaVentaScreen() {
   //  PASO 1 — Cliente
   // ════════════════════════════════════════════════════════════════════════════
   const renderPaso1 = () => (
-    // zIndex: 60 para que el dropdown flote sobre el paso 2 y 3
     <Animated.View style={[s.stepRow, { flex: flexPaso1, zIndex: 60 }]}>
       <View style={s.timelineCol}>
         <CircleStep num={1} active={step >= 1} />
@@ -390,7 +468,6 @@ export default function NuevaVentaScreen() {
                   Busca o crea un cliente
                 </AppText>
 
-                {/* Mismo patrón que paso 2: un solo dropdown, foco O texto */}
                 <View
                   style={[
                     s.inputDropdownWrapper,
@@ -399,7 +476,6 @@ export default function NuevaVentaScreen() {
                     },
                   ]}
                 >
-                  {/* Mide altura real del input para posicionar el dropdown correctamente en Android */}
                   <View
                     onLayout={(e) =>
                       setAlturaInputCliente(e.nativeEvent.layout.height)
@@ -425,7 +501,6 @@ export default function NuevaVentaScreen() {
                     })}
                   </View>
 
-                  {/* UN SOLO dropdown — aparece si hay foco O si hay texto */}
                   {(filtroClienteActivo || filtroCliente.trim() !== "") && (
                     <ScrollView
                       style={[
@@ -436,7 +511,7 @@ export default function NuevaVentaScreen() {
                         },
                       ]}
                       contentContainerStyle={{ paddingBottom: 4 }}
-                      keyboardShouldPersistTaps="handled"
+                      keyboardShouldPersistTaps="always"
                       nestedScrollEnabled={true}
                       showsVerticalScrollIndicator={true}
                     >
@@ -475,6 +550,10 @@ export default function NuevaVentaScreen() {
                               </>
                             ),
                             onPress: () => {
+                              // console.log(
+                                "➕ Abrir modal NUEVO CLIENTE con nombre:",
+                                filtroCliente.trim(),
+                              );
                               setValoresNuevoCliente((prev) => ({
                                 ...prev,
                                 nombre: filtroCliente.trim(),
@@ -498,7 +577,15 @@ export default function NuevaVentaScreen() {
                               cliente={c}
                               enMora={getMora(c.id).enMora}
                               totalDeuda={getMora(c.id).saldo}
-                              onPress={() => seleccionarCliente(c)}
+                              onPress={() => {
+                                // console.log(
+                                  "👤 Cliente seleccionado:",
+                                  c.nombre,
+                                  "| id:",
+                                  c.id,
+                                );
+                                seleccionarCliente(c);
+                              }}
                             />
                           ))}
                         </>
@@ -507,7 +594,6 @@ export default function NuevaVentaScreen() {
                   )}
                 </View>
 
-                {/* Botón crear — solo visible cuando no hay foco ni texto */}
                 {!filtroClienteActivo &&
                   filtroCliente.trim() === "" &&
                   renderCrearCard({
@@ -515,6 +601,7 @@ export default function NuevaVentaScreen() {
                     label: "Crear cliente nuevo",
                     sublabel: "Agregar a la lista de clientes",
                     onPress: () => {
+                      // console.log("➕ Abrir modal NUEVO CLIENTE (vacío)");
                       setValoresNuevoCliente({
                         nombre: "",
                         telefono: "",
@@ -525,7 +612,6 @@ export default function NuevaVentaScreen() {
                   })}
               </>
             ) : (
-              // ── Cliente seleccionado ────────────────────────────────────────
               <View
                 style={{
                   backgroundColor: colors.white,
@@ -580,12 +666,27 @@ export default function NuevaVentaScreen() {
                   </View>
                   <TouchableOpacity
                     style={s.btnRemove}
-                    onPress={() => setClienteSeleccionado(null)}
+                    onPress={() => {
+                      // console.log(
+                        "❌ Quitar cliente seleccionado:",
+                        clienteSeleccionado.nombre,
+                      );
+                      setClienteSeleccionado(null);
+                    }}
                   >
                     <MaterialIcons name="person-remove" size={16} color={RED} />
                   </TouchableOpacity>
                 </View>
-                <TouchableOpacity style={s.btnPrimary} onPress={siguiente}>
+                <TouchableOpacity
+                  style={s.btnPrimary}
+                  onPress={() => {
+                    // console.log(
+                      "➡️ Continuar paso 1 → 2 | cliente:",
+                      clienteSeleccionado.nombre,
+                    );
+                    siguiente();
+                  }}
+                >
                   <Text style={s.btnPrimaryText}>Continuar</Text>
                   <MaterialIcons name="arrow-forward" size={18} color="#fff" />
                 </TouchableOpacity>
@@ -657,7 +758,13 @@ export default function NuevaVentaScreen() {
                       </Text>
                     </View>
                     <TouchableOpacity
-                      onPress={cerrarModal}
+                      onPress={() => {
+                        // console.log(
+                          "❌ Cerrar modal producto:",
+                          productoActivo.nombre,
+                        );
+                        cerrarModal();
+                      }}
                       style={s.closeBtnRed}
                     >
                       <MaterialIcons name="close" size={14} color="#fff" />
@@ -671,8 +778,24 @@ export default function NuevaVentaScreen() {
                         style={[s.cantidadInput, { color: BLUE }]}
                         keyboardType="numeric"
                         value={precioModal}
-                        onChangeText={(txt) =>
-                          setPrecioModal(txt.replace(/[^0-9]/g, ""))
+                        onChangeText={(txt) => {
+                          const limpio = txt.replace(/[^0-9]/g, "");
+                          // console.log(
+                            "💲 Precio modificado:",
+                            limpio,
+                            "| producto:",
+                            productoActivo.nombre,
+                          );
+                          setPrecioModal(limpio);
+                        }}
+                        onFocus={() =>
+                          // console.log(
+                            "🔍 FOCO en input: Precio unitario | producto:",
+                            productoActivo.nombre,
+                          )
+                        }
+                        onBlur={() =>
+                          // console.log("👋 BLUR en input: Precio unitario")
                         }
                         placeholder="0"
                         placeholderTextColor={GRAY_TEXT}
@@ -687,7 +810,22 @@ export default function NuevaVentaScreen() {
                         style={s.cantidadInput}
                         keyboardType="numeric"
                         value={cantidadModal}
-                        onChangeText={setCantidadModal}
+                        onChangeText={(txt) => {
+                          // console.log(
+                            "🔢 Cantidad modificada:",
+                            txt,
+                            "| producto:",
+                            productoActivo.nombre,
+                          );
+                          setCantidadModal(txt);
+                        }}
+                        onFocus={() =>
+                          // console.log(
+                            "🔍 FOCO en input: Cantidad | producto:",
+                            productoActivo.nombre,
+                          )
+                        }
+                        onBlur={() => {} // console.log("👋 BLUR en input: Cantidad")}
                       />
                     </View>
                   </View>
@@ -705,7 +843,12 @@ export default function NuevaVentaScreen() {
                     s.btnAgregar,
                     modoModal === "editar" && { backgroundColor: BLUE },
                   ]}
-                  onPress={agregarAlCarrito}
+                  onPress={() => {
+                    // console.log(
+                      `🛒 ${modoModal === "editar" ? "Guardar cambios" : "Agregar al carrito"} | producto: ${productoActivo.nombre} | cantidad: ${cantidadModal} | precio: ${precioModal}`,
+                    );
+                    agregarAlCarrito();
+                  }}
                 >
                   <Text style={s.btnPrimaryText}>
                     {modoModal === "editar"
@@ -735,7 +878,6 @@ export default function NuevaVentaScreen() {
                     },
                   ]}
                 >
-                  {/* Mide altura real del input para posicionar el dropdown correctamente en Android */}
                   <View
                     onLayout={(e) =>
                       setAlturaInputProducto(e.nativeEvent.layout.height)
@@ -749,7 +891,6 @@ export default function NuevaVentaScreen() {
                       onFocus: () => {
                         smoothLayout();
                         setFiltroActivo(true);
-                        scrollAlFiltro(false);
                       },
                       onBlur: () => {
                         if (filtroProducto.trim() === "") {
@@ -764,7 +905,6 @@ export default function NuevaVentaScreen() {
                     })}
                   </View>
 
-                  {/* CAMBIO 2: View → ScrollView para permitir scroll interno */}
                   {(filtroActivo || filtroProducto.trim() !== "") && (
                     <ScrollView
                       style={[
@@ -814,6 +954,10 @@ export default function NuevaVentaScreen() {
                               </>
                             ),
                             onPress: () => {
+                              // console.log(
+                                "➕ Abrir modal NUEVO PRODUCTO con nombre:",
+                                filtroProducto.trim(),
+                              );
                               setValoresNuevoProducto((prev) => ({
                                 ...prev,
                                 nombre: filtroProducto.trim(),
@@ -843,9 +987,21 @@ export default function NuevaVentaScreen() {
                                 enCarrito={enCarrito}
                                 itemCarrito={itemCarrito}
                                 onPress={() => {
-                                  if (!enCarrito) abrirModal(p);
+                                  if (!enCarrito) {
+                                    // console.log(
+                                      "📦 Abrir modal producto:",
+                                      p.nombre,
+                                    );
+                                    abrirModal(p);
+                                  }
                                 }}
-                                onPressMenu={() => abrirMenu(itemCarrito)}
+                                onPressMenu={() => {
+                                  // console.log(
+                                    "⚙️ Menú opciones abierto para:",
+                                    itemCarrito?.nombre,
+                                  );
+                                  abrirMenu(itemCarrito);
+                                }}
                               />
                             );
                           };
@@ -878,6 +1034,7 @@ export default function NuevaVentaScreen() {
                     label: "Crear producto nuevo",
                     sublabel: "Agregar al catálogo",
                     onPress: () => {
+                      // console.log("➕ Abrir modal NUEVO PRODUCTO (vacío)");
                       setValoresNuevoProducto({
                         nombre: "",
                         precio: "",
@@ -946,7 +1103,13 @@ export default function NuevaVentaScreen() {
                             borderBottomWidth: 0,
                           },
                         ]}
-                        onPress={() => abrirMenu(item)}
+                        onPress={() => {
+                          // console.log(
+                            "⚙️ Abrir menú desde resumen carrito:",
+                            item.nombre,
+                          );
+                          abrirMenu(item);
+                        }}
                         activeOpacity={0.6}
                         delayPressIn={50}
                       >
@@ -1003,7 +1166,13 @@ export default function NuevaVentaScreen() {
 
                   <TouchableOpacity
                     style={s.totalRow}
-                    onPress={() => setCarritoExpandido((v) => !v)}
+                    onPress={() => {
+                      // console.log(
+                        "📋 Toggle carrito expandido:",
+                        !carritoExpandido,
+                      );
+                      setCarritoExpandido((v) => !v);
+                    }}
                     activeOpacity={0.7}
                   >
                     <View
@@ -1051,13 +1220,29 @@ export default function NuevaVentaScreen() {
 
             {!filtroActivo && !productoActivo && (
               <View style={[s.botonesRow, { marginTop: 24 }]}>
-                <TouchableOpacity style={s.btnOutline} onPress={retroceder}>
+                <TouchableOpacity
+                  style={s.btnOutline}
+                  onPress={() => {
+                    // console.log("⬅️ Retroceder paso 2 → 1");
+                    retroceder();
+                  }}
+                >
                   <MaterialIcons name="arrow-back" size={16} color={BLUE} />
                   <Text style={[s.btnOutlineText, { color: BLUE }]}>Atrás</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[s.btnPrimary, carrito.length === 0 && s.btnDisabled]}
-                  onPress={carrito.length > 0 ? siguiente : undefined}
+                  onPress={
+                    carrito.length > 0
+                      ? () => {
+                          // console.log(
+                            "➡️ Continuar paso 2 → 3 | productos en carrito:",
+                            carrito.length,
+                          );
+                          siguiente();
+                        }
+                      : undefined
+                  }
                   activeOpacity={carrito.length > 0 ? 0.7 : 1}
                 >
                   <Text style={s.btnPrimaryText}>
@@ -1176,7 +1361,13 @@ export default function NuevaVentaScreen() {
                     borderColor: BLUE,
                   },
                 ]}
-                onPress={() => setMetodoPago("contado")}
+                onPress={() => {
+                  // console.log("💳 Método de pago seleccionado: CONTADO");
+                  setMetodoPago("contado");
+                  setTimeout(() => {
+                    scrollRef.current?.scrollTo({ y: 99999, animated: true });
+                  }, 100);
+                }}
               >
                 <View
                   style={[
@@ -1217,7 +1408,13 @@ export default function NuevaVentaScreen() {
                   s.metodoBtn,
                   metodoPago === "credito" && s.metodoBtnCredito,
                 ]}
-                onPress={() => setMetodoPago("credito")}
+                onPress={() => {
+                  // console.log("💳 Método de pago seleccionado: CRÉDITO");
+                  setMetodoPago("credito");
+                  setTimeout(() => {
+                    scrollRef.current?.scrollTo({ y: 99999, animated: true });
+                  }, 100);
+                }}
               >
                 <View
                   style={[
@@ -1262,13 +1459,22 @@ export default function NuevaVentaScreen() {
                   style={s.inputDinero}
                   keyboardType="numeric"
                   value={paganCon}
-                  onChangeText={manejarCambioDinero}
+                  onChangeText={(txt) => {
+                    // console.log(
+                      "💵 Monto ingresado:",
+                      txt,
+                      "| total venta:",
+                      fmt(totalCarrito),
+                    );
+                    manejarCambioDinero(txt);
+                  }}
                   placeholder="$ 0"
                   placeholderTextColor={GRAY_TEXT}
-                  onFocus={() =>
-                    // ✅ solo al enfocar
-                    (scrollRef.current as any)?.scrollToEnd({ animated: true })
-                  }
+                  onFocus={() => {
+                    // console.log("🔍 FOCO en input: Monto de pago");
+                    scrollRef.current?.scrollTo({ y: 99999, animated: true });
+                  }}
+                  onBlur={() => {} // console.log("👋 BLUR en input: Monto de pago")}
                 />
                 {paganConNum > 0 && (
                   <View
@@ -1337,18 +1543,36 @@ export default function NuevaVentaScreen() {
             )}
 
             <View style={[s.botonesRow, { marginTop: 24 }]}>
-              <TouchableOpacity style={s.btnOutline} onPress={retroceder}>
+              <TouchableOpacity
+                style={s.btnOutline}
+                onPress={() => {
+                  // console.log("⬅️ Retroceder paso 3 → 2");
+                  retroceder();
+                }}
+              >
                 <MaterialIcons name="arrow-back" size={16} color={BLUE} />
                 <Text style={[s.btnOutlineText, { color: BLUE }]}>Atrás</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
                   s.btnFinalizar,
-                  metodoPago === "contado" &&
-                    paganConNum < totalCarrito &&
+                  (!metodoPago ||
+                    (metodoPago === "contado" && paganConNum < totalCarrito)) &&
                     s.btnDisabled,
                 ]}
-                onPress={finalizarVenta}
+                onPress={() => {
+                  // console.log(
+                    "✅ FINALIZAR VENTA | cliente:",
+                    clienteSeleccionado?.nombre,
+                    "| total:",
+                    fmt(totalCarrito),
+                    "| método:",
+                    metodoPago,
+                    "| productos:",
+                    carrito.length,
+                  );
+                  finalizarVenta();
+                }}
                 activeOpacity={0.85}
               >
                 <MaterialIcons name="check-circle" size={20} color="#fff" />
@@ -1389,7 +1613,10 @@ export default function NuevaVentaScreen() {
                 <TouchableOpacity
                   style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
                   activeOpacity={0.7}
-                  onPress={retroceder}
+                  onPress={() => {
+                    // console.log("⬅️ Volver (header) desde paso:", step);
+                    retroceder();
+                  }}
                 >
                   <Feather
                     name="chevron-left"
@@ -1437,7 +1664,14 @@ export default function NuevaVentaScreen() {
               <TouchableOpacity
                 style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
                 activeOpacity={0.7}
-                onPress={() => router.back()}
+                onPress={() => {
+                  // console.log(
+                    "🚪 Salir de NuevaVentaScreen (paso actual:",
+                    step,
+                    ")",
+                  );
+                  router.back();
+                }}
               >
                 <Text
                   style={{
@@ -1461,6 +1695,7 @@ export default function NuevaVentaScreen() {
         <KeyboardAwareScrollView
           ref={scrollRef}
           bottomOffset={250}
+          extraKeyboardSpace={0}
           contentContainerStyle={{
             flexGrow: 1,
             paddingHorizontal: spacing.lg,
@@ -1560,8 +1795,6 @@ const s = StyleSheet.create({
     gap: 8,
   },
   activeBlock: { marginTop: 10 },
-
-  // ── Dropdown flotante ─────────────────────────────────────────────────────
   inputDropdownWrapper: {
     position: "relative",
     zIndex: 100,
@@ -1583,9 +1816,7 @@ const s = StyleSheet.create({
     elevation: 8,
     zIndex: 20,
     padding: 8,
-    // maxHeight se pasa dinámicamente via useWindowDimensions
   },
-
   btnRemove: {
     width: 36,
     height: 36,
@@ -1819,8 +2050,8 @@ const s = StyleSheet.create({
     padding: 16,
     marginTop: 12,
     alignItems: "center",
-    justifyContent: "center", // ✅ agrega esto
-    minHeight: 130, // ✅ agrega esto
+    justifyContent: "center",
+    minHeight: 130,
     borderWidth: 1,
     borderColor: "#A7F3D0",
     gap: 2,

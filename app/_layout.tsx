@@ -10,8 +10,6 @@ import { initDatabase } from "../src/data/database/database";
 SplashScreen.preventAutoHideAsync();
 initDatabase();
 
-SplashScreen.preventAutoHideAsync();
-
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
     ...MaterialCommunityIcons.font,

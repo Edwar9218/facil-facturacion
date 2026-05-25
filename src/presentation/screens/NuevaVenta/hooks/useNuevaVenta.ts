@@ -7,6 +7,7 @@ import {
   TextInput,
   UIManager,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { ClienteRepositoryImpl } from "../../../../data/repositories/ClienteRepositoryImpl";
 import { ProductoRepositoryImpl } from "../../../../data/repositories/ProductoRepositoryImpl";
 import { VentaRepositoryImpl } from "../../../../data/repositories/VentaRepositoryImpl";
@@ -153,13 +154,15 @@ export const useNuevaVenta = () => {
   });
 
   // ── Paso 3 — Cobro ────────────────────────────────────────────────────────
-  const [metodoPago, setMetodoPago] = useState<"contado" | "credito">(
-    "contado",
+  // ← CAMBIO 1: null por defecto, sin selección previa
+  const [metodoPago, setMetodoPago] = useState<"contado" | "credito" | null>(
+    null,
   );
   const [paganCon, setPaganCon] = useState("");
 
   // ── Refs ──────────────────────────────────────────────────────────────────
-  const scrollRef = useRef<any>(null);
+  const scrollRef =
+    useRef<React.ElementRef<typeof KeyboardAwareScrollView>>(null);
   const filtroInputRef = useRef<TextInput>(null);
   const inputPagoRef = useRef<TextInput>(null);
   const precioInputRef = useRef<TextInput>(null);
@@ -210,7 +213,9 @@ export const useNuevaVenta = () => {
   };
 
   const scrollAlTop = () => {
-    setTimeout(() => scrollRef.current?.scrollTo({ y: 0, animated: true }), 80);
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: true });
+    }, 80);
   };
 
   const siguiente = () => {
@@ -283,7 +288,7 @@ export const useNuevaVenta = () => {
     setModoModal("agregar");
     setFiltroProducto("");
     setFiltroActivo(false);
-    setTimeout(() => precioInputRef.current?.focus(), 120);
+    setTimeout(() => precioInputRef.current?.focus(), 350);
   };
 
   const cerrarModal = () => {
@@ -326,7 +331,7 @@ export const useNuevaVenta = () => {
     setModoModal("editar");
     setFiltroProducto("");
     setFiltroActivo(false);
-    setTimeout(() => precioInputRef.current?.focus(), 120);
+    setTimeout(() => precioInputRef.current?.focus(), 350);
   };
 
   const eliminarConMenu = (item: any) => {
@@ -390,7 +395,8 @@ export const useNuevaVenta = () => {
 
   // ── Finalizar venta ───────────────────────────────────────────────────────
   const finalizarVenta = async () => {
-    if (!clienteSeleccionado || carrito.length === 0) return;
+    // ← CAMBIO 2: bloquear si no hay método seleccionado
+    if (!clienteSeleccionado || carrito.length === 0 || !metodoPago) return;
 
     try {
       const venta = await ventaRepo.create({
@@ -428,7 +434,8 @@ export const useNuevaVenta = () => {
     setCarrito([]);
     setFiltroCliente("");
     setFiltroProducto("");
-    setMetodoPago("contado");
+    // ← CAMBIO 3: reset a null, sin selección previa
+    setMetodoPago(null);
     setPaganCon("");
     scrollAlTop();
   };
