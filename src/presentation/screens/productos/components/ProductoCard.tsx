@@ -1,7 +1,11 @@
 import { MaterialIcons } from "@expo/vector-icons";
 import React from "react";
 import { Image, View } from "react-native";
-import { Producto } from "../../../../domain/entities/Producto";
+import {
+  EstadoStock,
+  Producto,
+  getEstadoStock,
+} from "../../../../domain/entities/Producto";
 import { useTheme } from "../../../../theme";
 import { AppCard } from "../../../components/ui/AppCard";
 import { AppText } from "../../../components/ui/AppText";
@@ -9,13 +13,32 @@ import { AppText } from "../../../components/ui/AppText";
 const fmt = (n: number) =>
   "$ " + Number(n).toLocaleString("es-CO", { minimumFractionDigits: 0 });
 
+// ── Colores y textos por estado de stock ──────────────────────────────────────
+const STOCK_CONFIG: Record<
+  EstadoStock,
+  { color: string; bg: string; label: string } | null
+> = {
+  "sin-control": null, // no mostrar nada
+  ok: { color: "#16A34A", bg: "#DCFCE7", label: "En stock" },
+  bajo: { color: "#D97706", bg: "#FEF3C7", label: "Stock bajo" },
+  agotado: { color: "#DC2626", bg: "#FEE2E2", label: "Agotado" },
+};
+
 interface Props {
   producto: Producto;
   onPress: (producto: Producto) => void;
+  mostrarStock?: boolean; // viene de AjustesScreen (toggle global)
 }
 
-export const ProductoCard = ({ producto, onPress }: Props) => {
+export const ProductoCard = ({
+  producto,
+  onPress,
+  mostrarStock = false,
+}: Props) => {
   const { colors, spacing, radius, sizes } = useTheme();
+
+  const estadoStock = getEstadoStock(producto);
+  const stockConfig = STOCK_CONFIG[estadoStock];
 
   return (
     <AppCard
@@ -57,9 +80,34 @@ export const ProductoCard = ({ producto, onPress }: Props) => {
         {/* Info */}
         <View style={{ flex: 1 }}>
           <AppText variant="bodyBold">{producto.nombre}</AppText>
+
+          {/* Badge de estado de stock (solo si inventario global activo y hay config) */}
+          {mostrarStock && stockConfig && (
+            <View
+              style={{
+                backgroundColor: stockConfig.bg,
+                paddingHorizontal: 10,
+                paddingVertical: 4,
+                borderRadius: 20,
+                marginRight: spacing.sm,
+              }}
+            >
+              <AppText
+                style={{
+                  fontSize: 12,
+                  fontWeight: "700",
+                  color: stockConfig.color,
+                }}
+              >
+                {stockConfig.label}
+              </AppText>
+            </View>
+          )}
+
           <AppText variant="caption" style={{ marginTop: spacing.xxs }}>
-            {producto.unidad} · Stock: {producto.disponible}
+            📦 {producto.stock ?? 0} {producto.unidad} disponibles
           </AppText>
+
           <AppText
             variant="bodyBold"
             color={colors.primary}

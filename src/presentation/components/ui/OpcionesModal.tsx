@@ -1,4 +1,8 @@
-import { Feather, MaterialIcons } from "@expo/vector-icons";
+import {
+  Feather,
+  MaterialCommunityIcons,
+  MaterialIcons,
+} from "@expo/vector-icons";
 import React from "react";
 import { TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../../theme";
@@ -10,7 +14,7 @@ export interface Opcion {
   label: string;
   sublabel: string;
   iconName: string;
-  iconLibrary?: "feather" | "material";
+  iconLibrary?: "feather" | "material" | "material-community";
   color: string;
   colorFondo: string;
   onPress: () => void;
@@ -100,6 +104,12 @@ export const OpcionesModal = ({
           >
             {opcion.iconLibrary === "material" ? (
               <MaterialIcons
+                name={opcion.iconName as any}
+                size={sizes.iconMd}
+                color={opcion.color}
+              />
+            ) : opcion.iconLibrary === "material-community" ? (
+              <MaterialCommunityIcons
                 name={opcion.iconName as any}
                 size={sizes.iconMd}
                 color={opcion.color}

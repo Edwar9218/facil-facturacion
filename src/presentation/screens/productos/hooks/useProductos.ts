@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Alert } from "react-native";
+import { ConfiguracionRepositoryImpl } from "../../../../data/repositories/ConfiguracionRepositoryImpl";
 import { ProductoRepositoryImpl } from "../../../../data/repositories/ProductoRepositoryImpl";
-import { Producto } from "../../../../domain/entities/Producto";
+import { CONFIG_KEYS } from "../../../../domain/entities/Configuracion";
+import { Producto, getEstadoStock } from "../../../../domain/entities/Producto";
 import { Campo, ValoresCampo } from "../../../components/ui/FormularioModal";
 import { useSlideModal } from "../../../hooks/useSlideModal";
 
 const repo = new ProductoRepositoryImpl();
+const configRepo = new ConfiguracionRepositoryImpl();
 
 // ── Campos formulario ─────────────────────────────────────────────────────────
 export const CAMPOS_PRODUCTO: Campo[] = [
@@ -30,13 +33,13 @@ export const CAMPOS_PRODUCTO: Campo[] = [
     opciones: ["Kg", "Und", "Lt", "g", "ml", "Lb", "Caja", "Bolsa"],
     obligatorio: true,
   },
-  {
+  /*{
     id: "disponible",
     label: "Cantidad disponible",
     placeholder: "0",
     tipo: "numero",
     obligatorio: false,
-  },
+  },*/
   {
     id: "imagen",
     label: "Foto del producto",
@@ -58,11 +61,16 @@ export const valoresVaciosProducto = (): ValoresCampo => ({
 const normalizarNombre = (nombre: string) =>
   nombre.trim().toLowerCase().replace(/\s+/g, " ");
 
+// ── Tipos de filtro de stock ──────────────────────────────────────────────────
+export type FiltroStock = "todos" | "stock-bajo" | "agotado";
+
 // ── Hook principal ────────────────────────────────────────────────────────────
 export const useProductos = () => {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
+  const [filtroStock, setFiltroStock] = useState<FiltroStock>("todos");
+  const [inventarioActivo, setInventarioActivo] = useState(false);
   const [productoSeleccionado, setProductoSeleccionado] =
     useState<Producto | null>(null);
   const [esEdicion, setEsEdicion] = useState(false);
@@ -70,12 +78,17 @@ export const useProductos = () => {
 
   const modalOpciones = useSlideModal(20);
   const modalFormulario = useSlideModal(300);
+  const modalInventario = useSlideModal(300);
 
-  // ── Cargar BD ─────────────────────────────────────────────────────────────
+  // ── Cargar BD y configuración ─────────────────────────────────────────────
   const cargarProductos = useCallback(async () => {
     setCargando(true);
-    const data = await repo.getAll();
+    const [data, valorConfig] = await Promise.all([
+      repo.getAll(),
+      configRepo.get(CONFIG_KEYS.INVENTARIO_ACTIVO),
+    ]);
     setProductos(data);
+    setInventarioActivo(valorConfig === "1");
     setCargando(false);
   }, []);
 
@@ -83,10 +96,31 @@ export const useProductos = () => {
     cargarProductos();
   }, [cargarProductos]);
 
-  // ── Filtrado ──────────────────────────────────────────────────────────────
-  const productosFiltrados = productos.filter((p) =>
-    p.nombre.toLowerCase().includes(busqueda.toLowerCase().trim()),
-  );
+  // ── Filtrado por búsqueda + stock ─────────────────────────────────────────
+  const productosFiltrados = productos.filter((p) => {
+    const coincideBusqueda = p.nombre
+      .toLowerCase()
+      .includes(busqueda.toLowerCase().trim());
+
+    if (!coincideBusqueda) return false;
+
+    // Si el inventario no está activo, no aplicar filtro de stock
+    if (!inventarioActivo || filtroStock === "todos") return true;
+
+    const estado = getEstadoStock(p);
+    if (filtroStock === "stock-bajo") return estado === "bajo";
+    if (filtroStock === "agotado") return estado === "agotado";
+
+    return true;
+  });
+
+  // ── Conteo de productos con stock bajo o agotado (para mostrar alerta) ────
+  const productosStockBajo = inventarioActivo
+    ? productos.filter((p) => {
+        const estado = getEstadoStock(p);
+        return estado === "bajo" || estado === "agotado";
+      }).length
+    : 0;
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleChange = (id: string, valor: string) =>
@@ -121,10 +155,39 @@ export const useProductos = () => {
     });
   };
 
+  const abrirInventario = (producto: Producto) => {
+    modalOpciones.cerrar(() => {
+      setTimeout(() => {
+        setProductoSeleccionado(producto);
+        modalInventario.abrir();
+      }, 300);
+    });
+  };
+
+  const guardarInventario = async (
+    productoId: string,
+    controlStock: boolean,
+    stock: number,
+    stockMinimo: number,
+  ) => {
+    const producto = productos.find((p) => p.id === productoId);
+    if (!producto) return;
+    const actualizado: Producto = {
+      ...producto,
+      controlStock,
+      stock,
+      stockMinimo,
+    };
+    await repo.update(actualizado);
+    setProductos((prev) =>
+      prev.map((p) => (p.id === productoId ? actualizado : p)),
+    );
+  };
+
   const guardar = async () => {
     if (!valores.nombre.trim() || !valores.precio.trim()) return;
 
-    // ── Validar duplicado solo al crear ──────────────────────────────────────
+    // Validar duplicado solo al crear
     if (!esEdicion) {
       const nombreNuevo = normalizarNombre(valores.nombre);
       const existe = productos.some(
@@ -150,6 +213,10 @@ export const useProductos = () => {
         unidad: valores.unidad,
         disponible: Number(valores.disponible) || 0,
         imagen: valores.imagen || undefined,
+        // Preservar campos de inventario al editar
+        controlStock: productoSeleccionado.controlStock,
+        stock: productoSeleccionado.stock,
+        stockMinimo: productoSeleccionado.stockMinimo,
       };
       await repo.update(actualizado);
       setProductos((prev) =>
@@ -162,6 +229,10 @@ export const useProductos = () => {
         unidad: valores.unidad,
         disponible: Number(valores.disponible) || 0,
         imagen: valores.imagen || undefined,
+        // Nuevos productos sin control de stock por defecto
+        controlStock: false,
+        stock: 0,
+        stockMinimo: 0,
       });
       setProductos((prev) => [nuevo, ...prev]);
     }
@@ -197,7 +268,11 @@ export const useProductos = () => {
     cargando,
     busqueda,
     setBusqueda,
+    filtroStock,
+    setFiltroStock,
+    inventarioActivo,
     productosFiltrados,
+    productosStockBajo,
     esEdicion,
     valores,
     handleChange,
@@ -207,7 +282,10 @@ export const useProductos = () => {
     abrirCrear,
     abrirOpciones,
     abrirEditar,
+    abrirInventario,
+    guardarInventario,
     guardar,
     confirmarEliminar,
+    modalInventario,
   };
 };

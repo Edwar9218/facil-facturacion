@@ -1,16 +1,20 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system/legacy";
 import { useRouter } from "expo-router";
+import * as Sharing from "expo-sharing";
 import React from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as XLSX from "xlsx";
 import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
 import { VentaRepositoryImpl } from "../../../data/repositories/VentaRepositoryImpl";
 import { ResumenCredito } from "../../../domain/entities/Credito";
@@ -26,14 +30,7 @@ const fmt = (n: number) =>
 const fechaHoy = () =>
   new Date().toLocaleDateString("sv-SE", { timeZone: "America/Bogota" });
 
-const fechaAyer = () => {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" });
-};
-
 const esHoy = (fecha: string) => fecha.startsWith(fechaHoy());
-const esAyer = (fecha: string) => fecha.startsWith(fechaAyer());
 
 const horaDeVenta = (fecha: string) => {
   const d = new Date(fecha);
@@ -61,13 +58,22 @@ const ventaRepo = new VentaRepositoryImpl();
 const creditoRepo = new CreditoRepositoryImpl();
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
+interface Abono {
+  id: string;
+  clienteId: string;
+  ventaId: string;
+  monto: number;
+  fecha: string;
+}
+
 interface DatosDelDia {
-  totalHoy: number;
+  recibiidoHoy: number; // contado hoy + abonos cobrados hoy
+  totalHoy: number; // suma de todas las facturas del día
   ventasHoy: number;
   clientesHoy: number;
-  totalContado: number;
-  totalCreditoHoy: number;
-  creditoPendiente: number;
+  totalCreditoHoy: number; // total original fiado hoy
+  creditoSaldoHoy: number; // saldo real pendiente de ventas de hoy
+  creditoPendiente: number; // cartera total (todos los días)
   ventasDelDia: Venta[];
   deudores: ResumenCredito[];
 }
@@ -86,17 +92,20 @@ const ModalFactura = ({
   venta,
   visible,
   onClose,
+  saldoPorVenta,
 }: {
   venta: Venta | null;
   visible: boolean;
   onClose: () => void;
+  saldoPorVenta: Map<string, number>;
 }) => {
-  const { colors, spacing, radius } = useTheme();
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   if (!venta) return null;
 
-  const esPagado = venta.tipo === "contado";
+  const esPagado = venta.tipo === "contado" || venta.estado === "pagado";
+  const saldoReal = saldoPorVenta.get(venta.id) ?? venta.total;
   const GREEN = "#16A34A";
   const AMBER = "#D97706";
   const GRAY = "#7B8499";
@@ -109,19 +118,13 @@ const ModalFactura = ({
       transparent
       onRequestClose={onClose}
     >
-      {/* Overlay */}
       <TouchableOpacity
         style={ms.overlay}
         activeOpacity={1}
         onPress={onClose}
       />
-
-      {/* Sheet */}
       <View style={[ms.sheet, { paddingBottom: insets.bottom + 24 }]}>
-        {/* Handle */}
         <View style={ms.handle} />
-
-        {/* Header */}
         <View style={ms.header}>
           <View style={{ flex: 1 }}>
             <AppText style={ms.headerTitulo}>Detalle de venta</AppText>
@@ -136,7 +139,6 @@ const ModalFactura = ({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}
         >
-          {/* Cliente + hora */}
           <View style={ms.clienteRow}>
             <View
               style={[
@@ -168,15 +170,13 @@ const ModalFactura = ({
               <AppText
                 style={[ms.badgeTxt, { color: esPagado ? GREEN : AMBER }]}
               >
-                {esPagado ? "Pagado" : "Fiado"}
+                {esPagado ? "Al día" : "En mora"}
               </AppText>
             </View>
           </View>
 
-          {/* Divider */}
           <View style={ms.divisor} />
 
-          {/* Tabla productos */}
           <View style={ms.tablaHeader}>
             <AppText style={[ms.colHead, { flex: 1 }]}>Producto</AppText>
             <AppText style={[ms.colHead, ms.colCant]}>Cant.</AppText>
@@ -218,7 +218,6 @@ const ModalFactura = ({
 
           <View style={ms.divisorDashed} />
 
-          {/* Total */}
           <View style={ms.totalRow}>
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
@@ -234,14 +233,25 @@ const ModalFactura = ({
               </AppText>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <AppText style={ms.totalLabel}>Total</AppText>
+              <AppText style={ms.totalLabel}>Total factura</AppText>
               <AppText style={[ms.totalMonto, { color: INK }]}>
                 {fmt(venta.total)}
               </AppText>
+              {!esPagado && saldoReal < venta.total && (
+                <AppText
+                  style={{
+                    fontSize: 14,
+                    color: AMBER,
+                    fontWeight: "700",
+                    marginTop: 2,
+                  }}
+                >
+                  Saldo: {fmt(saldoReal)}
+                </AppText>
+              )}
             </View>
           </View>
 
-          {/* Info pago fiado */}
           {!esPagado && (
             <View style={ms.fiadoInfo}>
               <MaterialCommunityIcons
@@ -256,7 +266,6 @@ const ModalFactura = ({
             </View>
           )}
 
-          {/* Número de factura si existe */}
           {venta.numeroFactura && (
             <View style={ms.facturaRow}>
               <MaterialCommunityIcons name="receipt" size={14} color={GRAY} />
@@ -273,15 +282,16 @@ const ModalFactura = ({
 
 // ── Screen ────────────────────────────────────────────────────────────────────
 export const VentaDelDiaScreen = () => {
-  const { colors, spacing, radius, shadows } = useTheme();
+  const { colors } = useTheme();
   const router = useRouter();
 
   const [datos, setDatos] = React.useState<DatosDelDia | null>(null);
+  const [abonos, setAbonos] = React.useState<Abono[]>([]);
   const [cargando, setCargando] = React.useState(true);
   const [refrescando, setRefrescando] = React.useState(false);
   const [mostrarTodas, setMostrarTodas] = React.useState(false);
+  const [exportando, setExportando] = React.useState(false);
 
-  // ── Modal ──
   const [ventaSeleccionada, setVentaSeleccionada] =
     React.useState<Venta | null>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
@@ -296,28 +306,69 @@ export const VentaDelDiaScreen = () => {
     setTimeout(() => setVentaSeleccionada(null), 300);
   };
 
+  // ── Saldo real por factura ────────────────────────────────────────────────
+  const saldoPorVenta = React.useMemo(() => {
+    const mapa = new Map<string, number>();
+    if (!datos) return mapa;
+    datos.ventasDelDia.forEach((v) => {
+      const totalAbonado = abonos
+        .filter((a) => a.ventaId === v.id)
+        .reduce((sum, a) => sum + a.monto, 0);
+      mapa.set(v.id, Math.max(0, v.total - totalAbonado));
+    });
+    return mapa;
+  }, [datos, abonos]);
+
   const cargar = async (esRefresh = false) => {
     if (esRefresh) setRefrescando(true);
     else setCargando(true);
 
-    const [todasVentas, resumenes] = await Promise.all([
+    const [todasVentas, resumenes, listaAbonos] = await Promise.all([
       ventaRepo.getAll(),
       creditoRepo.getResumenes(),
+      creditoRepo.getAbonos ? creditoRepo.getAbonos() : Promise.resolve([]),
     ]);
 
     const ventasDeHoy = todasVentas.filter((v) => esHoy(v.fecha));
     const clientesIds = [...new Set(ventasDeHoy.map((v) => v.clienteId))];
 
+    // Abonos cobrados hoy (independiente de cuándo fue la venta)
+    const abonosDeHoy = listaAbonos.filter((a: Abono) => esHoy(a.fecha));
+    const totalAbonosHoy = abonosDeHoy.reduce(
+      (s: number, a: Abono) => s + a.monto,
+      0,
+    );
+
+    // Recibido hoy = ventas de contado de hoy + abonos cobrados hoy
+    const totalContadoHoy = ventasDeHoy
+      .filter((v) => v.tipo === "contado")
+      .reduce((a, v) => a + v.total, 0);
+    const recibiidoHoy = totalContadoHoy + totalAbonosHoy;
+
+    // Saldo real de ventas a crédito de HOY
+    // Solo descuenta abonos cobrados HOY (filtrado por fecha del abono)
+    // Así si alguien abonó ayer, no afecta el pendiente de hoy
+    const totalCreditoHoy = ventasDeHoy
+      .filter((v) => v.tipo === "credito")
+      .reduce((a, v) => a + v.total, 0);
+
+    const creditoSaldoHoy = ventasDeHoy
+      .filter((v) => v.tipo === "credito")
+      .reduce((acc, v) => {
+        const abonado = abonosDeHoy
+          .filter((a: Abono) => a.ventaId === v.id)
+          .reduce((s: number, a: Abono) => s + a.monto, 0);
+        return acc + Math.max(0, v.total - abonado);
+      }, 0);
+
+    setAbonos(listaAbonos);
     setDatos({
+      recibiidoHoy,
       totalHoy: ventasDeHoy.reduce((a, v) => a + v.total, 0),
       ventasHoy: ventasDeHoy.length,
       clientesHoy: clientesIds.length,
-      totalContado: ventasDeHoy
-        .filter((v) => v.tipo === "contado")
-        .reduce((a, v) => a + v.total, 0),
-      totalCreditoHoy: ventasDeHoy
-        .filter((v) => v.tipo === "credito")
-        .reduce((a, v) => a + v.total, 0),
+      totalCreditoHoy,
+      creditoSaldoHoy,
       creditoPendiente: resumenes.reduce((a, r) => a + r.saldoActual, 0),
       ventasDelDia: ventasDeHoy,
       deudores: resumenes,
@@ -330,6 +381,135 @@ export const VentaDelDiaScreen = () => {
   React.useEffect(() => {
     cargar();
   }, []);
+
+  // ── Top 3 productos del día ───────────────────────────────────────────────
+  const top3 = React.useMemo(() => {
+    if (!datos) return [];
+    const conteo: { [nombre: string]: number } = {};
+    datos.ventasDelDia.forEach((v) => {
+      (v.items ?? []).forEach((item: ItemVenta) => {
+        const nombre = item.nombreProducto ?? "Producto";
+        conteo[nombre] = (conteo[nombre] ?? 0) + (item.cantidad ?? 1);
+      });
+    });
+    return Object.entries(conteo)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([nombre, cantidad]) => ({ nombre, cantidad }));
+  }, [datos]);
+
+  // ── Exportar Excel ────────────────────────────────────────────────────────
+  const exportarExcel = async () => {
+    if (!datos || datos.ventasDelDia.length === 0) {
+      Alert.alert("Sin datos", "No hay ventas hoy para exportar.");
+      return;
+    }
+    setExportando(true);
+    try {
+      const filas: object[] = [];
+      datos.ventasDelDia.forEach((v) => {
+        const saldo = saldoPorVenta.get(v.id) ?? v.total;
+        const estadoReal =
+          v.tipo === "contado" || v.estado === "pagado"
+            ? "Al día"
+            : saldo < v.total
+              ? "Abono parcial"
+              : "Debe";
+
+        if (v.items && v.items.length > 0) {
+          v.items.forEach((item: ItemVenta) => {
+            filas.push({
+              Factura: v.numeroFactura ?? v.id,
+              Fecha: new Date(v.fecha).toLocaleDateString("es-CO", {
+                timeZone: "America/Bogota",
+              }),
+              Hora: new Date(v.fecha).toLocaleTimeString("es-CO", {
+                timeZone: "America/Bogota",
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              Cliente: v.nombreCliente,
+              Producto: item.nombreProducto,
+              Cantidad: item.cantidad,
+              "Precio unitario": item.precioUnitario,
+              Subtotal: item.subtotal,
+              "Tipo de pago": v.tipo === "contado" ? "Contado" : "Crédito",
+              "Total factura": v.total,
+              "Saldo pendiente": saldo,
+              Estado: estadoReal,
+            });
+          });
+        } else {
+          filas.push({
+            Factura: v.numeroFactura ?? v.id,
+            Fecha: new Date(v.fecha).toLocaleDateString("es-CO", {
+              timeZone: "America/Bogota",
+            }),
+            Hora: new Date(v.fecha).toLocaleTimeString("es-CO", {
+              timeZone: "America/Bogota",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            Cliente: v.nombreCliente,
+            Producto: "",
+            Cantidad: "",
+            "Precio unitario": "",
+            Subtotal: "",
+            "Tipo de pago": v.tipo === "contado" ? "Contado" : "Crédito",
+            "Total factura": v.total,
+            "Saldo pendiente": saldo,
+            Estado: estadoReal,
+          });
+        }
+      });
+
+      const hoja = XLSX.utils.json_to_sheet(filas);
+      hoja["!cols"] = [
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 8 },
+        { wch: 20 },
+        { wch: 22 },
+        { wch: 10 },
+        { wch: 16 },
+        { wch: 12 },
+        { wch: 14 },
+        { wch: 14 },
+        { wch: 16 },
+        { wch: 14 },
+      ];
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Ventas del día");
+
+      const base64 = XLSX.write(libro, { type: "base64", bookType: "xlsx" });
+      const fechaArchivo = new Date().toISOString().substring(0, 10);
+      const ruta = `${FileSystem.cacheDirectory}ventas_${fechaArchivo}.xlsx`;
+
+      await FileSystem.writeAsStringAsync(ruta, base64, {
+        encoding: "base64" as FileSystem.EncodingType,
+      });
+
+      const puedoCompartir = await Sharing.isAvailableAsync();
+      if (puedoCompartir) {
+        await Sharing.shareAsync(ruta, {
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          dialogTitle: "Exportar ventas del día",
+          UTI: "com.microsoft.excel.xlsx",
+        });
+      } else {
+        Alert.alert(
+          "No disponible",
+          "Tu dispositivo no soporta compartir archivos.",
+        );
+      }
+    } catch (e) {
+      console.error("Error exportando Excel:", e);
+      Alert.alert("Error", "No se pudo generar el archivo. Intenta de nuevo.");
+    } finally {
+      setExportando(false);
+    }
+  };
 
   if (cargando) {
     return (
@@ -352,6 +532,9 @@ export const VentaDelDiaScreen = () => {
   const ventasVisibles = mostrarTodas
     ? datos.ventasDelDia
     : datos.ventasDelDia.slice(0, 5);
+  const medallas = ["🥇", "🥈", "🥉"];
+  const barColors = ["#F59E0B", "#9CA3AF", "#CD7C2F"];
+  const maxCantidad = top3[0]?.cantidad ?? 1;
 
   return (
     <ScreenWrapper title="Venta del día" showBtnB={false}>
@@ -371,17 +554,238 @@ export const VentaDelDiaScreen = () => {
           />
         }
       >
-        {/* ══ TARJETA TOTAL HOY ══════════════════════════════════════════ */}
+        {/* ══ TARJETA PRINCIPAL ══════════════════════════════════════════ */}
         <View style={[s.card, { marginBottom: 16 }]}>
-          <AppText style={s.labelGris}>Total vendido hoy</AppText>
+          {/* Encabezado: título + badge fecha larga */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: 2,
+            }}
+          >
+            <AppText style={s.labelGris}>Dinero recibido</AppText>
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                backgroundColor: "#EFF6FF",
+                borderRadius: 8,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+              }}
+            >
+              <AppText style={{ fontSize: 12 }}>📅</AppText>
+              <AppText
+                style={{ fontSize: 12, color: "#2563EB", fontWeight: "700" }}
+              >
+                {new Date().toLocaleDateString("es-CO", {
+                  timeZone: "America/Bogota",
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}
+              </AppText>
+            </View>
+          </View>
+
           <AppText
             style={[
               s.totalGrande,
               { color: hayVentas ? colors.primary : colors.grayText },
             ]}
           >
-            {fmt(datos.totalHoy)}
+            {fmt(datos.recibiidoHoy)}
           </AppText>
+
+          {/* Desglose siempre visible */}
+          <View
+            style={{
+              backgroundColor: "#F8FAFF",
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: "#E8EEFB",
+              padding: 14,
+              gap: 10,
+              marginBottom: 14,
+            }}
+          >
+            {/* Fila: Ventas de contado */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: "#DCFCE7",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="check-bold"
+                    size={20}
+                    color="#16A34A"
+                  />
+                </View>
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#374151",
+                      fontWeight: "700",
+                    }}
+                  >
+                    ✅ Ventas de contado
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#9CA3AF",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Pago al contado
+                  </AppText>
+                </View>
+              </View>
+              <AppText
+                style={{ fontSize: 18, color: "#16A34A", fontWeight: "800" }}
+              >
+                {fmt(
+                  datos.ventasDelDia
+                    .filter((v) => v.tipo === "contado")
+                    .reduce((a, v) => a + v.total, 0),
+                )}
+              </AppText>
+            </View>
+
+            <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
+
+            {/* Fila: Abonos recibidos */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: "#DBEAFE",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="cash-plus"
+                    size={20}
+                    color="#2563EB"
+                  />
+                </View>
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#374151",
+                      fontWeight: "700",
+                    }}
+                  >
+                    💵 Abonos recibidos
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#9CA3AF",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Pagos parciales de créditos
+                  </AppText>
+                </View>
+              </View>
+              <AppText
+                style={{ fontSize: 18, color: "#2563EB", fontWeight: "800" }}
+              >
+                {fmt(
+                  datos.recibiidoHoy -
+                    datos.ventasDelDia
+                      .filter((v) => v.tipo === "contado")
+                      .reduce((a, v) => a + v.total, 0),
+                )}
+              </AppText>
+            </View>
+          </View>
+
+          {/* Pendiente de cobro — solo si hay saldo */}
+          {datos.creditoSaldoHoy > 0 && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#FFFBEB",
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: "#FDE68A",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                marginBottom: 14,
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name="clock-alert-outline"
+                  size={22}
+                  color="#D97706"
+                />
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#92400E",
+                      fontWeight: "700",
+                    }}
+                  >
+                    Pendiente de cobro
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#B45309",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Créditos sin saldar hoy
+                  </AppText>
+                </View>
+              </View>
+              <AppText
+                style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
+              >
+                {fmt(datos.creditoSaldoHoy)}
+              </AppText>
+            </View>
+          )}
 
           <View style={s.divisorH} />
 
@@ -394,12 +798,12 @@ export const VentaDelDiaScreen = () => {
                   color="#F59E0B"
                 />
               </View>
-              <AppText style={s.countNum}>{datos.ventasHoy}</AppText>
-              <AppText style={s.countLabel}>Ventas hoy</AppText>
+              <View>
+                <AppText style={s.countNum}>{datos.ventasHoy}</AppText>
+                <AppText style={s.countLabel}>Ventas hoy</AppText>
+              </View>
             </View>
-
             <View style={s.divisorV} />
-
             <View style={s.countItem}>
               <View style={[s.iconBubble, { backgroundColor: "#FCE4EC" }]}>
                 <MaterialCommunityIcons
@@ -408,58 +812,117 @@ export const VentaDelDiaScreen = () => {
                   color="#E91E63"
                 />
               </View>
-              <AppText style={s.countNum}>{datos.clientesHoy}</AppText>
-              <AppText style={s.countLabel}>Clientes hoy</AppText>
+              <View>
+                <AppText style={s.countNum}>{datos.clientesHoy}</AppText>
+                <AppText style={s.countLabel}>Clientes hoy</AppText>
+              </View>
             </View>
-          </View>
-        </View>
-
-        {/* ══ 2 TARJETAS ════════════════════════════════════════════════ */}
-        <View style={[s.fila2, { marginBottom: 24 }]}>
-          <View
-            style={[
-              s.miniCard,
-              { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" },
-            ]}
-          >
-            <View style={[s.iconBubble, { backgroundColor: "#DCFCE7" }]}>
-              <MaterialCommunityIcons name="cash" size={26} color="#16A34A" />
-            </View>
-            <AppText style={[s.miniTitulo, { color: "#16A34A" }]}>
-              De contado
-            </AppText>
-            <AppText style={[s.miniMonto, { color: "#15803D" }]}>
-              {fmt(datos.totalContado)}
-            </AppText>
-            <AppText style={[s.miniSub, { color: "#4ADE80" }]}>
-              Dinero recibido hoy
-            </AppText>
           </View>
 
-          <View
-            style={[
-              s.miniCard,
-              { backgroundColor: "#F5F3FF", borderColor: "#DDD6FE" },
-            ]}
-          >
-            <View style={[s.iconBubble, { backgroundColor: "#EDE9FE" }]}>
-              <MaterialCommunityIcons
-                name="file-document-outline"
-                size={26}
-                color="#7C3AED"
-              />
-            </View>
-            <AppText style={[s.miniTitulo, { color: "#7C3AED" }]}>
-              A crédito hoy
-            </AppText>
-            <AppText style={[s.miniMonto, { color: "#6D28D9" }]}>
-              {fmt(datos.totalCreditoHoy)}
-            </AppText>
-            <AppText style={[s.miniSub, { color: "#A78BFA" }]}>
-              Ventas fiadas hoy
-            </AppText>
-          </View>
+          {/* ══ TOP 3 PRODUCTOS ══════════════════════════════════════════ */}
+          {top3.length > 0 && (
+            <>
+              <View style={[s.divisorH, { marginTop: 4, marginBottom: 16 }]} />
+              <View style={{ gap: 12 }}>
+                <AppText
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "700",
+                    color: "#111827",
+                    marginBottom: 2,
+                  }}
+                >
+                  🏆 Top productos hoy
+                </AppText>
+                {top3.map((p, i) => (
+                  <View key={p.nombre} style={{ gap: 4 }}>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          flex: 1,
+                        }}
+                      >
+                        <AppText style={{ fontSize: 18, lineHeight: 22 }}>
+                          {medallas[i]}
+                        </AppText>
+                        <AppText
+                          style={{
+                            fontSize: 14,
+                            color: "#1F2937",
+                            fontWeight: "600",
+                            flex: 1,
+                          }}
+                          numberOfLines={1}
+                        >
+                          {p.nombre}
+                        </AppText>
+                      </View>
+                      <AppText
+                        style={{
+                          fontSize: 14,
+                          color: "#6B7280",
+                          fontWeight: "700",
+                          marginLeft: 8,
+                        }}
+                      >
+                        {p.cantidad} uds
+                      </AppText>
+                    </View>
+                    <View
+                      style={{
+                        height: 5,
+                        backgroundColor: "#F3F4F6",
+                        borderRadius: 4,
+                        overflow: "hidden",
+                      }}
+                    >
+                      <View
+                        style={{
+                          height: 5,
+                          borderRadius: 4,
+                          backgroundColor: barColors[i],
+                          width: `${Math.round((p.cantidad / maxCantidad) * 100)}%`,
+                        }}
+                      />
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
         </View>
+
+        {/* ══ BOTÓN EXPORTAR EXCEL ══════════════════════════════════════ */}
+        <TouchableOpacity
+          style={[s.btnExcel, exportando && { opacity: 0.6 }]}
+          activeOpacity={0.8}
+          onPress={exportarExcel}
+          disabled={exportando}
+        >
+          {exportando ? (
+            <ActivityIndicator size="small" color="#15803D" />
+          ) : (
+            <MaterialCommunityIcons
+              name="file-excel"
+              size={24}
+              color="#15803D"
+            />
+          )}
+          <AppText style={s.btnExcelTxt}>
+            {exportando
+              ? "Generando archivo..."
+              : "Exportar ventas de hoy a Excel"}
+          </AppText>
+        </TouchableOpacity>
 
         {/* ══ LISTA VENTAS DEL DÍA ══════════════════════════════════════ */}
         {hayVentas && (
@@ -484,11 +947,13 @@ export const VentaDelDiaScreen = () => {
               {ventasVisibles.map((venta, index) => {
                 const avatarColor = AVATAR_COLORS[index % AVATAR_COLORS.length];
                 const inicial = venta.nombreCliente.charAt(0).toUpperCase();
-                const esPagado = venta.tipo === "contado";
+                const esPagado =
+                  venta.tipo === "contado" || venta.estado === "pagado";
+                const saldo = saldoPorVenta.get(venta.id) ?? venta.total;
+                const tieneAbonosParciales = !esPagado && saldo < venta.total;
 
                 return (
                   <View key={venta.id} style={s.ventaCard}>
-                    {/* Avatar */}
                     <View
                       style={[s.avatar, { backgroundColor: avatarColor.bg }]}
                     >
@@ -498,8 +963,6 @@ export const VentaDelDiaScreen = () => {
                         {inicial}
                       </AppText>
                     </View>
-
-                    {/* Nombre + hora */}
                     <View style={{ flex: 1, marginLeft: 14 }}>
                       <AppText style={s.ventaNombre} numberOfLines={1}>
                         {venta.nombreCliente}
@@ -508,10 +971,29 @@ export const VentaDelDiaScreen = () => {
                         {horaDeVenta(venta.fecha)}
                       </AppText>
                     </View>
-
-                    {/* Monto + badge */}
                     <View style={{ alignItems: "flex-end", marginRight: 12 }}>
-                      <AppText style={s.ventaMonto}>{fmt(venta.total)}</AppText>
+                      {!esPagado ? (
+                        <>
+                          <AppText style={[s.ventaMonto, { color: "#D97706" }]}>
+                            {fmt(saldo)}
+                          </AppText>
+                          {tieneAbonosParciales && (
+                            <AppText
+                              style={{
+                                fontSize: 11,
+                                color: "#9CA3AF",
+                                marginBottom: 1,
+                              }}
+                            >
+                              de {fmt(venta.total)}
+                            </AppText>
+                          )}
+                        </>
+                      ) : (
+                        <AppText style={s.ventaMonto}>
+                          {fmt(venta.total)}
+                        </AppText>
+                      )}
                       <View
                         style={[
                           s.badge,
@@ -524,12 +1006,10 @@ export const VentaDelDiaScreen = () => {
                             { color: esPagado ? "#16A34A" : "#D97706" },
                           ]}
                         >
-                          {esPagado ? "Pagado" : "Fiado"}
+                          {esPagado ? "Al día" : "En mora"}
                         </AppText>
                       </View>
                     </View>
-
-                    {/* Botón Ver — ahora abre el modal */}
                     <TouchableOpacity
                       style={[s.btnVer, { borderColor: colors.grayBorder }]}
                       activeOpacity={0.7}
@@ -551,7 +1031,7 @@ export const VentaDelDiaScreen = () => {
           </>
         )}
 
-        {/* ══ CRÉDITO PENDIENTE ═════════════════════════════════════════ */}
+        {/* ══ CRÉDITO PENDIENTE HISTÓRICO ═══════════════════════════════ */}
         {datos.deudores.length > 0 && (
           <View style={s.creditoCard}>
             <View
@@ -571,10 +1051,9 @@ export const VentaDelDiaScreen = () => {
                 color="#D97706"
               />
             </View>
-
             <View style={{ flex: 1, marginLeft: 14 }}>
-              <AppText style={s.creditoTitulo}>Crédito pendiente</AppText>
-              <AppText style={s.creditoSubtitulo}>de días anteriores</AppText>
+              <AppText style={s.creditoTitulo}>Cartera total pendiente</AppText>
+              <AppText style={s.creditoSubtitulo}>todos los días</AppText>
               <AppText style={s.creditoMonto}>
                 {fmt(datos.creditoPendiente)}
                 <AppText style={s.creditoClientes}>
@@ -604,17 +1083,17 @@ export const VentaDelDiaScreen = () => {
         )}
       </ScrollView>
 
-      {/* ══ MODAL FACTURA ═════════════════════════════════════════════════ */}
       <ModalFactura
         venta={ventaSeleccionada}
         visible={modalVisible}
         onClose={cerrarModal}
+        saldoPorVenta={saldoPorVenta}
       />
     </ScreenWrapper>
   );
 };
 
-// ── Estilos screen ────────────────────────────────────────────────────────────
+// ── Estilos ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   centrado: { flex: 1, justifyContent: "center", alignItems: "center" },
   card: {
@@ -626,6 +1105,7 @@ const s = StyleSheet.create({
     shadowOpacity: 0.07,
     shadowRadius: 10,
     elevation: 3,
+    marginBottom: 16,
   },
   labelGris: { fontSize: 17, fontWeight: "500", color: "#7B8499" },
   totalGrande: {
@@ -633,7 +1113,7 @@ const s = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: -1,
     marginTop: 4,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   divisorH: { height: 1.5, backgroundColor: "#EAECF4", marginBottom: 16 },
   filaCounts: { flexDirection: "row", alignItems: "center" },
@@ -653,18 +1133,19 @@ const s = StyleSheet.create({
   },
   countNum: { fontSize: 22, fontWeight: "800", color: "#111827" },
   countLabel: { fontSize: 15, color: "#7B8499", fontWeight: "500" },
-  fila2: { flexDirection: "row", gap: 12 },
-  miniCard: {
-    flex: 1,
-    borderRadius: 18,
+  btnExcel: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#F0FDF4",
     borderWidth: 1.5,
-    padding: 16,
-    minHeight: 160,
-    gap: 8,
+    borderColor: "#BBF7D0",
+    borderRadius: 16,
+    paddingVertical: 16,
+    marginBottom: 16,
   },
-  miniTitulo: { fontSize: 15, fontWeight: "800" },
-  miniMonto: { fontSize: 22, fontWeight: "900" },
-  miniSub: { fontSize: 13, fontWeight: "500", lineHeight: 18 },
+  btnExcelTxt: { fontSize: 16, fontWeight: "700", color: "#15803D" },
   seccionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -751,7 +1232,6 @@ const s = StyleSheet.create({
   },
 });
 
-// ── Estilos modal ─────────────────────────────────────────────────────────────
 const ms = StyleSheet.create({
   overlay: {
     position: "absolute",
@@ -803,8 +1283,6 @@ const ms = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-
-  // cliente
   clienteRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -829,7 +1307,6 @@ const ms = StyleSheet.create({
     borderRadius: 20,
   },
   badgeTxt: { fontSize: 13, fontWeight: "700" },
-
   divisor: { height: 1, backgroundColor: "#F0F2F7", marginBottom: 8 },
   divisorDashed: {
     height: 1,
@@ -838,12 +1315,7 @@ const ms = StyleSheet.create({
     borderColor: "#E2E6EF",
     marginVertical: 8,
   },
-
-  // tabla
-  tablaHeader: {
-    flexDirection: "row",
-    paddingVertical: 4,
-  },
+  tablaHeader: { flexDirection: "row", paddingVertical: 4 },
   colHead: {
     fontSize: 13,
     fontWeight: "700",
@@ -853,7 +1325,6 @@ const ms = StyleSheet.create({
   colCant: { width: 44, textAlign: "center" },
   colPrecio: { width: 80, textAlign: "right" },
   colTotal: { width: 80, textAlign: "right" },
-
   filaProducto: {
     flexDirection: "row",
     alignItems: "center",
@@ -865,8 +1336,6 @@ const ms = StyleSheet.create({
   productoNombre: { fontSize: 16, fontWeight: "600", color: "#111827" },
   productoPrecioUnit: { fontSize: 13, color: "#7B8499", marginTop: 2 },
   colValor: { fontSize: 15, fontWeight: "600", color: "#111827" },
-
-  // total
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -875,8 +1344,6 @@ const ms = StyleSheet.create({
   },
   totalLabel: { fontSize: 14, color: "#7B8499", fontWeight: "500" },
   totalMonto: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
-
-  // fiado info
   fiadoInfo: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -888,14 +1355,7 @@ const ms = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#FDE68A",
   },
-  fiadoTxt: {
-    flex: 1,
-    fontSize: 14,
-    color: "#92400E",
-    lineHeight: 20,
-  },
-
-  // factura
+  fiadoTxt: { flex: 1, fontSize: 14, color: "#92400E", lineHeight: 20 },
   facturaRow: {
     flexDirection: "row",
     alignItems: "center",

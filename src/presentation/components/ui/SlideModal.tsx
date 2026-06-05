@@ -1,5 +1,12 @@
 import React from "react";
-import { Animated, Modal, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useTheme } from "../../../theme";
 import { SlideModalType } from "../../hooks/useSlideModal";
 
@@ -27,46 +34,49 @@ export const SlideModal = ({
       animationType="none"
       onRequestClose={handleClose}
     >
-      <TouchableOpacity
-        style={{
-          flex: 1,
-          backgroundColor: colors.overlayDark,
-          justifyContent: "flex-end",
-          opacity: oculto ? 0 : 1, // ← invisible pero existe
-        }}
-        activeOpacity={1}
-        onPress={handleClose}
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <TouchableOpacity activeOpacity={1}>
-          <Animated.View
-            style={[
-              {
-                backgroundColor: colors.white,
-                /*} borderTopLeftRadius: radius.xxl,
-                borderTopRightRadius: radius.xxl,*/
-                padding: spacing.lg,
-                paddingBottom: spacing.xxxl,
-                maxHeight: "100%",
-              },
-              modal.animatedStyle,
-            ]}
-          >
-            {/* Handle */}
-            <View
-              style={{
-                width: 36,
-                height: 4,
-                backgroundColor: colors.grayBorder,
-                borderRadius: radius.full,
-                alignSelf: "center",
-                marginBottom: spacing.md,
-              }}
-            />
+        <TouchableOpacity
+          style={{
+            flex: 1,
+            backgroundColor: colors.overlayDark,
+            justifyContent: "flex-end",
+            opacity: oculto ? 0 : 1,
+          }}
+          activeOpacity={1}
+          onPress={handleClose}
+        >
+          <TouchableOpacity activeOpacity={1}>
+            <Animated.View
+              style={[
+                {
+                  backgroundColor: colors.white,
+                  padding: spacing.lg,
+                  paddingBottom: spacing.xxxl,
+                  maxHeight: "100%",
+                },
+                modal.animatedStyle,
+              ]}
+            >
+              {/* Handle */}
+              <View
+                style={{
+                  width: 36,
+                  height: 4,
+                  backgroundColor: colors.grayBorder,
+                  borderRadius: radius.full,
+                  alignSelf: "center",
+                  marginBottom: spacing.md,
+                }}
+              />
 
-            {children}
-          </Animated.View>
+              {children}
+            </Animated.View>
+          </TouchableOpacity>
         </TouchableOpacity>
-      </TouchableOpacity>
+      </KeyboardAvoidingView>
     </Modal>
   );
 };

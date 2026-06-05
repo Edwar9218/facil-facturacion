@@ -102,13 +102,13 @@ export const CAMPOS_PRODUCTO_VENTA = [
     opciones: ["Kg", "Und", "Lt", "g", "ml", "Lb", "Caja", "Bolsa"],
     obligatorio: true,
   },
-  {
+  /*{
     id: "disponible",
     label: "Cantidad disponible",
     placeholder: "0",
     tipo: "numero",
     obligatorio: false,
-  },
+  },*/
   {
     id: "imagen",
     label: "Foto del producto",

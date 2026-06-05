@@ -750,8 +750,11 @@ export default function NuevaVentaScreen() {
                       <Text style={T.h2}>{productoActivo.nombre}</Text>
                       <Text style={T.caption}>
                         {modoModal === "editar"
-                          ? `Cantidad actual: ${carrito.find((i) => i.id === productoActivo.id)?.qty ?? "-"}`
-                          : `Disponible: ${productoActivo.disponible} ${productoActivo.unidad}`}
+                          ? `Cantidad actual: ${
+                              carrito.find((i) => i.id === productoActivo.id)
+                                ?.qty ?? "-"
+                            }`
+                          : `Disponible: ${productoActivo.stock ?? 0} ${productoActivo.unidad}`}
                       </Text>
                     </View>
                     <TouchableOpacity

@@ -1,6 +1,6 @@
 // src/presentation/screens/productos/ProductosScreen.tsx
 
-import { Feather } from "@expo/vector-icons";
+import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { FlatList, TextInput, TouchableOpacity, View } from "react-native";
 import { Producto } from "../../../domain/entities/Producto";
@@ -9,8 +9,13 @@ import { ScreenWrapper } from "../../components/layout/ScreenWrapper";
 import { AppText } from "../../components/ui/AppText";
 import { FormularioModal } from "../../components/ui/FormularioModal";
 import { Opcion, OpcionesModal } from "../../components/ui/OpcionesModal";
+import { InventarioModal } from "./components/InventarioModal";
 import { ProductoCard } from "./components/ProductoCard";
-import { CAMPOS_PRODUCTO, useProductos } from "./hooks/useProductos";
+import {
+  CAMPOS_PRODUCTO,
+  FiltroStock,
+  useProductos,
+} from "./hooks/useProductos";
 
 export const ProductosScreen = () => {
   const { colors, typography, spacing, radius, sizes, shadows } = useTheme();
@@ -19,6 +24,10 @@ export const ProductosScreen = () => {
     productosFiltrados,
     busqueda,
     setBusqueda,
+    filtroStock,
+    setFiltroStock,
+    inventarioActivo,
+    productosStockBajo,
     esEdicion,
     valores,
     handleChange,
@@ -28,8 +37,11 @@ export const ProductosScreen = () => {
     abrirCrear,
     abrirOpciones,
     abrirEditar,
+    abrirInventario,
+    guardarInventario,
     guardar,
     confirmarEliminar,
+    modalInventario,
   } = useProductos();
 
   // ── Opciones del modal 3 puntos ───────────────────────────────────────────
@@ -44,6 +56,15 @@ export const ProductosScreen = () => {
       onPress: () => abrirEditar(producto),
     },
     {
+      label: "Inventario",
+      sublabel: "Controla cuánto tienes de este producto",
+      iconName: "package-variant",
+      iconLibrary: "material-community",
+      color: "#D97706",
+      colorFondo: "#FEF3C7",
+      onPress: () => abrirInventario(producto),
+    },
+    {
       label: "Eliminar producto",
       sublabel: "Esta acción no se puede deshacer",
       iconName: "delete-outline",
@@ -54,10 +75,16 @@ export const ProductosScreen = () => {
     },
   ];
 
+  // ── Config de filtros de stock ────────────────────────────────────────────
+  const FILTROS: { value: FiltroStock; label: string }[] = [
+    { value: "todos", label: "Todos" },
+    { value: "stock-bajo", label: "Stock bajo" },
+    { value: "agotado", label: "Agotado" },
+  ];
+
   return (
     <>
       <ScreenWrapper showBtnB={false} title="Productos">
-        {/* Buscador */}
         <View
           style={{
             paddingHorizontal: spacing.lg,
@@ -65,6 +92,7 @@ export const ProductosScreen = () => {
             marginBottom: spacing.xxs,
           }}
         >
+          {/* ── Buscador ───────────────────────────────────────────────── */}
           <View
             style={{
               flexDirection: "row",
@@ -102,19 +130,97 @@ export const ProductosScreen = () => {
             )}
           </View>
 
-          {/* Contador */}
+          {/* ── Alerta de stock bajo (solo si inventario activo) ────────── */}
+          {inventarioActivo && productosStockBajo > 0 && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                backgroundColor: "#FEF3C7",
+                borderRadius: radius.md,
+                paddingHorizontal: 14,
+                paddingVertical: 10,
+                marginBottom: spacing.sm,
+                borderWidth: 1,
+                borderColor: "#FDE68A",
+              }}
+            >
+              <MaterialCommunityIcons
+                name="alert-outline"
+                size={18}
+                color="#D97706"
+              />
+              <AppText
+                style={{
+                  fontSize: 14,
+                  color: "#92400E",
+                  fontWeight: "600",
+                  flex: 1,
+                }}
+              >
+                {productosStockBajo} producto
+                {productosStockBajo !== 1 ? "s" : ""} con stock bajo o agotado
+              </AppText>
+            </View>
+          )}
+
+          {/* ── Filtros de stock (solo si inventario activo) ─────────────── */}
+          {inventarioActivo && (
+            <View
+              style={{
+                flexDirection: "row",
+                gap: spacing.xs,
+                marginBottom: spacing.sm,
+              }}
+            >
+              {FILTROS.map((f) => {
+                const activo = filtroStock === f.value;
+                return (
+                  <TouchableOpacity
+                    key={f.value}
+                    onPress={() => setFiltroStock(f.value)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 8,
+                      borderRadius: radius.md,
+                      alignItems: "center",
+                      backgroundColor: activo ? colors.primary : "#F3F4F6",
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <AppText
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: activo ? "#FFFFFF" : "#4B5563",
+                      }}
+                    >
+                      {f.label}
+                    </AppText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+
+          {/* ── Contador ─────────────────────────────────────────────────── */}
           <AppText variant="label" style={{ marginBottom: spacing.xs }}>
             {productosFiltrados.length} producto
             {productosFiltrados.length !== 1 ? "s" : ""}
           </AppText>
         </View>
 
-        {/* Lista */}
+        {/* ── Lista ────────────────────────────────────────────────────── */}
         <FlatList
           data={productosFiltrados}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <ProductoCard producto={item} onPress={abrirOpciones} />
+            <ProductoCard
+              producto={item}
+              onPress={abrirOpciones}
+              mostrarStock={inventarioActivo}
+            />
           )}
           scrollEnabled={false}
           contentContainerStyle={{
@@ -129,14 +235,16 @@ export const ProductosScreen = () => {
                 📦
               </AppText>
               <AppText variant="body" color={colors.grayText}>
-                No hay productos
+                {filtroStock !== "todos"
+                  ? "No hay productos con ese estado de stock"
+                  : "No hay productos"}
               </AppText>
             </View>
           }
         />
       </ScreenWrapper>
 
-      {/* FAB */}
+      {/* ── FAB ──────────────────────────────────────────────────────────── */}
       <TouchableOpacity
         style={{
           position: "absolute",
@@ -155,7 +263,7 @@ export const ProductosScreen = () => {
         <Feather name="plus" size={sizes.iconLg} color={colors.white} />
       </TouchableOpacity>
 
-      {/* Modal opciones */}
+      {/* ── Modal opciones ───────────────────────────────────────────────── */}
       {productoSeleccionado && (
         <OpcionesModal
           modal={modalOpciones}
@@ -166,7 +274,7 @@ export const ProductosScreen = () => {
         />
       )}
 
-      {/* Modal formulario */}
+      {/* ── Modal formulario ─────────────────────────────────────────────── */}
       <FormularioModal
         modal={modalFormulario}
         titulo={esEdicion ? "Editar producto" : "Nuevo producto"}
@@ -180,6 +288,12 @@ export const ProductosScreen = () => {
         labelGuardar="Agregar producto"
         labelGuardarEditar="Guardar cambios"
         esEdicion={esEdicion}
+      />
+      {/* ── Modal inventario ─────────────────────────────────────────────── */}
+      <InventarioModal
+        modal={modalInventario}
+        producto={productoSeleccionado}
+        onGuardar={guardarInventario}
       />
     </>
   );

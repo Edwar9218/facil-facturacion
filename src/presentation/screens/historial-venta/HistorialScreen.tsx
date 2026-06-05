@@ -1,23 +1,42 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
 import React from "react";
 import {
-    ActivityIndicator,
-    Modal,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Modal,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import * as XLSX from "xlsx";
+import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
 import { VentaRepositoryImpl } from "../../../data/repositories/VentaRepositoryImpl";
 import { ItemVenta, Venta } from "../../../domain/entities/Venta";
 import { useTheme } from "../../../theme";
 import { ScreenWrapper } from "../../components/layout/ScreenWrapper";
 import { AppText } from "../../components/ui/AppText";
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+interface ResumenCredito {
+  clienteId: string;
+  saldoActual: number;
+}
+
+// ── NUEVA INTERFAZ PARA ABONOS ──
+interface Abono {
+  id: string;
+  clienteId: string;
+  ventaId: string;
+  monto: number;
+  fecha: string;
+}
+
 const fmt = (n: number) =>
   "$ " + Number(n).toLocaleString("es-CO", { minimumFractionDigits: 0 });
 
@@ -69,10 +88,10 @@ const obtenerEtiquetaAgrupacion = (fechaStr: string) => {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 };
 
-// ── Repos ─────────────────────────────────────────────────────────────────────
 const ventaRepo = new VentaRepositoryImpl();
+const creditoRepo = new CreditoRepositoryImpl();
 
-type TipoEstado = "todas" | "pagadas" | "fiadas";
+type TipoEstado = "todas" | "pazysalvo" | "debe";
 type TipoPeriodo = "hoy" | "semana" | "mes" | "personalizado";
 
 const AVATAR_COLORS = [
@@ -84,22 +103,23 @@ const AVATAR_COLORS = [
   { bg: "#F3E8FF", fg: "#9333EA" },
 ];
 
-// ── Modal Factura (Reutilizado) ───────────────────────────────────────────────
 const ModalFactura = ({
   venta,
   visible,
   onClose,
+  evaluarFacturaPagada,
 }: {
   venta: Venta | null;
   visible: boolean;
   onClose: () => void;
+  evaluarFacturaPagada: (v: Venta) => boolean;
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   if (!venta) return null;
 
-  const esPagado = venta.tipo === "contado";
+  const esPazYSalvo = evaluarFacturaPagada(venta);
   const GREEN = "#16A34A";
   const AMBER = "#D97706";
   const GRAY = "#7B8499";
@@ -153,18 +173,18 @@ const ModalFactura = ({
             <View
               style={[
                 ms.badge,
-                { backgroundColor: esPagado ? "#DCFCE7" : "#FEF3C7" },
+                { backgroundColor: esPazYSalvo ? "#DCFCE7" : "#FEF3C7" },
               ]}
             >
               <MaterialCommunityIcons
-                name={esPagado ? "check-circle" : "clock-outline"}
+                name={esPazYSalvo ? "check-circle" : "clock-outline"}
                 size={14}
-                color={esPagado ? GREEN : AMBER}
+                color={esPazYSalvo ? GREEN : AMBER}
               />
               <AppText
-                style={[ms.badgeTxt, { color: esPagado ? GREEN : AMBER }]}
+                style={[ms.badgeTxt, { color: esPazYSalvo ? GREEN : AMBER }]}
               >
-                {esPagado ? "Pagado" : "Fiado"}
+                {esPazYSalvo ? "Al día" : "En mora"}
               </AppText>
             </View>
           </View>
@@ -234,7 +254,7 @@ const ModalFactura = ({
             </View>
           </View>
 
-          {!esPagado && (
+          {!esPazYSalvo && (
             <View style={ms.fiadoInfo}>
               <MaterialCommunityIcons
                 name="information-outline"
@@ -242,8 +262,8 @@ const ModalFactura = ({
                 color={AMBER}
               />
               <AppText style={ms.fiadoTxt}>
-                Esta venta está pendiente de cobro. Puedes registrar el pago
-                desde el perfil del cliente.
+                Esta factura fue generada a crédito y presenta saldos pendientes
+                por abonar de manera específica.
               </AppText>
             </View>
           )}
@@ -262,7 +282,16 @@ const ModalFactura = ({
   );
 };
 
-// ── Modal Elegir Fecha (Estructura Accesible) ─────────────────────────────────
+const formatearFecha = (raw: string): string => {
+  const digits = raw.replace(/\D/g, "").substring(0, 8);
+  if (digits.length <= 4) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
+};
+
+const fechaValida = (f: string): boolean =>
+  /^\d{4}-\d{2}-\d{2}$/.test(f) && !isNaN(new Date(f).getTime());
+
 const ModalElegirFecha = ({
   visible,
   onClose,
@@ -272,10 +301,54 @@ const ModalElegirFecha = ({
   onClose: () => void;
   onAplicar: (inicio: string, fin: string) => void;
 }) => {
+  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
-  const [fInicio, setFInicio] = React.useState("2026-05-01");
-  const [fFin, setFFin] = React.useState("2026-05-25");
+  const hoy = fechaHoy();
+  const [fInicio, setFInicio] = React.useState(hoy);
+  const [fFin, setFFin] = React.useState(hoy);
+  const [errorInicio, setErrorInicio] = React.useState("");
+  const [errorFin, setErrorFin] = React.useState("");
+
+  React.useEffect(() => {
+    if (visible) {
+      setFInicio(hoy);
+      setFFin(hoy);
+      setErrorInicio("");
+      setErrorFin("");
+    }
+  }, [visible]);
+
+  const handleInicio = (texto: string) => {
+    const formateado = formatearFecha(texto);
+    setFInicio(formateado);
+    setErrorInicio("");
+  };
+
+  const handleFin = (texto: string) => {
+    const formateado = formatearFecha(texto);
+    setFFin(formateado);
+    setErrorFin("");
+  };
+
+  const handleBuscar = () => {
+    let valido = true;
+    if (!fechaValida(fInicio)) {
+      setErrorInicio("Fecha inválida. Usa el formato AAAA-MM-DD");
+      valido = false;
+    }
+    if (!fechaValida(fFin)) {
+      setErrorFin("Fecha inválida. Usa el formato AAAA-MM-DD");
+      valido = false;
+    }
+    if (valido && fInicio > fFin) {
+      setErrorInicio("La fecha inicial no puede ser mayor que la final");
+      valido = false;
+    }
+    if (!valido) return;
+    onAplicar(fInicio, fFin);
+    onClose();
+  };
 
   return (
     <Modal
@@ -289,90 +362,121 @@ const ModalElegirFecha = ({
         activeOpacity={1}
         onPress={onClose}
       />
-      <View style={[ms.sheet, { paddingBottom: insets.bottom + 24 }]}>
+
+      <KeyboardAwareScrollView
+        style={{ marginTop: "auto" }}
+        contentContainerStyle={[
+          ms.sheet,
+          { paddingBottom: insets.bottom + 24 },
+        ]}
+        bounces={false}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        extraScrollHeight={20}
+      >
         <View style={ms.handle} />
         <View style={ms.header}>
-          <AppText style={ms.headerTitulo}>Elegir fecha</AppText>
+          <View style={{ flex: 1 }}>
+            <AppText style={ms.headerTitulo}>Rango de fechas</AppText>
+            <AppText style={ms.headerFecha}>Formato: AAAA-MM-DD</AppText>
+          </View>
           <TouchableOpacity style={ms.btnClose} onPress={onClose}>
             <MaterialCommunityIcons name="close" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
 
         <View style={{ padding: 20, gap: 20 }}>
-          {/* Accesos rápidos gigantes */}
-          <View style={s.filterRow}>
-            <TouchableOpacity
-              style={[s.filterBtn, { backgroundColor: "#F3F4F6", flex: 1 }]}
-              onPress={() => {
-                setFInicio(fechaHoy());
-                setFFin(fechaHoy());
-              }}
-            >
-              <AppText style={[s.filterBtnText, { color: "#111827" }]}>
-                Hoy
-              </AppText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[s.filterBtn, { backgroundColor: "#F3F4F6", flex: 1 }]}
-              onPress={() => {
-                setFInicio("2026-05-18");
-                setFFin(fechaHoy());
-              }}
-            >
-              <AppText style={[s.filterBtnText, { color: "#111827" }]}>
-                Esta semana
-              </AppText>
-            </TouchableOpacity>
-          </View>
-
-          {/* Inputs visuales grandes */}
-          <View style={{ gap: 6 }}>
-            <AppText style={s.filterTitle}>Fecha inicial</AppText>
-            <TouchableOpacity style={s.inputFechaSimulado}>
+          <View style={{ gap: 8 }}>
+            <AppText style={mf.label}>
               <MaterialCommunityIcons
                 name="calendar-start"
-                size={22}
+                size={16}
                 color="#7B8499"
               />
-              <AppText style={s.inputFechaTexto}>{fInicio}</AppText>
-            </TouchableOpacity>
+              {"  "}Fecha inicial
+            </AppText>
+            <View style={[mf.inputRow, errorInicio ? mf.inputError : null]}>
+              <TextInput
+                style={mf.input}
+                value={fInicio}
+                onChangeText={handleInicio}
+                placeholder="2026-01-01"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+                maxLength={10}
+              />
+              {fechaValida(fInicio) && (
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={22}
+                  color="#16A34A"
+                  style={{ marginRight: 14 }}
+                />
+              )}
+            </View>
+            {!!errorInicio && (
+              <AppText style={mf.errorTxt}>{errorInicio}</AppText>
+            )}
           </View>
 
-          <View style={{ gap: 6 }}>
-            <AppText style={s.filterTitle}>Fecha final</AppText>
-            <TouchableOpacity style={s.inputFechaSimulado}>
+          <View style={{ gap: 8 }}>
+            <AppText style={mf.label}>
               <MaterialCommunityIcons
                 name="calendar-end"
-                size={22}
+                size={16}
                 color="#7B8499"
               />
-              <AppText style={s.inputFechaTexto}>{fFin}</AppText>
-            </TouchableOpacity>
+              {"  "}Fecha final
+            </AppText>
+            <View style={[mf.inputRow, errorFin ? mf.inputError : null]}>
+              <TextInput
+                style={mf.input}
+                value={fFin}
+                onChangeText={handleFin}
+                placeholder="2026-12-31"
+                placeholderTextColor="#9CA3AF"
+                keyboardType="numeric"
+                maxLength={10}
+                onSubmitEditing={handleBuscar}
+              />
+              {fechaValida(fFin) && (
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={22}
+                  color="#16A34A"
+                  style={{ marginRight: 14 }}
+                />
+              )}
+            </View>
+            {!!errorFin && <AppText style={mf.errorTxt}>{errorFin}</AppText>}
           </View>
 
-          {/* Botón de acción primario gigante */}
           <TouchableOpacity
-            style={[s.btnPrincipalAncho, { marginTop: 10 }]}
-            onPress={() => {
-              onAplicar(fInicio, fFin);
-              onClose();
-            }}
+            style={[
+              s.btnPrincipalAncho,
+              { marginTop: 8 },
+              (!fechaValida(fInicio) || !fechaValida(fFin)) && {
+                opacity: 0.5,
+              },
+            ]}
+            onPress={handleBuscar}
+            activeOpacity={0.8}
           >
             <MaterialCommunityIcons name="magnify" size={24} color="#FFF" />
             <AppText style={s.btnPrincipalAnchoTxt}>Buscar ventas</AppText>
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAwareScrollView>
     </Modal>
   );
 };
 
-// ── Screen Component ──────────────────────────────────────────────────────────
 export const HistorialScreen = () => {
   const { colors } = useTheme();
 
   // Estados de control
   const [todasVentas, setTodasVentas] = React.useState<Venta[]>([]);
+  const [abonos, setAbonos] = React.useState<Abono[]>([]); // 👈 1. Nuevo estado para almacenar los abonos
   const [ventasFiltradas, setVentasFiltradas] = React.useState<Venta[]>([]);
   const [cargando, setCargando] = React.useState(true);
   const [refrescando, setRefrescando] = React.useState(false);
@@ -380,7 +484,7 @@ export const HistorialScreen = () => {
   // Estados de Filtros
   const [busqueda, setBusqueda] = React.useState("");
   const [filtroEstado, setFiltroEstado] = React.useState<TipoEstado>("todas");
-  const [filtroPeriodo, setFiltroPeriodo] = React.useState<TipoPeriodo>("mes");
+  const [filtroPeriodo, setFiltroPeriodo] = React.useState<TipoPeriodo>("hoy");
   const [rangoPersonalizado, setRangoPersonalizado] = React.useState({
     inicio: "",
     fin: "",
@@ -392,34 +496,171 @@ export const HistorialScreen = () => {
   const [modalFacturaVisible, setModalFacturaVisible] = React.useState(false);
   const [modalFechaVisible, setModalFechaVisible] = React.useState(false);
 
+  // Paginación infinita
+  const PAGE_SIZE = 10;
+  const [pagina, setPagina] = React.useState(1);
+  const [cargandoMas, setCargandoMas] = React.useState(false);
+
+  // Exportar a Excel
+  const [exportando, setExportando] = React.useState(false);
+
+  // ── 2. NUEVA LÓGICA DE VALIDACIÓN INDIVIDUAL DE FACTURA CORREGIDA ──
+  const evaluarFacturaPagada = React.useCallback(
+    (venta: Venta) => {
+      // 1. Si es de contado, siempre está pagada
+      if (venta.tipo === "contado") return true;
+
+      // 2. CORRECCIÓN: Priorizar el campo 'estado' que ya trae tu objeto Venta
+      if (venta.estado === "pagado") return true;
+
+      // 3. Fallback: Si no está marcada como "pagado",
+      // calcula basándose en los abonos por si acaso (opcional)
+      const totalAbonado = abonos
+        .filter((a) => a.ventaId === venta.id)
+        .reduce((sum, a) => sum + a.monto, 0);
+
+      return totalAbonado >= venta.total;
+    },
+    [abonos],
+  );
+
+  const exportarExcel = async () => {
+    if (ventasFiltradas.length === 0) {
+      Alert.alert(
+        "Sin datos",
+        "No hay ventas para exportar con los filtros actuales.",
+      );
+      return;
+    }
+    setExportando(true);
+    try {
+      const filas: object[] = [];
+      ventasFiltradas.forEach((v) => {
+        const estReal = evaluarFacturaPagada(v) ? "Al día" : "En mora";
+        if (v.items && v.items.length > 0) {
+          v.items.forEach((item: ItemVenta) => {
+            filas.push({
+              Factura: v.numeroFactura ?? v.id,
+              Fecha: new Date(v.fecha).toLocaleDateString("es-CO", {
+                timeZone: "America/Bogota",
+              }),
+              Hora: new Date(v.fecha).toLocaleTimeString("es-CO", {
+                timeZone: "America/Bogota",
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+              Cliente: v.nombreCliente,
+              Producto: item.nombreProducto,
+              Cantidad: item.cantidad,
+              "Precio unitario": item.precioUnitario,
+              Subtotal: item.subtotal,
+              "Estado Factura": estReal,
+              Total: v.total,
+            });
+          });
+        } else {
+          filas.push({
+            Factura: v.numeroFactura ?? v.id,
+            Fecha: new Date(v.fecha).toLocaleDateString("es-CO", {
+              timeZone: "America/Bogota",
+            }),
+            Hora: new Date(v.fecha).toLocaleTimeString("es-CO", {
+              timeZone: "America/Bogota",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+            Cliente: v.nombreCliente,
+            Producto: "",
+            Cantidad: "",
+            "Precio unitario": "",
+            Subtotal: "",
+            "Estado Factura": estReal,
+            Total: v.total,
+          });
+        }
+      });
+
+      const hoja = XLSX.utils.json_to_sheet(filas);
+      hoja["!cols"] = [
+        { wch: 20 }, // Factura
+        { wch: 12 }, // Fecha
+        { wch: 8 }, // Hora
+        { wch: 20 }, // Cliente
+        { wch: 22 }, // Producto
+        { wch: 10 }, // Cantidad
+        { wch: 16 }, // Precio unitario
+        { wch: 12 }, // Subtotal
+        { wch: 16 }, // Estado Factura
+        { wch: 12 }, // Total
+      ];
+
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, hoja, "Historial");
+
+      const base64 = XLSX.write(libro, { type: "base64", bookType: "xlsx" });
+      const fechaArchivo = new Date().toISOString().substring(0, 10);
+      const ruta = `${FileSystem.cacheDirectory}historial_${fechaArchivo}.xlsx`;
+
+      await FileSystem.writeAsStringAsync(ruta, base64, {
+        encoding: "base64" as FileSystem.EncodingType,
+      });
+
+      const puedoCompartir = await Sharing.isAvailableAsync();
+      if (puedoCompartir) {
+        await Sharing.shareAsync(ruta, {
+          mimeType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          dialogTitle: "Exportar historial de ventas",
+          UTI: "com.microsoft.excel.xlsx",
+        });
+      } else {
+        Alert.alert(
+          "No disponible",
+          "Tu dispositivo no soporta compartir archivos.",
+        );
+      }
+    } catch (e) {
+      console.error("Error exportando Excel:", e);
+      Alert.alert("Error", "No se pudo generar el archivo. Intenta de nuevo.");
+    } finally {
+      setExportando(false);
+    }
+  };
+
+  // ── 3. CARGA COMPLETA DE VENTAS Y ABONOS DESDE SQLITE ──
+  // Dentro de HistorialScreen.tsx
   const cargarDatos = async (esRefresh = false) => {
     if (esRefresh) setRefrescando(true);
     else setCargando(true);
 
     try {
-      const res = await ventaRepo.getAll();
-      setTodasVentas(res);
+      const [ventas, listaAbonos] = await Promise.all([
+        ventaRepo.getAll(),
+        creditoRepo.getAbonos ? await creditoRepo.getAbonos() : [],
+      ]);
+
+      setTodasVentas(ventas);
+      setAbonos(listaAbonos);
     } catch (e) {
-      console.error(e);
+      console.error("Error cargando datos:", e);
     } finally {
       setCargando(false);
       setRefrescando(false);
     }
   };
-
   React.useEffect(() => {
     cargarDatos();
   }, []);
 
-  // Procesamiento de filtros en tiempo real (Corregido y unificado)
+  // Procesamiento de filtros corregido para evaluar factura de forma individual
   React.useEffect(() => {
     let resultado = [...todasVentas];
 
-    // 1. Filtrado por Estado
-    if (filtroEstado === "pagadas") {
-      resultado = resultado.filter((v) => v.tipo === "contado");
-    } else if (filtroEstado === "fiadas") {
-      resultado = resultado.filter((v) => v.tipo === "credito");
+    // 1. Filtrado Inteligente por Estado Real de Factura
+    if (filtroEstado === "pazysalvo") {
+      resultado = resultado.filter((v) => evaluarFacturaPagada(v));
+    } else if (filtroEstado === "debe") {
+      resultado = resultado.filter((v) => !evaluarFacturaPagada(v));
     }
 
     // 2. Filtrado por Periodo / Fechas
@@ -444,7 +685,7 @@ export const HistorialScreen = () => {
       });
     }
 
-    // 3. Filtrado por Buscador (Nombre o Factura)
+    // 3. Filtrado por Buscador
     if (busqueda.trim() !== "") {
       const query = busqueda.toLowerCase();
       resultado = resultado.filter(
@@ -455,28 +696,168 @@ export const HistorialScreen = () => {
     }
 
     setVentasFiltradas(resultado);
-  }, [todasVentas, filtroEstado, filtroPeriodo, rangoPersonalizado, busqueda]);
+    setPagina(1);
+  }, [
+    todasVentas,
+    filtroEstado,
+    filtroPeriodo,
+    rangoPersonalizado,
+    busqueda,
+    evaluarFacturaPagada,
+  ]);
 
-  // Cálculos estadísticos dinámicos basados en la selección actual
+  // Formatea fecha sv-SE a legible corta
+  const fmtFechaCorta = (svStr: string) => {
+    const d = new Date(svStr + "T00:00:00");
+    return d.toLocaleDateString("es-CO", {
+      timeZone: "America/Bogota",
+      day: "numeric",
+      month: "short",
+    });
+  };
+
+  // Rango de fechas activo (para filtrar abonos del mismo periodo)
+  const rangoActivo = React.useMemo(() => {
+    const hoyStr = fechaHoy();
+    if (filtroPeriodo === "hoy") {
+      return { inicio: hoyStr, fin: hoyStr };
+    } else if (filtroPeriodo === "semana") {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return {
+        inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
+        fin: hoyStr,
+      };
+    } else if (filtroPeriodo === "mes") {
+      const d = new Date();
+      d.setDate(1);
+      return {
+        inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
+        fin: hoyStr,
+      };
+    } else if (filtroPeriodo === "personalizado" && rangoPersonalizado.inicio) {
+      return { inicio: rangoPersonalizado.inicio, fin: rangoPersonalizado.fin };
+    }
+    return null;
+  }, [filtroPeriodo, rangoPersonalizado]);
+
+  // Etiqueta legible del rango
+  const etiquetaRango = React.useMemo(() => {
+    if (!rangoActivo) return "";
+    if (filtroPeriodo === "hoy")
+      return "Hoy, " + fmtFechaCorta(rangoActivo.inicio);
+    if (rangoActivo.inicio === rangoActivo.fin)
+      return fmtFechaCorta(rangoActivo.inicio);
+    return (
+      fmtFechaCorta(rangoActivo.inicio) +
+      " al " +
+      fmtFechaCorta(rangoActivo.fin)
+    );
+  }, [rangoActivo, filtroPeriodo]);
+
+  // Estadísticas exactas basadas en la corrección por factura
   const stats = React.useMemo(() => {
     const total = ventasFiltradas.reduce((a, v) => a + v.total, 0);
     const cantVentas = ventasFiltradas.length;
-    const contado = ventasFiltradas
+
+    // IDs de ventas en el período filtrado (para cruzar abonos)
+    const ventasIds = new Set(ventasFiltradas.map((v) => v.id));
+
+    // LOGICA IDENTICA A VentaDelDia:
+    // recibido = ventas de contado del periodo + TODOS los abonos cobrados en el periodo
+
+    // 1. Ventas de CONTADO creadas en el periodo
+    const totalContado = ventasFiltradas
       .filter((v) => v.tipo === "contado")
       .reduce((a, v) => a + v.total, 0);
-    const credito = ventasFiltradas
-      .filter((v) => v.tipo === "credito")
-      .reduce((a, v) => a + v.total, 0);
+
+    // 2. TODOS los abonos cuya fecha cae en el rango (sin importar la fecha de la venta)
+    const totalAbonosParciales = abonos
+      .filter((ab) => {
+        if (!rangoActivo) return true;
+        const fechaAbono = ab.fecha.substring(0, 10);
+        return (
+          fechaAbono >= rangoActivo.inicio && fechaAbono <= rangoActivo.fin
+        );
+      })
+      .reduce((s, ab) => s + ab.monto, 0);
+
+    // 3. Total recibido = contado del periodo + abonos cobrados en el periodo
+    const totalRecibido = totalContado + totalAbonosParciales;
+
+    // Cuentas por cobrar = suma de saldos reales (total - abonado) de facturas pendientes
+    const totalDebe = ventasFiltradas
+      .filter((v) => !evaluarFacturaPagada(v))
+      .reduce((a, v) => {
+        const totalAbonado = abonos
+          .filter((ab) => ab.ventaId === v.id)
+          .reduce((s, ab) => s + ab.monto, 0);
+        return a + Math.max(0, v.total - totalAbonado);
+      }, 0);
+
     const clientesUnicos = [...new Set(ventasFiltradas.map((v) => v.clienteId))]
       .length;
 
-    return { total, cantVentas, contado, credito, clientesUnicos };
-  }, [ventasFiltradas]);
+    const conteoProductos: { [nombre: string]: number } = {};
+    ventasFiltradas.forEach((v) => {
+      (v.items ?? []).forEach((item: ItemVenta) => {
+        const nombre = item.nombreProducto ?? item.productoId ?? "Producto";
+        conteoProductos[nombre] =
+          (conteoProductos[nombre] ?? 0) + (item.cantidad ?? 1);
+      });
+    });
+    const top3 = Object.entries(conteoProductos)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([nombre, cantidad]) => ({ nombre, cantidad }));
 
-  // Agrupador de ventas por fechas
+    return {
+      total,
+      cantVentas,
+      totalContado,
+      totalAbonosParciales,
+      totalRecibido,
+      totalDebe,
+      clientesUnicos,
+      top3,
+    };
+  }, [ventasFiltradas, evaluarFacturaPagada, abonos, rangoActivo]);
+
+  // Saldo real pendiente por factura (total - abonos aplicados a esa venta)
+  const saldoPorVenta = React.useMemo(() => {
+    const mapa = new Map<string, number>();
+    todasVentas.forEach((v) => {
+      const totalAbonado = abonos
+        .filter((a) => a.ventaId === v.id)
+        .reduce((sum, a) => sum + a.monto, 0);
+      const saldo = Math.max(0, v.total - totalAbonado);
+      mapa.set(v.id, saldo);
+    });
+    return mapa;
+  }, [todasVentas, abonos]);
+
+  // Ventas visibles
+  const ventasVisibles = React.useMemo(() => {
+    const ordenadas = [...ventasFiltradas].sort(
+      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+    );
+    return ordenadas.slice(0, pagina * PAGE_SIZE);
+  }, [ventasFiltradas, pagina]);
+
+  const hayMas = ventasVisibles.length < ventasFiltradas.length;
+
+  const cargarMas = () => {
+    if (cargandoMas || !hayMas) return;
+    setCargandoMas(true);
+    setTimeout(() => {
+      setPagina((p) => p + 1);
+      setCargandoMas(false);
+    }, 400);
+  };
+
   const ventasAgrupadas = React.useMemo(() => {
     const grupos: { [key: string]: Venta[] } = {};
-    const ordenadas = [...ventasFiltradas].sort(
+    const ordenadas = [...ventasVisibles].sort(
       (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
     );
 
@@ -487,7 +868,7 @@ export const HistorialScreen = () => {
       grupos[titulo].push(venta);
     });
     return grupos;
-  }, [ventasFiltradas]);
+  }, [ventasVisibles]);
 
   if (cargando) {
     return (
@@ -497,12 +878,21 @@ export const HistorialScreen = () => {
           <AppText
             style={{ marginTop: 16, fontSize: 18, color: colors.grayText }}
           >
-            Cargando historial...
+            Cargando historial comercial...
           </AppText>
         </View>
       </ScreenWrapper>
     );
   }
+
+  const handleScroll = (e: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    const distanciaAlFondo =
+      contentSize.height - contentOffset.y - layoutMeasurement.height;
+    if (distanciaAlFondo < 200) {
+      cargarMas();
+    }
+  };
 
   return (
     <ScreenWrapper title="Historial" showBtnB={false}>
@@ -513,6 +903,8 @@ export const HistorialScreen = () => {
           paddingBottom: 80,
         }}
         showsVerticalScrollIndicator={false}
+        scrollEventThrottle={200}
+        onScroll={handleScroll}
         refreshControl={
           <RefreshControl
             refreshing={refrescando}
@@ -522,94 +914,8 @@ export const HistorialScreen = () => {
           />
         }
       >
-        {/* ══ TARJETA RESUMEN GRANDE ══════════════════════════════════════ */}
-        <View style={[s.card, { marginBottom: 16 }]}>
-          <AppText style={s.labelGris}>Monto total del periodo</AppText>
-          <AppText style={[s.totalGrande, { color: colors.primary }]}>
-            {fmt(stats.total)}
-          </AppText>
-
-          <View style={s.divisorH} />
-
-          <View style={s.filaCounts}>
-            <View style={s.countItem}>
-              <View style={[s.iconBubble, { backgroundColor: "#FFF3E0" }]}>
-                <MaterialCommunityIcons
-                  name="cart-outline"
-                  size={24}
-                  color="#F59E0B"
-                />
-              </View>
-              <View>
-                <AppText style={s.countNum}>{stats.cantVentas}</AppText>
-                <AppText style={s.countLabel}>Ventas</AppText>
-              </View>
-            </View>
-
-            <View style={s.divisorV} />
-
-            <View style={s.countItem}>
-              <View style={[s.iconBubble, { backgroundColor: "#FCE4EC" }]}>
-                <MaterialCommunityIcons
-                  name="account-outline"
-                  size={24}
-                  color="#E91E63"
-                />
-              </View>
-              <View>
-                <AppText style={s.countNum}>{stats.clientesUnicos}</AppText>
-                <AppText style={s.countLabel}>Clientes</AppText>
-              </View>
-            </View>
-          </View>
-        </View>
-
-        {/* ══ TARJETAS ESTADÍSTICAS EN MATRIZ ══════════════════════════ */}
-        <View style={{ gap: 12, marginBottom: 24 }}>
-          <View style={s.fila2}>
-            <View
-              style={[
-                s.miniCard,
-                { backgroundColor: "#F0FDF4", borderColor: "#BBF7D0" },
-              ]}
-            >
-              <View style={[s.iconBubble, { backgroundColor: "#DCFCE7" }]}>
-                <MaterialCommunityIcons name="cash" size={24} color="#16A34A" />
-              </View>
-              <AppText style={[s.miniTitulo, { color: "#16A34A" }]}>
-                De contado
-              </AppText>
-              <AppText style={[s.miniMonto, { color: "#15803D" }]}>
-                {fmt(stats.contado)}
-              </AppText>
-            </View>
-
-            <View
-              style={[
-                s.miniCard,
-                { backgroundColor: "#F5F3FF", borderColor: "#DDD6FE" },
-              ]}
-            >
-              <View style={[s.iconBubble, { backgroundColor: "#EDE9FE" }]}>
-                <MaterialCommunityIcons
-                  name="file-document-outline"
-                  size={24}
-                  color="#7C3AED"
-                />
-              </View>
-              <AppText style={[s.miniTitulo, { color: "#7C3AED" }]}>
-                A crédito
-              </AppText>
-              <AppText style={[s.miniMonto, { color: "#6D28D9" }]}>
-                {fmt(stats.credito)}
-              </AppText>
-            </View>
-          </View>
-        </View>
-
-        {/* ══ BUSCADOR CÓMODO Y GRANDE ══════════════════════════════════ */}
-        <View style={{ marginBottom: 24 }}>
-          <AppText style={s.filterTitle}>Buscar cliente o factura</AppText>
+        {/* BUSCADOR */}
+        <View style={{ marginBottom: 20 }}>
           <View style={s.contenedorBuscador}>
             <MaterialCommunityIcons
               name="magnify"
@@ -619,7 +925,7 @@ export const HistorialScreen = () => {
             />
             <TextInput
               style={s.inputBuscador}
-              placeholder="Escribe el nombre o número..."
+              placeholder="Buscar cliente o factura..."
               placeholderTextColor="#7B8499"
               value={busqueda}
               onChangeText={setBusqueda}
@@ -639,11 +945,11 @@ export const HistorialScreen = () => {
           </View>
         </View>
 
-        {/* ══ FILTRO ESTADO ══════════════════════════════════════════════ */}
+        {/* FILTRO ESTADO FACTURA */}
         <View style={s.filterSection}>
-          <AppText style={s.filterTitle}>Estado</AppText>
+          <AppText style={s.filterTitle}>Estado de facturas</AppText>
           <View style={s.filterRow}>
-            {(["todas", "pagadas", "fiadas"] as TipoEstado[]).map((estado) => {
+            {(["todas", "pazysalvo", "debe"] as TipoEstado[]).map((estado) => {
               const activo = filtroEstado === estado;
               return (
                 <TouchableOpacity
@@ -666,9 +972,9 @@ export const HistorialScreen = () => {
                   >
                     {estado === "todas"
                       ? "Todas"
-                      : estado === "pagadas"
-                        ? "Pagadas"
-                        : "Fiadas"}
+                      : estado === "pazysalvo"
+                        ? "Al día"
+                        : "En mora"}
                   </AppText>
                 </TouchableOpacity>
               );
@@ -676,7 +982,7 @@ export const HistorialScreen = () => {
           </View>
         </View>
 
-        {/* ══ FILTRO PERIODO ═════════════════════════════════════════════ */}
+        {/* FILTRO PERIODO */}
         <View style={s.filterSection}>
           <AppText style={s.filterTitle}>Periodo</AppText>
           <View style={s.filterRow}>
@@ -713,7 +1019,7 @@ export const HistorialScreen = () => {
           </View>
         </View>
 
-        {/* ══ BOTÓN GRANDE SELECCIONAR FECHA ════════════════════════════ */}
+        {/* FECHA PERSONALIZADA */}
         <TouchableOpacity
           style={[
             s.fechaBtn,
@@ -737,28 +1043,384 @@ export const HistorialScreen = () => {
           </AppText>
         </TouchableOpacity>
 
-        {/* ══ BOTÓN EXPORTAR EXCEL ANCHO ════════════════════════════════ */}
-        <TouchableOpacity style={s.btnExcelAncho} activeOpacity={0.8}>
-          <MaterialCommunityIcons name="file-excel" size={24} color="#15803D" />
+        {/* EXPORTAR EXCEL */}
+        <TouchableOpacity
+          style={[s.btnExcelAncho, exportando && { opacity: 0.6 }]}
+          activeOpacity={0.8}
+          onPress={exportarExcel}
+          disabled={exportando}
+        >
+          {exportando ? (
+            <ActivityIndicator size="small" color="#15803D" />
+          ) : (
+            <MaterialCommunityIcons
+              name="file-excel"
+              size={24}
+              color="#15803D"
+            />
+          )}
           <AppText style={s.btnExcelAnchoTxt}>
-            Exportar historial a Excel
+            {exportando ? "Generando archivo..." : "Exportar historial a Excel"}
           </AppText>
         </TouchableOpacity>
 
-        <View style={[s.divisorH, { marginVertical: 12 }]} />
+        {/* TARJETA RESUMEN GRANDE */}
+        <View style={[s.card, { marginBottom: 16 }]}>
+          {/* Encabezado con rango de fechas */}
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: 2,
+            }}
+          >
+            <AppText style={s.labelGris}>Dinero recibido</AppText>
+            {!!etiquetaRango && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  backgroundColor: "#EFF6FF",
+                  borderRadius: 8,
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="calendar-range"
+                  size={13}
+                  color="#2563EB"
+                />
+                <AppText
+                  style={{ fontSize: 12, color: "#2563EB", fontWeight: "700" }}
+                >
+                  {etiquetaRango}
+                </AppText>
+              </View>
+            )}
+          </View>
 
-        {/* ══ LISTA DE VENTAS AGRUPADAS POR DÍA ══════════════════════════ */}
+          <AppText style={[s.totalGrande, { color: colors.primary }]}>
+            {fmt(stats.totalRecibido)}
+          </AppText>
+
+          {/* Desglose siempre visible */}
+          <View
+            style={{
+              backgroundColor: "#F8FAFF",
+              borderRadius: 14,
+              borderWidth: 1,
+              borderColor: "#E8EEFB",
+              padding: 14,
+              gap: 10,
+              marginBottom: 14,
+            }}
+          >
+            {/* Fila: Ventas pagadas */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: "#DCFCE7",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="check-bold"
+                    size={20}
+                    color="#16A34A"
+                  />
+                </View>
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#374151",
+                      fontWeight: "700",
+                    }}
+                  >
+                    Ventas pagadas
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#9CA3AF",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Pago al contado
+                  </AppText>
+                </View>
+              </View>
+              <AppText
+                style={{ fontSize: 18, color: "#16A34A", fontWeight: "800" }}
+              >
+                {fmt(stats.totalContado)}
+              </AppText>
+            </View>
+
+            <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
+
+            {/* Fila: Abonos recibidos */}
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+              >
+                <View
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 18,
+                    backgroundColor: "#DBEAFE",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="cash-plus"
+                    size={20}
+                    color="#2563EB"
+                  />
+                </View>
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#374151",
+                      fontWeight: "700",
+                    }}
+                  >
+                    Abonos recibidos
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#9CA3AF",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Pagos parciales de créditos
+                  </AppText>
+                </View>
+              </View>
+              <AppText
+                style={{ fontSize: 18, color: "#2563EB", fontWeight: "800" }}
+              >
+                {fmt(stats.totalAbonosParciales)}
+              </AppText>
+            </View>
+          </View>
+
+          {/* Pendiente de cobro */}
+          {stats.totalDebe > 0 && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#FFFBEB",
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: "#FDE68A",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                marginBottom: 14,
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name="clock-alert-outline"
+                  size={22}
+                  color="#D97706"
+                />
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#92400E",
+                      fontWeight: "700",
+                    }}
+                  >
+                    Pendiente de cobro
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#B45309",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Créditos sin saldar
+                  </AppText>
+                </View>
+              </View>
+              <AppText
+                style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
+              >
+                {fmt(stats.totalDebe)}
+              </AppText>
+            </View>
+          )}
+
+          <View style={s.divisorH} />
+          <View style={s.filaCounts}>
+            <View style={s.countItem}>
+              <View style={[s.iconBubble, { backgroundColor: "#FFF3E0" }]}>
+                <MaterialCommunityIcons
+                  name="cart-outline"
+                  size={24}
+                  color="#F59E0B"
+                />
+              </View>
+              <View>
+                <AppText style={s.countNum}>{stats.cantVentas}</AppText>
+                <AppText style={s.countLabel}>Ventas</AppText>
+              </View>
+            </View>
+            <View style={s.divisorV} />
+            <View style={s.countItem}>
+              <View style={[s.iconBubble, { backgroundColor: "#FCE4EC" }]}>
+                <MaterialCommunityIcons
+                  name="account-outline"
+                  size={24}
+                  color="#E91E63"
+                />
+              </View>
+              <View>
+                <AppText style={s.countNum}>{stats.clientesUnicos}</AppText>
+                <AppText style={s.countLabel}>Clientes</AppText>
+              </View>
+            </View>
+          </View>
+
+          {/* TOP PRODUCTOS */}
+          {stats.top3.length > 0 &&
+            (() => {
+              const medallas = ["🥇", "🥈", "🥉"];
+              const barColors = ["#F59E0B", "#9CA3AF", "#CD7C2F"];
+              const maxCantidad = stats.top3[0]?.cantidad ?? 1;
+              return (
+                <>
+                  <View
+                    style={[s.divisorH, { marginTop: 4, marginBottom: 16 }]}
+                  />
+                  <View style={{ gap: 12 }}>
+                    <AppText
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "700",
+                        color: "#111827",
+                      }}
+                    >
+                      🏆 Top productos
+                    </AppText>
+                    {stats.top3.map((p, i) => (
+                      <View key={p.nombre} style={{ gap: 4 }}>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                          }}
+                        >
+                          <View
+                            style={{
+                              flexDirection: "row",
+                              alignItems: "center",
+                              gap: 8,
+                              flex: 1,
+                            }}
+                          >
+                            <AppText style={{ fontSize: 18, lineHeight: 22 }}>
+                              {medallas[i]}
+                            </AppText>
+                            <AppText
+                              style={{
+                                fontSize: 14,
+                                color: "#1F2937",
+                                fontWeight: "600",
+                                flex: 1,
+                              }}
+                              numberOfLines={1}
+                            >
+                              {p.nombre}
+                            </AppText>
+                          </View>
+                          <AppText
+                            style={{
+                              fontSize: 14,
+                              color: "#6B7280",
+                              fontWeight: "700",
+                              marginLeft: 8,
+                            }}
+                          >
+                            {p.cantidad} uds
+                          </AppText>
+                        </View>
+                        <View
+                          style={{
+                            height: 5,
+                            backgroundColor: "#F3F4F6",
+                            borderRadius: 4,
+                            overflow: "hidden",
+                          }}
+                        >
+                          <View
+                            style={{
+                              height: 5,
+                              borderRadius: 4,
+                              backgroundColor: barColors[i],
+                              width: `${Math.round((p.cantidad / maxCantidad) * 100)}%`,
+                            }}
+                          />
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              );
+            })()}
+        </View>
+
+        {/* LISTADO DINÁMICO DE FACTURAS */}
+        {ventasFiltradas.length > 0 && (
+          <AppText style={[s.filterTitle, { marginBottom: 4 }]}>
+            Listado de facturas
+          </AppText>
+        )}
+
         {Object.keys(ventasAgrupadas).length > 0 ? (
           Object.keys(ventasAgrupadas).map((fechaGrupo) => (
             <View key={fechaGrupo} style={{ marginBottom: 20 }}>
               <AppText style={s.tituloGrupoFecha}>{fechaGrupo}</AppText>
-
               <View style={{ gap: 12, marginTop: 8 }}>
                 {ventasAgrupadas[fechaGrupo].map((venta, index) => {
                   const avatarColor =
                     AVATAR_COLORS[index % AVATAR_COLORS.length];
                   const inicial = venta.nombreCliente.charAt(0).toUpperCase();
-                  const esPagado = venta.tipo === "contado";
+                  const esFacturaSaldada = evaluarFacturaPagada(venta);
 
                   return (
                     <View key={venta.id} style={s.ventaCard}>
@@ -771,39 +1433,45 @@ export const HistorialScreen = () => {
                           {inicial}
                         </AppText>
                       </View>
-
                       <View style={{ flex: 1, marginLeft: 14 }}>
                         <AppText style={s.ventaNombre} numberOfLines={1}>
                           {venta.nombreCliente}
                         </AppText>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            gap: 6,
-                            marginTop: 2,
-                          }}
-                        >
-                          <AppText style={s.ventaHora}>
-                            {horaDeVenta(venta.fecha)}
-                          </AppText>
-                          {venta.numeroFactura && (
-                            <AppText style={s.numeroFacturaTag}>
-                              #{venta.numeroFactura}
-                            </AppText>
-                          )}
-                        </View>
-                      </View>
-
-                      <View style={{ alignItems: "flex-end", marginRight: 8 }}>
-                        <AppText style={s.ventaMonto}>
-                          {fmt(venta.total)}
+                        <AppText style={s.ventaHora}>
+                          {horaDeVenta(venta.fecha)}
                         </AppText>
+                      </View>
+                      <View style={{ alignItems: "flex-end", marginRight: 8 }}>
+                        {/* Si es crédito pendiente mostramos saldo, si no el total */}
+                        {!esFacturaSaldada ? (
+                          <>
+                            <AppText
+                              style={[s.ventaMonto, { color: "#D97706" }]}
+                            >
+                              {fmt(saldoPorVenta.get(venta.id) ?? venta.total)}
+                            </AppText>
+                            <AppText
+                              style={{
+                                fontSize: 11,
+                                color: "#9CA3AF",
+                                marginBottom: 2,
+                              }}
+                            >
+                              de {fmt(venta.total)}
+                            </AppText>
+                          </>
+                        ) : (
+                          <AppText style={s.ventaMonto}>
+                            {fmt(venta.total)}
+                          </AppText>
+                        )}
                         <View
                           style={[
                             s.badge,
                             {
-                              backgroundColor: esPagado ? "#DCFCE7" : "#FEF3C7",
+                              backgroundColor: esFacturaSaldada
+                                ? "#DCFCE7"
+                                : "#FEF3C7",
                               paddingVertical: 3,
                             },
                           ]}
@@ -812,17 +1480,15 @@ export const HistorialScreen = () => {
                             style={[
                               s.badgeTxt,
                               {
-                                color: esPagado ? "#16A34A" : "#D97706",
+                                color: esFacturaSaldada ? "#16A34A" : "#D97706",
                                 fontSize: 12,
                               },
                             ]}
                           >
-                            {esPagado ? "Pagado" : "Fiado"}
+                            {esFacturaSaldada ? "Al día" : "En mora"}
                           </AppText>
                         </View>
                       </View>
-
-                      {/* Botón Ver Macizo y Gigante Táctil */}
                       <TouchableOpacity
                         style={[s.btnVerGrande, { backgroundColor: "#F3F4F6" }]}
                         activeOpacity={0.7}
@@ -849,7 +1515,6 @@ export const HistorialScreen = () => {
             </View>
           ))
         ) : (
-          /* ESTADO VACÍO */
           <View
             style={[
               s.card,
@@ -868,12 +1533,19 @@ export const HistorialScreen = () => {
             </AppText>
           </View>
         )}
+
+        {cargandoMas && (
+          <View style={{ paddingVertical: 20, alignItems: "center" }}>
+            <ActivityIndicator size="small" color={colors.primary} />
+          </View>
+        )}
       </ScrollView>
 
       {/* MODAL DETALLE DE FACTURA */}
       <ModalFactura
         venta={ventaSeleccionada}
         visible={modalFacturaVisible}
+        evaluarFacturaPagada={evaluarFacturaPagada}
         onClose={() => {
           setModalFacturaVisible(false);
           setTimeout(() => setVentaSeleccionada(null), 300);
@@ -893,7 +1565,6 @@ export const HistorialScreen = () => {
   );
 };
 
-// ── Estilos Screen Accesible ──────────────────────────────────────────────────
 const s = StyleSheet.create({
   centrado: { flex: 1, justifyContent: "center", alignItems: "center" },
   card: {
@@ -932,19 +1603,7 @@ const s = StyleSheet.create({
   },
   countNum: { fontSize: 22, fontWeight: "800", color: "#111827" },
   countLabel: { fontSize: 15, color: "#7B8499", fontWeight: "500" },
-  fila2: { flexDirection: "row", gap: 12 },
-  miniCard: {
-    flex: 1,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    padding: 16,
-    minHeight: 120,
-    gap: 6,
-  },
-  miniTitulo: { fontSize: 15, fontWeight: "800" },
-  miniMonto: { fontSize: 20, fontWeight: "900", marginTop: 2 },
 
-  // Buscador Cómodo
   contenedorBuscador: {
     flexDirection: "row",
     alignItems: "center",
@@ -963,7 +1622,6 @@ const s = StyleSheet.create({
     fontWeight: "500",
   },
 
-  // Componentes de Filtros estructurados
   filterSection: {
     marginBottom: 24,
   },
@@ -989,7 +1647,6 @@ const s = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Botón Fecha
   fechaBtn: {
     height: 58,
     borderRadius: 18,
@@ -1007,7 +1664,6 @@ const s = StyleSheet.create({
     fontWeight: "700",
   },
 
-  // Botón Excel Ancho Profesional
   btnExcelAncho: {
     height: 58,
     borderRadius: 18,
@@ -1026,7 +1682,6 @@ const s = StyleSheet.create({
     color: "#16A34A",
   },
 
-  // Listado Dinámico Grupos
   tituloGrupoFecha: {
     fontSize: 19,
     fontWeight: "800",
@@ -1056,15 +1711,6 @@ const s = StyleSheet.create({
   avatarLetra: { fontSize: 18, fontWeight: "800" },
   ventaNombre: { fontSize: 17, fontWeight: "700", color: "#111827" },
   ventaHora: { fontSize: 14, color: "#7B8499" },
-  numeroFacturaTag: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#6B7280",
-    backgroundColor: "#F3F4F6",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
   ventaMonto: { fontSize: 17, fontWeight: "700", color: "#111827" },
   badge: {
     paddingHorizontal: 10,
@@ -1074,7 +1720,6 @@ const s = StyleSheet.create({
   },
   badgeTxt: { fontSize: 13, fontWeight: "700" },
 
-  // Botón Ver Rediseñado (Más Alto)
   btnVerGrande: {
     flexDirection: "row",
     alignItems: "center",
@@ -1087,17 +1732,6 @@ const s = StyleSheet.create({
   },
   btnVerGrandeTxt: { fontSize: 15, fontWeight: "700" },
 
-  // Simulación Inputs del Modal
-  inputFechaSimulado: {
-    flexDirection: "row",
-    alignItems: "center",
-    height: 56,
-    backgroundColor: "#F3F4F6",
-    borderRadius: 16,
-    paddingHorizontal: 16,
-    gap: 12,
-  },
-  inputFechaTexto: { fontSize: 17, fontWeight: "600", color: "#111827" },
   btnPrincipalAncho: {
     height: 58,
     backgroundColor: "#2563EB",
@@ -1122,7 +1756,6 @@ const s = StyleSheet.create({
   },
 });
 
-// ── Estilos Modal Factura Detalle ─────────────────────────────────────────────
 const ms = StyleSheet.create({
   overlay: {
     position: "absolute",
@@ -1133,10 +1766,7 @@ const ms = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   sheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    marginTop: "auto",
     backgroundColor: "#fff",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -1255,4 +1885,39 @@ const ms = StyleSheet.create({
     justifyContent: "center",
   },
   facturaTxt: { fontSize: 13, color: "#7B8499" },
+});
+
+const mf = StyleSheet.create({
+  label: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#374151",
+  },
+  inputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 16,
+    height: 58,
+  },
+  inputError: {
+    borderColor: "#EF4444",
+    backgroundColor: "#FFF5F5",
+  },
+  input: {
+    flex: 1,
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#111827",
+    paddingHorizontal: 16,
+    letterSpacing: 1,
+  },
+  errorTxt: {
+    fontSize: 13,
+    color: "#EF4444",
+    fontWeight: "500",
+    paddingLeft: 4,
+  },
 });

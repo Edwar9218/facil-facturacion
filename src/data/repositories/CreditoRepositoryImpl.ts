@@ -19,7 +19,13 @@ const formatearFecha = (fecha: string): string => {
 };
 
 export class CreditoRepositoryImpl implements CreditoRepository {
-  // ── Resúmenes ─────────────────────────────────────────────────────────────
+  // ── NUEVO: Retorna todos los abonos para que el Historial pueda
+  //          calcular el estado real de cada factura sin lógica duplicada ──
+  async getAbonos(): Promise<Abono[]> {
+    return db.getAllSync<Abono>("SELECT * FROM abonos;");
+  }
+
+  // ── Resúmenes de Cartera ──────────────────────────────────────────────────
   async getResumenes(): Promise<ResumenCredito[]> {
     const ventas = db.getAllSync<any>(
       "SELECT * FROM ventas WHERE tipo = 'credito';",
@@ -27,85 +33,185 @@ export class CreditoRepositoryImpl implements CreditoRepository {
     const abonos = db.getAllSync<Abono>("SELECT * FROM abonos;");
     const clientes = db.getAllSync<any>("SELECT * FROM clientes;");
 
-    const mapa = new Map<string, ResumenCredito>();
+    const abonosPorVenta = new Map<string, number>();
+    for (const abono of abonos) {
+      const acumulado = abonosPorVenta.get(abono.ventaId) ?? 0;
+      abonosPorVenta.set(abono.ventaId, acumulado + abono.monto);
+    }
+
+    const mapaClientes = new Map<string, ResumenCredito>();
 
     for (const venta of ventas) {
-      const existente = mapa.get(venta.clienteId);
+      const totalAbonadoAFactura = abonosPorVenta.get(venta.id) ?? 0;
+      const saldoRestanteFactura = venta.total - totalAbonadoAFactura;
+
+      // Factura saldada → no suma a cartera
+      if (saldoRestanteFactura <= 0) continue;
+
+      const existente = mapaClientes.get(venta.clienteId);
       if (existente) {
         existente.deudaTotal += venta.total;
-        existente.saldoActual += venta.total;
+        existente.totalAbonos += totalAbonadoAFactura;
+        existente.saldoActual += saldoRestanteFactura;
       } else {
         const cliente = clientes.find((c) => c.id === venta.clienteId);
-        mapa.set(venta.clienteId, {
+        mapaClientes.set(venta.clienteId, {
           clienteId: venta.clienteId,
           nombreCliente: venta.nombreCliente,
           telefono: cliente?.telefono ?? "",
           direccion: cliente?.direccion ?? undefined,
           deudaTotal: venta.total,
-          totalAbonos: 0,
-          saldoActual: venta.total,
+          totalAbonos: totalAbonadoAFactura,
+          saldoActual: saldoRestanteFactura,
         });
       }
     }
 
-    for (const abono of abonos) {
-      const resumen = mapa.get(abono.clienteId);
-      if (resumen) {
-        resumen.totalAbonos += abono.monto;
-        resumen.saldoActual = resumen.deudaTotal - resumen.totalAbonos;
-      }
-    }
-
-    return Array.from(mapa.values()).filter((r) => r.saldoActual > 0);
+    return Array.from(mapaClientes.values());
   }
 
-  // ── Detalle ───────────────────────────────────────────────────────────────
+  // ── Detalle de estado de cuenta de un Cliente ─────────────────────────────
   async getDetalle(clienteId: string): Promise<DetalleCredito> {
-    const resumenes = await this.getResumenes();
-    const resumen = resumenes.find((r) => r.clienteId === clienteId);
+    const abonosRaw = db.getAllSync<Abono>(
+      "SELECT * FROM abonos WHERE clienteId = ? ORDER BY rowid DESC;",
+      [clienteId],
+    );
+
+    const abonosPorVenta = new Map<string, number>();
+    for (const abono of abonosRaw) {
+      const acumulado = abonosPorVenta.get(abono.ventaId) ?? 0;
+      abonosPorVenta.set(abono.ventaId, acumulado + abono.monto);
+    }
 
     const ventasRaw = db.getAllSync<any>(
       "SELECT * FROM ventas WHERE clienteId = ? AND tipo = 'credito' ORDER BY rowid DESC;",
       [clienteId],
     );
 
-    const ventas: Venta[] = ventasRaw.map((v, index) => ({
-      ...v,
-      items: JSON.parse(v.items),
-      numeroFactura: v.numeroFactura ?? "Sin factura",
-      fecha: formatearFecha(v.fecha),
-    }));
+    let acumuladorDeudaTotal = 0;
+    let acumuladorTotalAbonos = 0;
+    let acumuladorSaldoActual = 0;
 
-    const abonos = db.getAllSync<Abono>(
-      "SELECT * FROM abonos WHERE clienteId = ? ORDER BY rowid DESC;",
-      [clienteId],
-    );
+    const ventas: Venta[] = ventasRaw.map((v) => {
+      const abonadoAFactura = abonosPorVenta.get(v.id) ?? 0;
 
-    const abonosFormateados: Abono[] = abonos.map((a) => ({
+      acumuladorDeudaTotal += v.total;
+      acumuladorTotalAbonos += abonadoAFactura;
+      acumuladorSaldoActual += v.total - abonadoAFactura;
+
+      return {
+        ...v,
+        items: JSON.parse(v.items),
+        numeroFactura: v.numeroFactura ?? "Sin factura",
+        fecha: formatearFecha(v.fecha),
+        estado: v.estado ?? "debe",
+      };
+    });
+
+    const abonosFormateados: Abono[] = abonosRaw.map((a) => ({
       ...a,
       fecha: formatearFecha(a.fecha),
     }));
 
+    const clientes = db.getAllSync<any>(
+      "SELECT * FROM clientes WHERE id = ?;",
+      [clienteId],
+    );
+    const cliente = clientes[0];
+
     return {
       clienteId,
-      nombreCliente: resumen?.nombreCliente ?? "",
-      telefono: resumen?.telefono ?? "",
-      direccion: resumen?.direccion,
-      deudaTotal: resumen?.deudaTotal ?? 0,
-      totalAbonos: resumen?.totalAbonos ?? 0,
-      saldoActual: resumen?.saldoActual ?? 0,
+      nombreCliente: cliente?.nombre ?? "Cliente desconocido",
+      telefono: cliente?.telefono ?? "",
+      direccion: cliente?.direccion ?? undefined,
+      deudaTotal: acumuladorDeudaTotal,
+      totalAbonos: acumuladorTotalAbonos,
+      saldoActual: acumuladorSaldoActual,
       ventas,
       abonos: abonosFormateados,
     };
   }
 
-  // ── Registrar abono ───────────────────────────────────────────────────────
-  async registrarAbono(data: Omit<Abono, "id">): Promise<Abono> {
-    const id = String(Date.now());
+  // ── Registrar abono (FIFO) ────────────────────────────────────────────────
+  async registrarAbono({
+    clienteId,
+    ventaId,
+    monto,
+    fecha,
+  }: {
+    clienteId: string;
+    ventaId: string;
+    monto: number;
+    fecha: string;
+  }) {
+    try {
+      let montoRestante = monto;
+
+      if (ventaId && ventaId !== "") {
+        // Abono directo a factura específica
+        await this.guardarAbonoEnDB(clienteId, ventaId, monto, fecha);
+
+        // Recalcular saldo de esta factura y actualizar estado
+        const abonoAcumulado = db.getFirstSync<any>(
+          "SELECT SUM(monto) as total FROM abonos WHERE ventaId = ?",
+          [ventaId],
+        );
+        const ventaRow = db.getFirstSync<any>(
+          "SELECT total FROM ventas WHERE id = ?",
+          [ventaId],
+        );
+        if (ventaRow) {
+          const saldoRestante = ventaRow.total - (abonoAcumulado?.total ?? 0);
+          db.runSync("UPDATE ventas SET estado = ? WHERE id = ?", [
+            saldoRestante <= 0 ? "pagado" : "debe",
+            ventaId,
+          ]);
+        }
+      } else {
+        // Abono global FIFO — aplica a las facturas más antiguas primero
+        const ventasPendientes = db.getAllSync<any>(
+          "SELECT id, total FROM ventas WHERE clienteId = ? AND tipo = 'credito' AND estado = 'debe' ORDER BY fecha ASC",
+          [clienteId],
+        );
+
+        for (const venta of ventasPendientes) {
+          if (montoRestante <= 0) break;
+
+          const abonoAcumulado = db.getFirstSync<any>(
+            "SELECT SUM(monto) as total FROM abonos WHERE ventaId = ?",
+            [venta.id],
+          );
+          const saldoFactura = venta.total - (abonoAcumulado?.total ?? 0);
+
+          if (saldoFactura > 0) {
+            const aPagar = Math.min(montoRestante, saldoFactura);
+            await this.guardarAbonoEnDB(clienteId, venta.id, aPagar, fecha);
+            montoRestante -= aPagar;
+
+            const saldoTrasAbono = saldoFactura - aPagar;
+            db.runSync("UPDATE ventas SET estado = ? WHERE id = ?", [
+              saldoTrasAbono <= 0 ? "pagado" : "debe",
+              venta.id,
+            ]);
+          }
+        }
+      }
+      return true;
+    } catch (error) {
+      console.error("Error en FIFO:", error);
+      throw error;
+    }
+  }
+
+  private async guardarAbonoEnDB(
+    clienteId: string,
+    ventaId: string,
+    monto: number,
+    fecha: string,
+  ) {
     db.runSync(
-      "INSERT INTO abonos (id, clienteId, monto, fecha) VALUES (?, ?, ?, ?);",
-      [id, data.clienteId, data.monto, data.fecha],
+      "INSERT INTO abonos (id, clienteId, ventaId, monto, fecha) VALUES (?, ?, ?, ?, ?)",
+      [Date.now().toString() + Math.random(), clienteId, ventaId, monto, fecha],
     );
-    return { id, ...data };
   }
 }
