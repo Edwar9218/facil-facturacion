@@ -14,5 +14,13 @@ export interface Venta {
   total: number;
   tipo: "contado" | "credito";
   fecha: string;
-  numeroFactura?: string; // ← agregar
+  numeroFactura?: string;
+  /**
+   * 'pagado'  → contado o crédito completamente abonado
+   * 'debe'    → crédito con saldo pendiente
+   *
+   * Nota: el campo existe en BD desde la migración anterior.
+   * VentaRepositoryImpl siempre lo garantiza (nunca llega undefined).
+   */
+  estado: "pagado" | "debe";
 }

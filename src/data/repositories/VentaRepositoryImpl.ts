@@ -1,9 +1,41 @@
-import { Venta } from "../../domain/entities/Venta";
+import { ItemVenta, Venta } from "../../domain/entities/Venta";
 import { VentaRepository } from "../../domain/repositories/VentaRepository";
 import db from "../database/database";
 import { ProductoRepositoryImpl } from "./ProductoRepositoryImpl";
 
 const productoRepo = new ProductoRepositoryImpl();
+
+// ── Helper: construye el array de ItemVenta desde venta_items ─────────────────
+// Primero intenta leer de venta_items (tabla normalizada).
+// Si no hay filas (registro viejo migrado al vuelo), cae al JSON legacy.
+const cargarItems = (ventaId: string, itemsJson: string): ItemVenta[] => {
+  const filas = db.getAllSync<any>(
+    `SELECT productoId, nombreProducto, precioUnitario, cantidad, subtotal
+     FROM venta_items
+     WHERE ventaId = ?
+     ORDER BY rowid ASC;`,
+    [ventaId],
+  );
+
+  if (filas.length > 0) return filas as ItemVenta[];
+
+  // Fallback: JSON legacy (ventas antes de la migración)
+  try {
+    return JSON.parse(itemsJson) as ItemVenta[];
+  } catch {
+    return [];
+  }
+};
+
+// ── Helper: estado normalizado ────────────────────────────────────────────────
+const resolverEstado = (
+  estado: string | null,
+  tipo: string,
+): "pagado" | "debe" => {
+  if (estado === "pagado") return "pagado";
+  if (estado === "debe") return "debe";
+  return tipo === "contado" ? "pagado" : "debe";
+};
 
 export class VentaRepositoryImpl implements VentaRepository {
   async getAll(): Promise<Venta[]> {
@@ -12,9 +44,8 @@ export class VentaRepositoryImpl implements VentaRepository {
     );
     return rows.map((r) => ({
       ...r,
-      items: JSON.parse(r.items),
-      // Garantizar que estado nunca llegue null al historial
-      estado: r.estado ?? (r.tipo === "contado" ? "pagado" : "debe"),
+      items: cargarItems(r.id, r.items),
+      estado: resolverEstado(r.estado, r.tipo),
     }));
   }
 
@@ -25,8 +56,8 @@ export class VentaRepositoryImpl implements VentaRepository {
     );
     return rows.map((r) => ({
       ...r,
-      items: JSON.parse(r.items),
-      estado: r.estado ?? (r.tipo === "contado" ? "pagado" : "debe"),
+      items: cargarItems(r.id, r.items),
+      estado: resolverEstado(r.estado, r.tipo),
     }));
   }
 
@@ -41,47 +72,69 @@ export class VentaRepositoryImpl implements VentaRepository {
     const consecutivo = ((resultado?.total ?? 0) + 1)
       .toString()
       .padStart(3, "0");
-
     const numeroFactura = `${año}-${consecutivo}`;
 
-    // El estado inicial depende del tipo:
-    // contado → pagado de inmediato
-    // credito → debe (pendiente de cobro)
-    const estadoInicial = data.tipo === "contado" ? "pagado" : "debe";
+    const estadoInicial: "pagado" | "debe" =
+      data.tipo === "contado" ? "pagado" : "debe";
 
-    db.runSync(
-      `INSERT INTO ventas (id, clienteId, nombreCliente, items, total, tipo, fecha, numeroFactura, estado)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-      [
-        id,
-        data.clienteId,
-        data.nombreCliente,
-        JSON.stringify(data.items),
-        data.total,
-        data.tipo,
-        data.fecha,
-        numeroFactura,
-        estadoInicial,
-      ],
-    );
+    // ── Transacción: insertar venta + todos sus ítems atomicamente ────────
+    db.withTransactionSync(() => {
+      // La columna `items` queda '[]'; la fuente de verdad es venta_items.
+      db.runSync(
+        `INSERT INTO ventas
+           (id, clienteId, nombreCliente, items, total, tipo, fecha, numeroFactura, estado)
+         VALUES (?, ?, ?, '[]', ?, ?, ?, ?, ?);`,
+        [
+          id,
+          data.clienteId,
+          data.nombreCliente,
+          data.total,
+          data.tipo,
+          data.fecha,
+          numeroFactura,
+          estadoInicial,
+        ],
+      );
 
-    // ── Descontar stock si el producto tiene control activo ───────────────
-    // Se hace después de guardar la venta para no bloquearla si algo falla.
-    // Si un producto no tiene controlStock, ajustarStock lo ignora internamente.
+      for (const item of data.items) {
+        const itemId = `${id}_${item.productoId}`;
+        db.runSync(
+          `INSERT INTO venta_items
+             (id, ventaId, productoId, nombreProducto, precioUnitario, cantidad, subtotal)
+           VALUES (?, ?, ?, ?, ?, ?, ?);`,
+          [
+            itemId,
+            id,
+            item.productoId,
+            item.nombreProducto,
+            item.precioUnitario,
+            item.cantidad,
+            item.subtotal,
+          ],
+        );
+      }
+    });
+
+    // ── Descontar stock fuera de la transacción ───────────────────────────
+    // Si falla, la venta ya quedó guardada (el stock es best-effort).
     try {
       for (const item of data.items) {
         await productoRepo.ajustarStock(item.productoId, -item.cantidad);
       }
     } catch (e) {
-      // El descuento de stock no debe romper el flujo de la venta.
-      // Si falla, la venta ya quedó guardada.
       console.warn("No se pudo ajustar stock:", e);
     }
 
-    return { id, ...data, numeroFactura, estado: estadoInicial };
+    return {
+      id,
+      ...data,
+      numeroFactura,
+      estado: estadoInicial,
+    };
   }
 
   async delete(id: string): Promise<void> {
+    // ON DELETE CASCADE en venta_items borra los ítems automáticamente.
     db.runSync("DELETE FROM ventas WHERE id = ?;", [id]);
   }
 }

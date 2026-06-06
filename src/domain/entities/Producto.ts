@@ -4,22 +4,19 @@ export interface Producto {
   precio: number;
   unidad: string;
   disponible: number;
-  imagen?: string; // ← URL o ruta local (opcional)
+  imagen?: string;
+
+  // ── Soft delete ───────────────────────────────────────────────────────────
+  /** false / 0 = archivado. El repo filtra activo=1 por defecto. */
+  activo?: boolean;
 
   // ── Inventario (opcional) ─────────────────────────────────────────────────
-  controlStock?: boolean; // si este producto lleva control de stock
-  stock?: number; // cantidad actual disponible
-  stockMinimo?: number; // cantidad mínima antes de alertar
+  controlStock?: boolean;
+  stock?: number;
+  stockMinimo?: number;
 }
 
 // ── Helper de estado de stock ─────────────────────────────────────────────────
-// Úsalo en cualquier pantalla para saber el estado sin repetir lógica:
-// const estado = getEstadoStock(producto)
-// "sin-control" → no lleva inventario
-// "ok"          → stock por encima del mínimo
-// "bajo"        → stock en el mínimo o por debajo
-// "agotado"     → stock en 0
-
 export type EstadoStock = "sin-control" | "ok" | "bajo" | "agotado";
 
 export const getEstadoStock = (producto: Producto): EstadoStock => {

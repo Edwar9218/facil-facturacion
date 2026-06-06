@@ -5,7 +5,14 @@ import db from "../database/database";
 export class ProductoRepositoryImpl implements ProductoRepository {
   async getAll(): Promise<Producto[]> {
     const rows = db.getAllSync<any>(
-      "SELECT * FROM productos ORDER BY rowid DESC;",
+      "SELECT * FROM productos WHERE activo = 1 ORDER BY rowid DESC;",
+    );
+    return rows.map(this.mapRow);
+  }
+
+  async getArchivados(): Promise<Producto[]> {
+    const rows = db.getAllSync<any>(
+      "SELECT * FROM productos WHERE activo = 0 ORDER BY rowid DESC;",
     );
     return rows.map(this.mapRow);
   }
@@ -14,8 +21,8 @@ export class ProductoRepositoryImpl implements ProductoRepository {
     const id = String(Date.now());
     db.runSync(
       `INSERT INTO productos
-         (id, nombre, precio, unidad, disponible, imagen, controlStock, stock, stockMinimo)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+         (id, nombre, precio, unidad, disponible, imagen, controlStock, stock, stockMinimo, activo)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1);`,
       [
         id,
         data.nombre,
@@ -34,14 +41,8 @@ export class ProductoRepositoryImpl implements ProductoRepository {
   async update(producto: Producto): Promise<void> {
     db.runSync(
       `UPDATE productos
-       SET nombre       = ?,
-           precio       = ?,
-           unidad       = ?,
-           disponible   = ?,
-           imagen       = ?,
-           controlStock = ?,
-           stock        = ?,
-           stockMinimo  = ?
+       SET nombre=?, precio=?, unidad=?, disponible=?, imagen=?,
+           controlStock=?, stock=?, stockMinimo=?
        WHERE id = ?;`,
       [
         producto.nombre,
@@ -57,25 +58,23 @@ export class ProductoRepositoryImpl implements ProductoRepository {
     );
   }
 
+  // DELETE activa el trigger → siempre archiva, nunca borra de verdad
   async delete(id: string): Promise<void> {
     db.runSync("DELETE FROM productos WHERE id = ?;", [id]);
   }
 
-  // ── Método exclusivo de inventario ───────────────────────────────────────
-  // Suma o resta stock de un producto. Se llama desde VentaRepositoryImpl
-  // al registrar una venta. Usa valor negativo para descontar.
+  async reactivar(id: string): Promise<void> {
+    db.runSync("UPDATE productos SET activo = 1 WHERE id = ?;", [id]);
+  }
+
   async ajustarStock(id: string, cantidad: number): Promise<void> {
     db.runSync(
-      `UPDATE productos
-       SET stock = MAX(0, stock + ?)
+      `UPDATE productos SET stock = MAX(0, stock + ?)
        WHERE id = ? AND controlStock = 1;`,
       [cantidad, id],
     );
   }
 
-  // ── Mapper privado ────────────────────────────────────────────────────────
-  // Convierte la fila SQLite (donde controlStock es 0/1) al tipo Producto
-  // (donde controlStock es boolean). Centralizado aquí para no repetirlo.
   private mapRow(row: any): Producto {
     return {
       id: row.id,
