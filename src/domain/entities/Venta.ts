@@ -16,11 +16,16 @@ export interface Venta {
   fecha: string;
   numeroFactura?: string;
   /**
-   * 'pagado'  → contado o crédito completamente abonado
-   * 'debe'    → crédito con saldo pendiente
-   *
-   * Nota: el campo existe en BD desde la migración anterior.
-   * VentaRepositoryImpl siempre lo garantiza (nunca llega undefined).
+   * 'pagado'   → contado o crédito completamente abonado
+   * 'debe'     → crédito con saldo pendiente
+   * 'anulada'  → factura anulada; excluida de ventas activas
    */
-  estado: "pagado" | "debe";
+  estado: "pagado" | "debe" | "anulada";
+
+  // ── Campos de anulación (solo presentes cuando estado === 'anulada') ──
+  anulacion?: {
+    fecha: string; // ISO timestamp del momento de anulación
+    usuario: string; // Nombre o ID del usuario que anuló
+    motivo: string; // Razón registrada por el usuario
+  };
 }

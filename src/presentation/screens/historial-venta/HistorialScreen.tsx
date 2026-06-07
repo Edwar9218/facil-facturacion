@@ -28,7 +28,6 @@ interface ResumenCredito {
   saldoActual: number;
 }
 
-// ── NUEVA INTERFAZ PARA ABONOS ──
 interface Abono {
   id: string;
   clienteId: string;
@@ -91,7 +90,9 @@ const obtenerEtiquetaAgrupacion = (fechaStr: string) => {
 const ventaRepo = new VentaRepositoryImpl();
 const creditoRepo = new CreditoRepositoryImpl();
 
-type TipoEstado = "todas" | "pazysalvo" | "debe";
+// ── Tipos de filtro ──────────────────────────────────────────────────────────
+// "anulada" es el nuevo valor que se agrega al filtro de estado
+type TipoEstado = "todas" | "pazysalvo" | "debe" | "anulada";
 type TipoPeriodo = "hoy" | "semana" | "mes" | "personalizado";
 
 const AVATAR_COLORS = [
@@ -103,27 +104,43 @@ const AVATAR_COLORS = [
   { bg: "#F3E8FF", fg: "#9333EA" },
 ];
 
+// ── Modal detalle de factura ─────────────────────────────────────────────────
+// Actualizado: muestra bloque de anulación si la venta está anulada
 const ModalFactura = ({
   venta,
   visible,
   onClose,
   evaluarFacturaPagada,
+  onAnular,
 }: {
   venta: Venta | null;
   visible: boolean;
   onClose: () => void;
   evaluarFacturaPagada: (v: Venta) => boolean;
+  onAnular: (v: Venta) => void;
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   if (!venta) return null;
 
-  const esPazYSalvo = evaluarFacturaPagada(venta);
+  const esAnulada = venta.estado === "anulada";
+  const esPazYSalvo = !esAnulada && evaluarFacturaPagada(venta);
   const GREEN = "#16A34A";
   const AMBER = "#D97706";
+  const RED = "#DC2626";
   const GRAY = "#7B8499";
   const INK = "#111827";
+
+  // Badge adaptado al estado
+  const badgeBg = esAnulada ? "#FEE2E2" : esPazYSalvo ? "#DCFCE7" : "#FEF3C7";
+  const badgeColor = esAnulada ? RED : esPazYSalvo ? GREEN : AMBER;
+  const badgeIcon = esAnulada
+    ? "cancel"
+    : esPazYSalvo
+      ? "check-circle"
+      : "clock-outline";
+  const badgeLabel = esAnulada ? "Anulada" : esPazYSalvo ? "Al día" : "En mora";
 
   return (
     <Modal
@@ -153,6 +170,7 @@ const ModalFactura = ({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}
         >
+          {/* Fila cliente + badge de estado */}
           <View style={ms.clienteRow}>
             <View
               style={[
@@ -170,27 +188,69 @@ const ModalFactura = ({
                 {horaDeVenta(venta.fecha)}
               </AppText>
             </View>
-            <View
-              style={[
-                ms.badge,
-                { backgroundColor: esPazYSalvo ? "#DCFCE7" : "#FEF3C7" },
-              ]}
-            >
+            <View style={[ms.badge, { backgroundColor: badgeBg }]}>
               <MaterialCommunityIcons
-                name={esPazYSalvo ? "check-circle" : "clock-outline"}
+                name={badgeIcon as any}
                 size={14}
-                color={esPazYSalvo ? GREEN : AMBER}
+                color={badgeColor}
               />
-              <AppText
-                style={[ms.badgeTxt, { color: esPazYSalvo ? GREEN : AMBER }]}
-              >
-                {esPazYSalvo ? "Al día" : "En mora"}
+              <AppText style={[ms.badgeTxt, { color: badgeColor }]}>
+                {badgeLabel}
               </AppText>
             </View>
           </View>
 
+          {/* Bloque de anulación: solo visible cuando está anulada */}
+          {esAnulada && venta.anulacion && (
+            <View style={ms.bloqueAnulacion}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                }}
+              >
+                <MaterialCommunityIcons name="cancel" size={18} color={RED} />
+                <AppText
+                  style={{ fontSize: 15, fontWeight: "800", color: RED }}
+                >
+                  Factura anulada
+                </AppText>
+              </View>
+              <View style={{ gap: 4 }}>
+                <View style={ms.anulacionFila}>
+                  <AppText style={ms.anulacionLabel}>Fecha:</AppText>
+                  <AppText style={ms.anulacionValor}>
+                    {new Date(venta.anulacion.fecha).toLocaleString("es-CO", {
+                      timeZone: "America/Bogota",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </AppText>
+                </View>
+                <View style={ms.anulacionFila}>
+                  <AppText style={ms.anulacionLabel}>Anulada por:</AppText>
+                  <AppText style={ms.anulacionValor}>
+                    {venta.anulacion.usuario}
+                  </AppText>
+                </View>
+                <View style={ms.anulacionFila}>
+                  <AppText style={ms.anulacionLabel}>Motivo:</AppText>
+                  <AppText style={[ms.anulacionValor, { flex: 1 }]}>
+                    {venta.anulacion.motivo}
+                  </AppText>
+                </View>
+              </View>
+            </View>
+          )}
+
           <View style={ms.divisor} />
 
+          {/* Tabla de productos */}
           <View style={ms.tablaHeader}>
             <AppText style={[ms.colHead, { flex: 1 }]}>Producto</AppText>
             <AppText style={[ms.colHead, ms.colCant]}>Cant.</AppText>
@@ -248,13 +308,19 @@ const ModalFactura = ({
             </View>
             <View style={{ alignItems: "flex-end" }}>
               <AppText style={ms.totalLabel}>Total</AppText>
-              <AppText style={[ms.totalMonto, { color: INK }]}>
+              <AppText
+                style={[
+                  ms.totalMonto,
+                  { color: esAnulada ? "#9CA3AF" : INK },
+                  esAnulada && { textDecorationLine: "line-through" },
+                ]}
+              >
                 {fmt(venta.total)}
               </AppText>
             </View>
           </View>
 
-          {!esPazYSalvo && (
+          {!esAnulada && !esPazYSalvo && (
             <View style={ms.fiadoInfo}>
               <MaterialCommunityIcons
                 name="information-outline"
@@ -276,7 +342,227 @@ const ModalFactura = ({
               </AppText>
             </View>
           )}
+
+          {/* Botón anular: solo visible en facturas activas */}
+          {!esAnulada && (
+            <TouchableOpacity
+              style={ms.btnAnular}
+              activeOpacity={0.8}
+              onPress={() => onAnular(venta)}
+            >
+              <MaterialCommunityIcons name="cancel" size={20} color={RED} />
+              <AppText style={ms.btnAnularTxt}>Anular factura</AppText>
+            </TouchableOpacity>
+          )}
         </ScrollView>
+      </View>
+    </Modal>
+  );
+};
+
+// ── Modal para capturar motivo de anulación ──────────────────────────────────
+const ModalAnular = ({
+  venta,
+  visible,
+  onClose,
+  onConfirmar,
+  anulando,
+}: {
+  venta: Venta | null;
+  visible: boolean;
+  onClose: () => void;
+  onConfirmar: (motivo: string) => void;
+  anulando: boolean;
+}) => {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [motivo, setMotivo] = React.useState("");
+  const [errorMotivo, setErrorMotivo] = React.useState("");
+  const RED = "#DC2626";
+
+  React.useEffect(() => {
+    if (visible) {
+      setMotivo("");
+      setErrorMotivo("");
+    }
+  }, [visible]);
+
+  const handleConfirmar = () => {
+    const motivoTrimmed = motivo.trim();
+    if (motivoTrimmed.length < 5) {
+      setErrorMotivo("Describe el motivo (mínimo 5 caracteres)");
+      return;
+    }
+    onConfirmar(motivoTrimmed);
+  };
+
+  if (!venta) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={ms.overlay}>
+        {/* Fondo interactivo para cerrar */}
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+
+        <KeyboardAwareScrollView
+          style={{ flex: 1, width: "100%" }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "flex-end",
+          }}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+          enableOnAndroid={true}
+          bottomOffset={20}
+          extraScrollHeight={60}
+        >
+          {/* Tarjeta blanca (sheet) */}
+          <View style={[ms.sheet, { paddingBottom: insets.bottom + 24 }]}>
+            <View style={ms.handle} />
+
+            {/* Header */}
+            <View style={[ms.header, { borderBottomColor: "#FEE2E2" }]}>
+              <View style={{ flex: 1 }}>
+                <AppText style={[ms.headerTitulo, { color: RED }]}>
+                  Anular factura
+                </AppText>
+                <AppText style={ms.headerFecha}>
+                  {venta.numeroFactura
+                    ? `Factura #${venta.numeroFactura}`
+                    : venta.nombreCliente}
+                </AppText>
+              </View>
+              <TouchableOpacity
+                style={[ms.btnClose, { backgroundColor: "#FCA5A5" }]}
+                onPress={onClose}
+              >
+                <MaterialCommunityIcons name="close" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ padding: 20, gap: 20 }}>
+              {/* Resumen de la factura */}
+              <View style={ms.resumenAnulacion}>
+                <View style={ms.resumenFila}>
+                  <AppText style={ms.resumenLabel}>Cliente</AppText>
+                  <AppText style={ms.resumenValor}>
+                    {venta.nombreCliente}
+                  </AppText>
+                </View>
+                <View style={ms.resumenFila}>
+                  <AppText style={ms.resumenLabel}>Total</AppText>
+                  <AppText
+                    style={[ms.resumenValor, { color: RED, fontWeight: "800" }]}
+                  >
+                    {fmt(venta.total)}
+                  </AppText>
+                </View>
+                <View style={ms.resumenFila}>
+                  <AppText style={ms.resumenLabel}>Tipo</AppText>
+                  <AppText style={ms.resumenValor}>
+                    {venta.tipo === "contado" ? "Contado" : "Crédito"}
+                  </AppText>
+                </View>
+              </View>
+
+              {/* Aviso de consecuencias */}
+              <View style={ms.avisoAnulacion}>
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={18}
+                  color="#92400E"
+                />
+                <AppText style={ms.avisoTxt}>
+                  Al anular: el stock de los productos se restaurará y la
+                  factura quedará excluida de las ventas activas. Esta acción no
+                  se puede deshacer.
+                </AppText>
+              </View>
+
+              {/* Campo motivo */}
+              <View style={{ gap: 8 }}>
+                <AppText style={mf.label}>Motivo de anulación</AppText>
+                <View
+                  style={[
+                    ms.inputAreaWrap,
+                    errorMotivo
+                      ? { borderColor: "#EF4444", backgroundColor: "#FFF5F5" }
+                      : null,
+                  ]}
+                >
+                  <TextInput
+                    style={ms.inputArea}
+                    value={motivo}
+                    onChangeText={(t) => {
+                      setMotivo(t);
+                      setErrorMotivo("");
+                    }}
+                    placeholder="Ej: Error en los productos, cliente canceló el pedido..."
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={3}
+                    maxLength={200}
+                    textAlignVertical="top"
+                  />
+                </View>
+                {!!errorMotivo && (
+                  <AppText style={mf.errorTxt}>{errorMotivo}</AppText>
+                )}
+                <AppText
+                  style={{ fontSize: 12, color: "#9CA3AF", textAlign: "right" }}
+                >
+                  {motivo.length}/200
+                </AppText>
+              </View>
+
+              {/* Botones */}
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <TouchableOpacity
+                  style={[ms.btnCancelarAnulacion, { flex: 1 }]}
+                  onPress={onClose}
+                  activeOpacity={0.8}
+                  disabled={anulando}
+                >
+                  <AppText style={ms.btnCancelarAnulacionTxt}>Cancelar</AppText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    ms.btnConfirmarAnulacion,
+                    { flex: 1 },
+                    (anulando || motivo.trim().length < 5) && { opacity: 0.5 },
+                  ]}
+                  onPress={handleConfirmar}
+                  activeOpacity={0.8}
+                  disabled={anulando || motivo.trim().length < 5}
+                >
+                  {anulando ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons
+                        name="cancel"
+                        size={18}
+                        color="#fff"
+                      />
+                      <AppText style={ms.btnConfirmarAnulacionTxt}>
+                        Anular
+                      </AppText>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAwareScrollView>
       </View>
     </Modal>
   );
@@ -320,14 +606,12 @@ const ModalElegirFecha = ({
   }, [visible]);
 
   const handleInicio = (texto: string) => {
-    const formateado = formatearFecha(texto);
-    setFInicio(formateado);
+    setFInicio(formatearFecha(texto));
     setErrorInicio("");
   };
 
   const handleFin = (texto: string) => {
-    const formateado = formatearFecha(texto);
-    setFFin(formateado);
+    setFFin(formatearFecha(texto));
     setErrorFin("");
   };
 
@@ -455,9 +739,7 @@ const ModalElegirFecha = ({
             style={[
               s.btnPrincipalAncho,
               { marginTop: 8 },
-              (!fechaValida(fInicio) || !fechaValida(fFin)) && {
-                opacity: 0.5,
-              },
+              (!fechaValida(fInicio) || !fechaValida(fFin)) && { opacity: 0.5 },
             ]}
             onPress={handleBuscar}
             activeOpacity={0.8}
@@ -476,12 +758,12 @@ export const HistorialScreen = () => {
 
   // Estados de control
   const [todasVentas, setTodasVentas] = React.useState<Venta[]>([]);
-  const [abonos, setAbonos] = React.useState<Abono[]>([]); // 👈 1. Nuevo estado para almacenar los abonos
+  const [abonos, setAbonos] = React.useState<Abono[]>([]);
   const [ventasFiltradas, setVentasFiltradas] = React.useState<Venta[]>([]);
   const [cargando, setCargando] = React.useState(true);
   const [refrescando, setRefrescando] = React.useState(false);
 
-  // Estados de Filtros
+  // Filtros
   const [busqueda, setBusqueda] = React.useState("");
   const [filtroEstado, setFiltroEstado] = React.useState<TipoEstado>("todas");
   const [filtroPeriodo, setFiltroPeriodo] = React.useState<TipoPeriodo>("hoy");
@@ -496,33 +778,83 @@ export const HistorialScreen = () => {
   const [modalFacturaVisible, setModalFacturaVisible] = React.useState(false);
   const [modalFechaVisible, setModalFechaVisible] = React.useState(false);
 
-  // Paginación infinita
+  // Modal anulación
+  const [ventaAAnular, setVentaAAnular] = React.useState<Venta | null>(null);
+  const [modalAnularVisible, setModalAnularVisible] = React.useState(false);
+  const [anulando, setAnulando] = React.useState(false);
+
+  // Paginación
   const PAGE_SIZE = 10;
   const [pagina, setPagina] = React.useState(1);
   const [cargandoMas, setCargandoMas] = React.useState(false);
 
-  // Exportar a Excel
+  // Exportar
   const [exportando, setExportando] = React.useState(false);
 
-  // ── 2. NUEVA LÓGICA DE VALIDACIÓN INDIVIDUAL DE FACTURA CORREGIDA ──
   const evaluarFacturaPagada = React.useCallback(
     (venta: Venta) => {
-      // 1. Si es de contado, siempre está pagada
+      if (venta.estado === "anulada") return false;
       if (venta.tipo === "contado") return true;
-
-      // 2. CORRECCIÓN: Priorizar el campo 'estado' que ya trae tu objeto Venta
       if (venta.estado === "pagado") return true;
-
-      // 3. Fallback: Si no está marcada como "pagado",
-      // calcula basándose en los abonos por si acaso (opcional)
       const totalAbonado = abonos
         .filter((a) => a.ventaId === venta.id)
         .reduce((sum, a) => sum + a.monto, 0);
-
       return totalAbonado >= venta.total;
     },
     [abonos],
   );
+
+  // ── Abrir modal de anulación ────────────────────────────────────────────────
+  const handleSolicitarAnular = (venta: Venta) => {
+    // Cerrar el modal de detalle primero
+    setModalFacturaVisible(false);
+    setTimeout(() => {
+      setVentaAAnular(venta);
+      setModalAnularVisible(true);
+    }, 350);
+  };
+
+  // ── Confirmar anulación ────────────────────────────────────────────────────
+  const handleConfirmarAnulacion = async (motivo: string) => {
+    if (!ventaAAnular) return;
+    setAnulando(true);
+    try {
+      await ventaRepo.anular(ventaAAnular.id, {
+        usuario: "Usuario", // Puedes reemplazar por el usuario real de sesión
+        motivo,
+      });
+
+      // Actualizar lista local sin recargar todo
+      setTodasVentas((prev) =>
+        prev.map((v) =>
+          v.id === ventaAAnular.id
+            ? {
+                ...v,
+                estado: "anulada" as const,
+                anulacion: {
+                  fecha: new Date().toISOString(),
+                  usuario: "Usuario",
+                  motivo,
+                },
+              }
+            : v,
+        ),
+      );
+
+      setModalAnularVisible(false);
+      setVentaAAnular(null);
+
+      Alert.alert(
+        "Factura anulada",
+        `La factura ${ventaAAnular.numeroFactura ?? ""} fue anulada y el stock restaurado.`,
+        [{ text: "Entendido" }],
+      );
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "No se pudo anular la factura.");
+    } finally {
+      setAnulando(false);
+    }
+  };
 
   const exportarExcel = async () => {
     if (ventasFiltradas.length === 0) {
@@ -536,7 +868,13 @@ export const HistorialScreen = () => {
     try {
       const filas: object[] = [];
       ventasFiltradas.forEach((v) => {
-        const estReal = evaluarFacturaPagada(v) ? "Al día" : "En mora";
+        const esAnulada = v.estado === "anulada";
+        const estReal = esAnulada
+          ? "Anulada"
+          : evaluarFacturaPagada(v)
+            ? "Al día"
+            : "En mora";
+
         if (v.items && v.items.length > 0) {
           v.items.forEach((item: ItemVenta) => {
             filas.push({
@@ -556,6 +894,7 @@ export const HistorialScreen = () => {
               Subtotal: item.subtotal,
               "Estado Factura": estReal,
               Total: v.total,
+              "Motivo anulación": esAnulada ? (v.anulacion?.motivo ?? "") : "",
             });
           });
         } else {
@@ -576,22 +915,24 @@ export const HistorialScreen = () => {
             Subtotal: "",
             "Estado Factura": estReal,
             Total: v.total,
+            "Motivo anulación": esAnulada ? (v.anulacion?.motivo ?? "") : "",
           });
         }
       });
 
       const hoja = XLSX.utils.json_to_sheet(filas);
       hoja["!cols"] = [
-        { wch: 20 }, // Factura
-        { wch: 12 }, // Fecha
-        { wch: 8 }, // Hora
-        { wch: 20 }, // Cliente
-        { wch: 22 }, // Producto
-        { wch: 10 }, // Cantidad
-        { wch: 16 }, // Precio unitario
-        { wch: 12 }, // Subtotal
-        { wch: 16 }, // Estado Factura
-        { wch: 12 }, // Total
+        { wch: 20 },
+        { wch: 12 },
+        { wch: 8 },
+        { wch: 20 },
+        { wch: 22 },
+        { wch: 10 },
+        { wch: 16 },
+        { wch: 12 },
+        { wch: 16 },
+        { wch: 12 },
+        { wch: 30 },
       ];
 
       const libro = XLSX.utils.book_new();
@@ -627,8 +968,6 @@ export const HistorialScreen = () => {
     }
   };
 
-  // ── 3. CARGA COMPLETA DE VENTAS Y ABONOS DESDE SQLITE ──
-  // Dentro de HistorialScreen.tsx
   const cargarDatos = async (esRefresh = false) => {
     if (esRefresh) setRefrescando(true);
     else setCargando(true);
@@ -638,7 +977,6 @@ export const HistorialScreen = () => {
         ventaRepo.getAll(),
         creditoRepo.getAbonos ? await creditoRepo.getAbonos() : [],
       ]);
-
       setTodasVentas(ventas);
       setAbonos(listaAbonos);
     } catch (e) {
@@ -648,22 +986,30 @@ export const HistorialScreen = () => {
       setRefrescando(false);
     }
   };
+
   React.useEffect(() => {
     cargarDatos();
   }, []);
 
-  // Procesamiento de filtros corregido para evaluar factura de forma individual
+  // ── Filtros ────────────────────────────────────────────────────────────────
   React.useEffect(() => {
     let resultado = [...todasVentas];
 
-    // 1. Filtrado Inteligente por Estado Real de Factura
+    // Filtro por estado (ahora incluye "anulada")
     if (filtroEstado === "pazysalvo") {
-      resultado = resultado.filter((v) => evaluarFacturaPagada(v));
+      resultado = resultado.filter(
+        (v) => v.estado !== "anulada" && evaluarFacturaPagada(v),
+      );
     } else if (filtroEstado === "debe") {
-      resultado = resultado.filter((v) => !evaluarFacturaPagada(v));
+      resultado = resultado.filter(
+        (v) => v.estado !== "anulada" && !evaluarFacturaPagada(v),
+      );
+    } else if (filtroEstado === "anulada") {
+      resultado = resultado.filter((v) => v.estado === "anulada");
     }
+    // "todas" no filtra por estado
 
-    // 2. Filtrado por Periodo / Fechas
+    // Filtro por periodo
     const hoyStr = fechaHoy();
     if (filtroPeriodo === "hoy") {
       resultado = resultado.filter((v) => v.fecha.startsWith(hoyStr));
@@ -685,7 +1031,7 @@ export const HistorialScreen = () => {
       });
     }
 
-    // 3. Filtrado por Buscador
+    // Filtro por búsqueda
     if (busqueda.trim() !== "") {
       const query = busqueda.toLowerCase();
       resultado = resultado.filter(
@@ -706,7 +1052,6 @@ export const HistorialScreen = () => {
     evaluarFacturaPagada,
   ]);
 
-  // Formatea fecha sv-SE a legible corta
   const fmtFechaCorta = (svStr: string) => {
     const d = new Date(svStr + "T00:00:00");
     return d.toLocaleDateString("es-CO", {
@@ -716,32 +1061,30 @@ export const HistorialScreen = () => {
     });
   };
 
-  // Rango de fechas activo (para filtrar abonos del mismo periodo)
   const rangoActivo = React.useMemo(() => {
     const hoyStr = fechaHoy();
-    if (filtroPeriodo === "hoy") {
-      return { inicio: hoyStr, fin: hoyStr };
-    } else if (filtroPeriodo === "semana") {
+    if (filtroPeriodo === "hoy") return { inicio: hoyStr, fin: hoyStr };
+    if (filtroPeriodo === "semana") {
       const d = new Date();
       d.setDate(d.getDate() - 7);
       return {
         inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
         fin: hoyStr,
       };
-    } else if (filtroPeriodo === "mes") {
+    }
+    if (filtroPeriodo === "mes") {
       const d = new Date();
       d.setDate(1);
       return {
         inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
         fin: hoyStr,
       };
-    } else if (filtroPeriodo === "personalizado" && rangoPersonalizado.inicio) {
-      return { inicio: rangoPersonalizado.inicio, fin: rangoPersonalizado.fin };
     }
+    if (filtroPeriodo === "personalizado" && rangoPersonalizado.inicio)
+      return { inicio: rangoPersonalizado.inicio, fin: rangoPersonalizado.fin };
     return null;
   }, [filtroPeriodo, rangoPersonalizado]);
 
-  // Etiqueta legible del rango
   const etiquetaRango = React.useMemo(() => {
     if (!rangoActivo) return "";
     if (filtroPeriodo === "hoy")
@@ -755,23 +1098,21 @@ export const HistorialScreen = () => {
     );
   }, [rangoActivo, filtroPeriodo]);
 
-  // Estadísticas exactas basadas en la corrección por factura
+  // ── Stats: las anuladas se excluyen del total recibido ────────────────────
   const stats = React.useMemo(() => {
-    const total = ventasFiltradas.reduce((a, v) => a + v.total, 0);
-    const cantVentas = ventasFiltradas.length;
+    const ventasActivas = ventasFiltradas.filter((v) => v.estado !== "anulada");
+    const ventasAnuladas = ventasFiltradas.filter(
+      (v) => v.estado === "anulada",
+    );
 
-    // IDs de ventas en el período filtrado (para cruzar abonos)
-    const ventasIds = new Set(ventasFiltradas.map((v) => v.id));
+    const total = ventasActivas.reduce((a, v) => a + v.total, 0);
+    const cantVentas = ventasActivas.length;
+    const cantAnuladas = ventasAnuladas.length;
 
-    // LOGICA IDENTICA A VentaDelDia:
-    // recibido = ventas de contado del periodo + TODOS los abonos cobrados en el periodo
-
-    // 1. Ventas de CONTADO creadas en el periodo
-    const totalContado = ventasFiltradas
+    const totalContado = ventasActivas
       .filter((v) => v.tipo === "contado")
       .reduce((a, v) => a + v.total, 0);
 
-    // 2. TODOS los abonos cuya fecha cae en el rango (sin importar la fecha de la venta)
     const totalAbonosParciales = abonos
       .filter((ab) => {
         if (!rangoActivo) return true;
@@ -782,11 +1123,9 @@ export const HistorialScreen = () => {
       })
       .reduce((s, ab) => s + ab.monto, 0);
 
-    // 3. Total recibido = contado del periodo + abonos cobrados en el periodo
     const totalRecibido = totalContado + totalAbonosParciales;
 
-    // Cuentas por cobrar = suma de saldos reales (total - abonado) de facturas pendientes
-    const totalDebe = ventasFiltradas
+    const totalDebe = ventasActivas
       .filter((v) => !evaluarFacturaPagada(v))
       .reduce((a, v) => {
         const totalAbonado = abonos
@@ -795,11 +1134,11 @@ export const HistorialScreen = () => {
         return a + Math.max(0, v.total - totalAbonado);
       }, 0);
 
-    const clientesUnicos = [...new Set(ventasFiltradas.map((v) => v.clienteId))]
+    const clientesUnicos = [...new Set(ventasActivas.map((v) => v.clienteId))]
       .length;
 
     const conteoProductos: { [nombre: string]: number } = {};
-    ventasFiltradas.forEach((v) => {
+    ventasActivas.forEach((v) => {
       (v.items ?? []).forEach((item: ItemVenta) => {
         const nombre = item.nombreProducto ?? item.productoId ?? "Producto";
         conteoProductos[nombre] =
@@ -814,6 +1153,7 @@ export const HistorialScreen = () => {
     return {
       total,
       cantVentas,
+      cantAnuladas,
       totalContado,
       totalAbonosParciales,
       totalRecibido,
@@ -823,20 +1163,17 @@ export const HistorialScreen = () => {
     };
   }, [ventasFiltradas, evaluarFacturaPagada, abonos, rangoActivo]);
 
-  // Saldo real pendiente por factura (total - abonos aplicados a esa venta)
   const saldoPorVenta = React.useMemo(() => {
     const mapa = new Map<string, number>();
     todasVentas.forEach((v) => {
       const totalAbonado = abonos
         .filter((a) => a.ventaId === v.id)
         .reduce((sum, a) => sum + a.monto, 0);
-      const saldo = Math.max(0, v.total - totalAbonado);
-      mapa.set(v.id, saldo);
+      mapa.set(v.id, Math.max(0, v.total - totalAbonado));
     });
     return mapa;
   }, [todasVentas, abonos]);
 
-  // Ventas visibles
   const ventasVisibles = React.useMemo(() => {
     const ordenadas = [...ventasFiltradas].sort(
       (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
@@ -860,7 +1197,6 @@ export const HistorialScreen = () => {
     const ordenadas = [...ventasVisibles].sort(
       (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
     );
-
     ordenadas.forEach((venta) => {
       const fechaClave = venta.fecha.substring(0, 10);
       const titulo = obtenerEtiquetaAgrupacion(fechaClave);
@@ -889,9 +1225,7 @@ export const HistorialScreen = () => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
     const distanciaAlFondo =
       contentSize.height - contentOffset.y - layoutMeasurement.height;
-    if (distanciaAlFondo < 200) {
-      cargarMas();
-    }
+    if (distanciaAlFondo < 200) cargarMas();
   };
 
   return (
@@ -945,36 +1279,39 @@ export const HistorialScreen = () => {
           </View>
         </View>
 
-        {/* FILTRO ESTADO FACTURA */}
+        {/* FILTRO ESTADO — ahora con 4 opciones */}
         <View style={s.filterSection}>
           <AppText style={s.filterTitle}>Estado de facturas</AppText>
-          <View style={s.filterRow}>
-            {(["todas", "pazysalvo", "debe"] as TipoEstado[]).map((estado) => {
-              const activo = filtroEstado === estado;
+          <View style={[s.filterRow, { flexWrap: "wrap" }]}>
+            {(
+              [
+                { key: "todas", label: "Todas", color: colors.primary },
+                { key: "pazysalvo", label: "Activas", color: "#16A34A" },
+                { key: "debe", label: "En mora", color: "#D97706" },
+                { key: "anulada", label: "Anuladas", color: "#DC2626" },
+              ] as { key: TipoEstado; label: string; color: string }[]
+            ).map(({ key, label, color }) => {
+              const activo = filtroEstado === key;
               return (
                 <TouchableOpacity
-                  key={estado}
+                  key={key}
                   style={[
                     s.filterBtn,
                     activo
-                      ? { backgroundColor: colors.primary }
+                      ? { backgroundColor: color }
                       : { backgroundColor: "#F3F4F6" },
-                    { flex: 1 },
+                    { flex: 1, minWidth: "22%" },
                   ]}
-                  onPress={() => setFiltroEstado(estado)}
+                  onPress={() => setFiltroEstado(key)}
                   activeOpacity={0.8}
                 >
                   <AppText
                     style={[
                       s.filterBtnText,
-                      { color: activo ? "#FFF" : "#4B5563" },
+                      { color: activo ? "#FFF" : "#4B5563", fontSize: 14 },
                     ]}
                   >
-                    {estado === "todas"
-                      ? "Todas"
-                      : estado === "pazysalvo"
-                        ? "Al día"
-                        : "En mora"}
+                    {label}
                   </AppText>
                 </TouchableOpacity>
               );
@@ -1066,7 +1403,6 @@ export const HistorialScreen = () => {
 
         {/* TARJETA RESUMEN GRANDE */}
         <View style={[s.card, { marginBottom: 16 }]}>
-          {/* Encabezado con rango de fechas */}
           <View
             style={{
               flexDirection: "row",
@@ -1106,7 +1442,6 @@ export const HistorialScreen = () => {
             {fmt(stats.totalRecibido)}
           </AppText>
 
-          {/* Desglose siempre visible */}
           <View
             style={{
               backgroundColor: "#F8FAFF",
@@ -1118,7 +1453,7 @@ export const HistorialScreen = () => {
               marginBottom: 14,
             }}
           >
-            {/* Fila: Ventas pagadas */}
+            {/* Ventas pagadas */}
             <View
               style={{
                 flexDirection: "row",
@@ -1175,7 +1510,7 @@ export const HistorialScreen = () => {
 
             <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
 
-            {/* Fila: Abonos recibidos */}
+            {/* Abonos recibidos */}
             <View
               style={{
                 flexDirection: "row",
@@ -1280,6 +1615,59 @@ export const HistorialScreen = () => {
                 style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
               >
                 {fmt(stats.totalDebe)}
+              </AppText>
+            </View>
+          )}
+
+          {/* Anuladas del periodo */}
+          {stats.cantAnuladas > 0 && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#FEF2F2",
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: "#FECACA",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                marginBottom: 14,
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name="cancel"
+                  size={22}
+                  color="#DC2626"
+                />
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#7F1D1D",
+                      fontWeight: "700",
+                    }}
+                  >
+                    Facturas anuladas
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#991B1B",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Excluidas del total
+                  </AppText>
+                </View>
+              </View>
+              <AppText
+                style={{ fontSize: 18, color: "#DC2626", fontWeight: "800" }}
+              >
+                {stats.cantAnuladas}
               </AppText>
             </View>
           )}
@@ -1420,30 +1808,79 @@ export const HistorialScreen = () => {
                   const avatarColor =
                     AVATAR_COLORS[index % AVATAR_COLORS.length];
                   const inicial = venta.nombreCliente.charAt(0).toUpperCase();
-                  const esFacturaSaldada = evaluarFacturaPagada(venta);
+                  const esAnulada = venta.estado === "anulada";
+                  const esFacturaSaldada =
+                    !esAnulada && evaluarFacturaPagada(venta);
+
+                  // Colores según estado
+                  const badgeBg = esAnulada
+                    ? "#FEE2E2"
+                    : esFacturaSaldada
+                      ? "#DCFCE7"
+                      : "#FEF3C7";
+                  const badgeColor = esAnulada
+                    ? "#DC2626"
+                    : esFacturaSaldada
+                      ? "#16A34A"
+                      : "#D97706";
+                  const badgeLabel = esAnulada
+                    ? "Anulada"
+                    : esFacturaSaldada
+                      ? "Al día"
+                      : "En mora";
 
                   return (
-                    <View key={venta.id} style={s.ventaCard}>
+                    <View
+                      key={venta.id}
+                      style={[
+                        s.ventaCard,
+                        esAnulada && {
+                          opacity: 0.72,
+                          borderWidth: 1.5,
+                          borderColor: "#FECACA",
+                        },
+                      ]}
+                    >
+                      {/* Avatar */}
                       <View
-                        style={[s.avatar, { backgroundColor: avatarColor.bg }]}
+                        style={[
+                          s.avatar,
+                          {
+                            backgroundColor: esAnulada
+                              ? "#F3F4F6"
+                              : avatarColor.bg,
+                          },
+                        ]}
                       >
                         <AppText
-                          style={[s.avatarLetra, { color: avatarColor.fg }]}
+                          style={[
+                            s.avatarLetra,
+                            { color: esAnulada ? "#9CA3AF" : avatarColor.fg },
+                          ]}
                         >
                           {inicial}
                         </AppText>
                       </View>
+
+                      {/* Info */}
                       <View style={{ flex: 1, marginLeft: 14 }}>
-                        <AppText style={s.ventaNombre} numberOfLines={1}>
+                        <AppText
+                          style={[
+                            s.ventaNombre,
+                            esAnulada && { color: "#9CA3AF" },
+                          ]}
+                          numberOfLines={1}
+                        >
                           {venta.nombreCliente}
                         </AppText>
                         <AppText style={s.ventaHora}>
                           {horaDeVenta(venta.fecha)}
                         </AppText>
                       </View>
+
+                      {/* Monto + badge */}
                       <View style={{ alignItems: "flex-end", marginRight: 8 }}>
-                        {/* Si es crédito pendiente mostramos saldo, si no el total */}
-                        {!esFacturaSaldada ? (
+                        {!esAnulada && !esFacturaSaldada ? (
                           <>
                             <AppText
                               style={[s.ventaMonto, { color: "#D97706" }]}
@@ -1461,34 +1898,37 @@ export const HistorialScreen = () => {
                             </AppText>
                           </>
                         ) : (
-                          <AppText style={s.ventaMonto}>
+                          <AppText
+                            style={[
+                              s.ventaMonto,
+                              esAnulada && {
+                                color: "#9CA3AF",
+                                textDecorationLine: "line-through",
+                                fontSize: 15,
+                              },
+                            ]}
+                          >
                             {fmt(venta.total)}
                           </AppText>
                         )}
                         <View
                           style={[
                             s.badge,
-                            {
-                              backgroundColor: esFacturaSaldada
-                                ? "#DCFCE7"
-                                : "#FEF3C7",
-                              paddingVertical: 3,
-                            },
+                            { backgroundColor: badgeBg, paddingVertical: 3 },
                           ]}
                         >
                           <AppText
                             style={[
                               s.badgeTxt,
-                              {
-                                color: esFacturaSaldada ? "#16A34A" : "#D97706",
-                                fontSize: 12,
-                              },
+                              { color: badgeColor, fontSize: 12 },
                             ]}
                           >
-                            {esFacturaSaldada ? "Al día" : "En mora"}
+                            {badgeLabel}
                           </AppText>
                         </View>
                       </View>
+
+                      {/* Botón ver */}
                       <TouchableOpacity
                         style={[s.btnVerGrande, { backgroundColor: "#F3F4F6" }]}
                         activeOpacity={0.7}
@@ -1541,7 +1981,7 @@ export const HistorialScreen = () => {
         )}
       </ScrollView>
 
-      {/* MODAL DETALLE DE FACTURA */}
+      {/* MODAL DETALLE */}
       <ModalFactura
         venta={ventaSeleccionada}
         visible={modalFacturaVisible}
@@ -1550,9 +1990,22 @@ export const HistorialScreen = () => {
           setModalFacturaVisible(false);
           setTimeout(() => setVentaSeleccionada(null), 300);
         }}
+        onAnular={handleSolicitarAnular}
       />
 
-      {/* MODAL FILTRO DE FECHA */}
+      {/* MODAL ANULACIÓN */}
+      <ModalAnular
+        venta={ventaAAnular}
+        visible={modalAnularVisible}
+        onClose={() => {
+          setModalAnularVisible(false);
+          setVentaAAnular(null);
+        }}
+        onConfirmar={handleConfirmarAnulacion}
+        anulando={anulando}
+      />
+
+      {/* MODAL FECHA */}
       <ModalElegirFecha
         visible={modalFechaVisible}
         onClose={() => setModalFechaVisible(false)}
@@ -1603,7 +2056,6 @@ const s = StyleSheet.create({
   },
   countNum: { fontSize: 22, fontWeight: "800", color: "#111827" },
   countLabel: { fontSize: 15, color: "#7B8499", fontWeight: "500" },
-
   contenedorBuscador: {
     flexDirection: "row",
     alignItems: "center",
@@ -1621,32 +2073,22 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     fontWeight: "500",
   },
-
-  filterSection: {
-    marginBottom: 24,
-  },
+  filterSection: { marginBottom: 24 },
   filterTitle: {
     fontSize: 18,
     fontWeight: "800",
     color: "#111827",
     marginBottom: 12,
   },
-  filterRow: {
-    flexDirection: "row",
-    gap: 12,
-  },
+  filterRow: { flexDirection: "row", gap: 8 },
   filterBtn: {
-    height: 52,
-    paddingHorizontal: 16,
+    height: 48,
+    paddingHorizontal: 12,
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
   },
-  filterBtnText: {
-    fontSize: 17,
-    fontWeight: "700",
-  },
-
+  filterBtnText: { fontSize: 14, fontWeight: "700" },
   fechaBtn: {
     height: 58,
     borderRadius: 18,
@@ -1659,11 +2101,7 @@ const s = StyleSheet.create({
     gap: 10,
     marginBottom: 24,
   },
-  fechaBtnText: {
-    fontSize: 17,
-    fontWeight: "700",
-  },
-
+  fechaBtnText: { fontSize: 17, fontWeight: "700" },
   btnExcelAncho: {
     height: 58,
     borderRadius: 18,
@@ -1676,12 +2114,7 @@ const s = StyleSheet.create({
     gap: 10,
     marginBottom: 24,
   },
-  btnExcelAnchoTxt: {
-    fontSize: 17,
-    fontWeight: "700",
-    color: "#16A34A",
-  },
-
+  btnExcelAnchoTxt: { fontSize: 17, fontWeight: "700", color: "#16A34A" },
   tituloGrupoFecha: {
     fontSize: 19,
     fontWeight: "800",
@@ -1719,7 +2152,6 @@ const s = StyleSheet.create({
     marginTop: 4,
   },
   badgeTxt: { fontSize: 13, fontWeight: "700" },
-
   btnVerGrande: {
     flexDirection: "row",
     alignItems: "center",
@@ -1731,7 +2163,6 @@ const s = StyleSheet.create({
     marginLeft: 6,
   },
   btnVerGrandeTxt: { fontSize: 15, fontWeight: "700" },
-
   btnPrincipalAncho: {
     height: 58,
     backgroundColor: "#2563EB",
@@ -1885,14 +2316,108 @@ const ms = StyleSheet.create({
     justifyContent: "center",
   },
   facturaTxt: { fontSize: 13, color: "#7B8499" },
+
+  // ── Bloque de anulación en el detalle ────────────────────────────────────
+  bloqueAnulacion: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
+    padding: 14,
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  anulacionFila: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  anulacionLabel: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    fontWeight: "600",
+    width: 90,
+  },
+  anulacionValor: {
+    fontSize: 13,
+    color: "#7F1D1D",
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+
+  // ── Botón anular en el detalle ────────────────────────────────────────────
+  btnAnular: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
+  },
+  btnAnularTxt: { fontSize: 16, fontWeight: "800", color: "#DC2626" },
+
+  // ── Modal anular ─────────────────────────────────────────────────────────
+  resumenAnulacion: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 14,
+    gap: 8,
+  },
+  resumenFila: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  resumenLabel: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  resumenValor: { fontSize: 14, color: "#111827", fontWeight: "700" },
+  avisoAnulacion: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  avisoTxt: { flex: 1, fontSize: 13, color: "#92400E", lineHeight: 19 },
+  inputAreaWrap: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 16,
+    padding: 14,
+    minHeight: 90,
+  },
+  inputArea: { fontSize: 16, color: "#111827", fontWeight: "500" },
+  btnCancelarAnulacion: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnCancelarAnulacionTxt: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#4B5563",
+  },
+  btnConfirmarAnulacion: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#DC2626",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  btnConfirmarAnulacionTxt: { fontSize: 16, fontWeight: "800", color: "#FFF" },
 });
 
 const mf = StyleSheet.create({
-  label: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#374151",
-  },
+  label: { fontSize: 15, fontWeight: "700", color: "#374151" },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1902,10 +2427,7 @@ const mf = StyleSheet.create({
     borderRadius: 16,
     height: 58,
   },
-  inputError: {
-    borderColor: "#EF4444",
-    backgroundColor: "#FFF5F5",
-  },
+  inputError: { borderColor: "#EF4444", backgroundColor: "#FFF5F5" },
   input: {
     flex: 1,
     fontSize: 20,

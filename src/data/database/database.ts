@@ -85,18 +85,30 @@ export const initDatabase = (): void => {
         ON DELETE RESTRICT
         ON UPDATE CASCADE
     );
+
+    -- ── TABLA DE ANULACIONES ───────────────────────────────────────────────
+    -- Guarda la auditoría de cada factura anulada.
+    -- Se relaciona con ventas pero NO en cascada: el historial debe
+    -- mantenerse incluso si (hipotéticamente) se eliminara la venta.
+    CREATE TABLE IF NOT EXISTS anulaciones (
+      id        TEXT PRIMARY KEY NOT NULL,
+      ventaId   TEXT NOT NULL UNIQUE,   -- una venta solo puede anularse una vez
+      fecha     TEXT NOT NULL,           -- ISO timestamp del momento de anulación
+      usuario   TEXT NOT NULL,           -- quién anuló
+      motivo    TEXT NOT NULL,           -- por qué se anuló
+      FOREIGN KEY (ventaId)
+        REFERENCES ventas(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+    );
   `);
 
   // ── TRIGGERS ──────────────────────────────────────────────────────────────
-  // Dropear siempre y recrear, para que el fix llegue a usuarios con la app
-  // ya instalada que tienen la versión defectuosa en su BD.
   db.execSync(`
     DROP TRIGGER IF EXISTS desactivar_cliente_si_tiene_ventas;
     DROP TRIGGER IF EXISTS desactivar_producto_en_delete;
   `);
 
-  // Cliente: solo archiva (cancela el DELETE) si tiene ventas asociadas.
-  // Si NO tiene ventas, el trigger no hace nada → el DELETE procede normal.
   db.execSync(`
     CREATE TRIGGER desactivar_cliente_si_tiene_ventas
     BEFORE DELETE ON clientes
@@ -108,8 +120,6 @@ export const initDatabase = (): void => {
     END;
   `);
 
-  // Producto: solo archiva si aparece en algún ítem de venta_items.
-  // Si nunca se vendió, el DELETE procede normal y lo elimina de verdad.
   db.execSync(`
     CREATE TRIGGER desactivar_producto_en_delete
     BEFORE DELETE ON productos
@@ -167,8 +177,21 @@ export const initDatabase = (): void => {
     );
   }
 
+  // ── Migración: tabla anulaciones (usuarios con app previa no la tienen) ──
+  // CREATE TABLE IF NOT EXISTS ya la crea arriba para instalaciones nuevas.
+  // Para las existentes el CREATE IF NOT EXISTS también aplica, pero dejamos
+  // este bloque explícito como documentación y para garantizar el índice.
+  try {
+    db.execSync(`
+      CREATE INDEX IF NOT EXISTS idx_anulaciones_ventaId
+        ON anulaciones(ventaId);
+    `);
+  } catch {
+    // Si la tabla aún no existía en una BD muy vieja, el CREATE TABLE
+    // de arriba ya la habrá creado; el índice se intenta igual.
+  }
+
   // ── Migración: poblar venta_items desde la columna JSON 'items' ──────────
-  // Se ejecuta una sola vez: sólo procesa ventas que no tienen filas en venta_items.
   const ventasSinItems = db.getAllSync<{ id: string; items: string }>(`
     SELECT v.id, v.items
     FROM ventas v

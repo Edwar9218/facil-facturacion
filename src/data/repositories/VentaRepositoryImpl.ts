@@ -1,13 +1,14 @@
 import { ItemVenta, Venta } from "../../domain/entities/Venta";
-import { VentaRepository } from "../../domain/repositories/VentaRepository";
+import {
+  AnulacionData,
+  VentaRepository,
+} from "../../domain/repositories/VentaRepository";
 import db from "../database/database";
 import { ProductoRepositoryImpl } from "./ProductoRepositoryImpl";
 
 const productoRepo = new ProductoRepositoryImpl();
 
 // ── Helper: construye el array de ItemVenta desde venta_items ─────────────────
-// Primero intenta leer de venta_items (tabla normalizada).
-// Si no hay filas (registro viejo migrado al vuelo), cae al JSON legacy.
 const cargarItems = (ventaId: string, itemsJson: string): ItemVenta[] => {
   const filas = db.getAllSync<any>(
     `SELECT productoId, nombreProducto, precioUnitario, cantidad, subtotal
@@ -19,7 +20,6 @@ const cargarItems = (ventaId: string, itemsJson: string): ItemVenta[] => {
 
   if (filas.length > 0) return filas as ItemVenta[];
 
-  // Fallback: JSON legacy (ventas antes de la migración)
   try {
     return JSON.parse(itemsJson) as ItemVenta[];
   } catch {
@@ -27,14 +27,38 @@ const cargarItems = (ventaId: string, itemsJson: string): ItemVenta[] => {
   }
 };
 
+// ── Helper: carga la anulación de una venta si existe ─────────────────────────
+const cargarAnulacion = (ventaId: string): Venta["anulacion"] | undefined => {
+  const row = db.getFirstSync<{
+    fecha: string;
+    usuario: string;
+    motivo: string;
+  }>(`SELECT fecha, usuario, motivo FROM anulaciones WHERE ventaId = ?;`, [
+    ventaId,
+  ]);
+  return row ?? undefined;
+};
+
 // ── Helper: estado normalizado ────────────────────────────────────────────────
 const resolverEstado = (
   estado: string | null,
   tipo: string,
-): "pagado" | "debe" => {
+): "pagado" | "debe" | "anulada" => {
   if (estado === "pagado") return "pagado";
   if (estado === "debe") return "debe";
+  if (estado === "anulada") return "anulada";
   return tipo === "contado" ? "pagado" : "debe";
+};
+
+// ── Helper: mapea una fila de BD a la entidad Venta ───────────────────────────
+const mapearVenta = (r: any): Venta => {
+  const estado = resolverEstado(r.estado, r.tipo);
+  return {
+    ...r,
+    items: cargarItems(r.id, r.items),
+    estado,
+    anulacion: estado === "anulada" ? cargarAnulacion(r.id) : undefined,
+  };
 };
 
 export class VentaRepositoryImpl implements VentaRepository {
@@ -42,11 +66,7 @@ export class VentaRepositoryImpl implements VentaRepository {
     const rows = db.getAllSync<any>(
       "SELECT * FROM ventas ORDER BY rowid DESC;",
     );
-    return rows.map((r) => ({
-      ...r,
-      items: cargarItems(r.id, r.items),
-      estado: resolverEstado(r.estado, r.tipo),
-    }));
+    return rows.map(mapearVenta);
   }
 
   async getByCliente(clienteId: string): Promise<Venta[]> {
@@ -54,11 +74,7 @@ export class VentaRepositoryImpl implements VentaRepository {
       "SELECT * FROM ventas WHERE clienteId = ? ORDER BY rowid DESC;",
       [clienteId],
     );
-    return rows.map((r) => ({
-      ...r,
-      items: cargarItems(r.id, r.items),
-      estado: resolverEstado(r.estado, r.tipo),
-    }));
+    return rows.map(mapearVenta);
   }
 
   async create(data: Omit<Venta, "id">): Promise<Venta> {
@@ -77,9 +93,7 @@ export class VentaRepositoryImpl implements VentaRepository {
     const estadoInicial: "pagado" | "debe" =
       data.tipo === "contado" ? "pagado" : "debe";
 
-    // ── Transacción: insertar venta + todos sus ítems atomicamente ────────
     db.withTransactionSync(() => {
-      // La columna `items` queda '[]'; la fuente de verdad es venta_items.
       db.runSync(
         `INSERT INTO ventas
            (id, clienteId, nombreCliente, items, total, tipo, fecha, numeroFactura, estado)
@@ -115,8 +129,6 @@ export class VentaRepositoryImpl implements VentaRepository {
       }
     });
 
-    // ── Descontar stock fuera de la transacción ───────────────────────────
-    // Si falla, la venta ya quedó guardada (el stock es best-effort).
     try {
       for (const item of data.items) {
         await productoRepo.ajustarStock(item.productoId, -item.cantidad);
@@ -134,7 +146,94 @@ export class VentaRepositoryImpl implements VentaRepository {
   }
 
   async delete(id: string): Promise<void> {
-    // ON DELETE CASCADE en venta_items borra los ítems automáticamente.
     db.runSync("DELETE FROM ventas WHERE id = ?;", [id]);
+  }
+
+  // ── ANULAR ────────────────────────────────────────────────────────────────
+  /**
+   * Flujo completo de anulación (atómico):
+   *
+   * 1. Verifica que la venta existe, NO está ya anulada, y NO tiene abonos
+   * 2. Dentro de una transacción:
+   * a. Cambia estado → 'anulada' en ventas
+   * b. Inserta el registro de auditoría en anulaciones
+   * 3. Fuera de la transacción: restaura stock de cada ítem
+   * (best-effort, igual que el descuento al crear)
+   * 4. Devuelve la venta actualizada con el bloque anulacion incluido
+   */
+  async anular(id: string, data: AnulacionData): Promise<Venta> {
+    // ── 1. Verificaciones previas ─────────────────────────────────────────
+    const ventaRow = db.getFirstSync<any>(
+      "SELECT * FROM ventas WHERE id = ?;",
+      [id],
+    );
+
+    if (!ventaRow) {
+      throw new Error(`Venta "${id}" no encontrada.`);
+    }
+
+    if (ventaRow.estado === "anulada") {
+      throw new Error(
+        `La factura ${ventaRow.numeroFactura ?? id} ya está anulada.`,
+      );
+    }
+
+    // NUEVA VALIDACIÓN: Bloquear si tiene abonos registrados
+    const abonoQuery = db.getFirstSync<{ totalAbonado: number }>(
+      "SELECT SUM(monto) as totalAbonado FROM abonos WHERE ventaId = ?;",
+      [id],
+    );
+
+    if (abonoQuery && abonoQuery.totalAbonado > 0) {
+      throw new Error(
+        "Esta factura tiene abonos registrados. Primero debes revertirlos manualmente.",
+      );
+    }
+
+    const fechaAnulacion = new Date().toISOString();
+    const anulacionId = `anu_${id}_${Date.now()}`;
+
+    // ── 2. Transacción: marcar + auditoría ───────────────────────────────
+    db.withTransactionSync(() => {
+      // a) Marcar la venta como anulada
+      db.runSync(`UPDATE ventas SET estado = 'anulada' WHERE id = ?;`, [id]);
+
+      // b) Registrar auditoría
+      db.runSync(
+        `INSERT INTO anulaciones (id, ventaId, fecha, usuario, motivo)
+         VALUES (?, ?, ?, ?, ?);`,
+        [anulacionId, id, fechaAnulacion, data.usuario, data.motivo],
+      );
+    });
+
+    // ── 3. Restaurar stock (best-effort) ──────────────────────────────────
+    const items = cargarItems(id, ventaRow.items);
+    try {
+      for (const item of items) {
+        await productoRepo.ajustarStock(item.productoId, +item.cantidad);
+      }
+    } catch (e) {
+      console.warn("No se pudo restaurar stock al anular:", e);
+    }
+
+    // ── 4. Devolver venta actualizada ─────────────────────────────────────
+    const anulacion: Venta["anulacion"] = {
+      fecha: fechaAnulacion,
+      usuario: data.usuario,
+      motivo: data.motivo,
+    };
+
+    return {
+      id: ventaRow.id,
+      clienteId: ventaRow.clienteId,
+      nombreCliente: ventaRow.nombreCliente,
+      items,
+      total: ventaRow.total,
+      tipo: ventaRow.tipo,
+      fecha: ventaRow.fecha,
+      numeroFactura: ventaRow.numeroFactura,
+      estado: "anulada",
+      anulacion,
+    };
   }
 }

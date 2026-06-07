@@ -10,9 +10,11 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
+import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as XLSX from "xlsx";
 import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
@@ -58,24 +60,14 @@ const ventaRepo = new VentaRepositoryImpl();
 const creditoRepo = new CreditoRepositoryImpl();
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
+type TipoEstado = "todas" | "pazysalvo" | "debe" | "anulada";
+
 interface Abono {
   id: string;
   clienteId: string;
   ventaId: string;
   monto: number;
   fecha: string;
-}
-
-interface DatosDelDia {
-  recibiidoHoy: number; // contado hoy + abonos cobrados hoy
-  totalHoy: number; // suma de todas las facturas del día
-  ventasHoy: number;
-  clientesHoy: number;
-  totalCreditoHoy: number; // total original fiado hoy
-  creditoSaldoHoy: number; // saldo real pendiente de ventas de hoy
-  creditoPendiente: number; // cartera total (todos los días)
-  ventasDelDia: Venta[];
-  deudores: ResumenCredito[];
 }
 
 const AVATAR_COLORS = [
@@ -92,24 +84,36 @@ const ModalFactura = ({
   venta,
   visible,
   onClose,
-  saldoPorVenta,
+  evaluarFacturaPagada,
+  onAnular,
 }: {
   venta: Venta | null;
   visible: boolean;
   onClose: () => void;
-  saldoPorVenta: Map<string, number>;
+  evaluarFacturaPagada: (v: Venta) => boolean;
+  onAnular: (v: Venta) => void;
 }) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
   if (!venta) return null;
 
-  const esPagado = venta.tipo === "contado" || venta.estado === "pagado";
-  const saldoReal = saldoPorVenta.get(venta.id) ?? venta.total;
+  const esAnulada = venta.estado === "anulada";
+  const esPazYSalvo = !esAnulada && evaluarFacturaPagada(venta);
   const GREEN = "#16A34A";
   const AMBER = "#D97706";
+  const RED = "#DC2626";
   const GRAY = "#7B8499";
   const INK = "#111827";
+
+  const badgeBg = esAnulada ? "#FEE2E2" : esPazYSalvo ? "#DCFCE7" : "#FEF3C7";
+  const badgeColor = esAnulada ? RED : esPazYSalvo ? GREEN : AMBER;
+  const badgeIcon = esAnulada
+    ? "cancel"
+    : esPazYSalvo
+      ? "check-circle"
+      : "clock-outline";
+  const badgeLabel = esAnulada ? "Anulada" : esPazYSalvo ? "Al día" : "En mora";
 
   return (
     <Modal
@@ -156,24 +160,64 @@ const ModalFactura = ({
                 {horaDeVenta(venta.fecha)}
               </AppText>
             </View>
-            <View
-              style={[
-                ms.badge,
-                { backgroundColor: esPagado ? "#DCFCE7" : "#FEF3C7" },
-              ]}
-            >
+            <View style={[ms.badge, { backgroundColor: badgeBg }]}>
               <MaterialCommunityIcons
-                name={esPagado ? "check-circle" : "clock-outline"}
+                name={badgeIcon as any}
                 size={14}
-                color={esPagado ? GREEN : AMBER}
+                color={badgeColor}
               />
-              <AppText
-                style={[ms.badgeTxt, { color: esPagado ? GREEN : AMBER }]}
-              >
-                {esPagado ? "Al día" : "En mora"}
+              <AppText style={[ms.badgeTxt, { color: badgeColor }]}>
+                {badgeLabel}
               </AppText>
             </View>
           </View>
+
+          {esAnulada && venta.anulacion && (
+            <View style={ms.bloqueAnulacion}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 6,
+                  marginBottom: 8,
+                }}
+              >
+                <MaterialCommunityIcons name="cancel" size={18} color={RED} />
+                <AppText
+                  style={{ fontSize: 15, fontWeight: "800", color: RED }}
+                >
+                  Factura anulada
+                </AppText>
+              </View>
+              <View style={{ gap: 4 }}>
+                <View style={ms.anulacionFila}>
+                  <AppText style={ms.anulacionLabel}>Fecha:</AppText>
+                  <AppText style={ms.anulacionValor}>
+                    {new Date(venta.anulacion.fecha).toLocaleString("es-CO", {
+                      timeZone: "America/Bogota",
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </AppText>
+                </View>
+                <View style={ms.anulacionFila}>
+                  <AppText style={ms.anulacionLabel}>Anulada por:</AppText>
+                  <AppText style={ms.anulacionValor}>
+                    {venta.anulacion.usuario}
+                  </AppText>
+                </View>
+                <View style={ms.anulacionFila}>
+                  <AppText style={ms.anulacionLabel}>Motivo:</AppText>
+                  <AppText style={[ms.anulacionValor, { flex: 1 }]}>
+                    {venta.anulacion.motivo}
+                  </AppText>
+                </View>
+              </View>
+            </View>
+          )}
 
           <View style={ms.divisor} />
 
@@ -233,26 +277,20 @@ const ModalFactura = ({
               </AppText>
             </View>
             <View style={{ alignItems: "flex-end" }}>
-              <AppText style={ms.totalLabel}>Total factura</AppText>
-              <AppText style={[ms.totalMonto, { color: INK }]}>
+              <AppText style={ms.totalLabel}>Total</AppText>
+              <AppText
+                style={[
+                  ms.totalMonto,
+                  { color: esAnulada ? "#9CA3AF" : INK },
+                  esAnulada && { textDecorationLine: "line-through" },
+                ]}
+              >
                 {fmt(venta.total)}
               </AppText>
-              {!esPagado && saldoReal < venta.total && (
-                <AppText
-                  style={{
-                    fontSize: 14,
-                    color: AMBER,
-                    fontWeight: "700",
-                    marginTop: 2,
-                  }}
-                >
-                  Saldo: {fmt(saldoReal)}
-                </AppText>
-              )}
             </View>
           </View>
 
-          {!esPagado && (
+          {!esAnulada && !esPazYSalvo && (
             <View style={ms.fiadoInfo}>
               <MaterialCommunityIcons
                 name="information-outline"
@@ -274,7 +312,219 @@ const ModalFactura = ({
               </AppText>
             </View>
           )}
+
+          {!esAnulada && (
+            <TouchableOpacity
+              style={ms.btnAnular}
+              activeOpacity={0.8}
+              onPress={() => onAnular(venta)}
+            >
+              <MaterialCommunityIcons name="cancel" size={20} color={RED} />
+              <AppText style={ms.btnAnularTxt}>Anular factura</AppText>
+            </TouchableOpacity>
+          )}
         </ScrollView>
+      </View>
+    </Modal>
+  );
+};
+
+// ── Modal Anular ──────────────────────────────────────────────────────────────
+const ModalAnular = ({
+  venta,
+  visible,
+  onClose,
+  onConfirmar,
+  anulando,
+}: {
+  venta: Venta | null;
+  visible: boolean;
+  onClose: () => void;
+  onConfirmar: (motivo: string) => void;
+  anulando: boolean;
+}) => {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [motivo, setMotivo] = React.useState("");
+  const [errorMotivo, setErrorMotivo] = React.useState("");
+  const RED = "#DC2626";
+
+  React.useEffect(() => {
+    if (visible) {
+      setMotivo("");
+      setErrorMotivo("");
+    }
+  }, [visible]);
+
+  const handleConfirmar = () => {
+    const motivoTrimmed = motivo.trim();
+    if (motivoTrimmed.length < 5) {
+      setErrorMotivo("Describe el motivo (mínimo 5 caracteres)");
+      return;
+    }
+    onConfirmar(motivoTrimmed);
+  };
+
+  if (!venta) return null;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      transparent
+      onRequestClose={onClose}
+    >
+      <View style={ms.overlay}>
+        <TouchableOpacity
+          style={StyleSheet.absoluteFill}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+
+        <KeyboardAwareScrollView
+          style={{ flex: 1, width: "100%" }}
+          contentContainerStyle={{
+            flexGrow: 1,
+            justifyContent: "flex-end",
+          }}
+          bounces={false}
+          keyboardShouldPersistTaps="handled"
+          enableOnAndroid={true}
+          bottomOffset={20}
+          extraScrollHeight={60}
+        >
+          <View style={[ms.sheet, { paddingBottom: insets.bottom + 24 }]}>
+            <View style={ms.handle} />
+
+            <View style={[ms.header, { borderBottomColor: "#FEE2E2" }]}>
+              <View style={{ flex: 1 }}>
+                <AppText style={[ms.headerTitulo, { color: RED }]}>
+                  Anular factura
+                </AppText>
+                <AppText style={ms.headerFecha}>
+                  {venta.numeroFactura
+                    ? `Factura #${venta.numeroFactura}`
+                    : venta.nombreCliente}
+                </AppText>
+              </View>
+              <TouchableOpacity
+                style={[ms.btnClose, { backgroundColor: "#FCA5A5" }]}
+                onPress={onClose}
+              >
+                <MaterialCommunityIcons name="close" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ padding: 20, gap: 20 }}>
+              <View style={ms.resumenAnulacion}>
+                <View style={ms.resumenFila}>
+                  <AppText style={ms.resumenLabel}>Cliente</AppText>
+                  <AppText style={ms.resumenValor}>
+                    {venta.nombreCliente}
+                  </AppText>
+                </View>
+                <View style={ms.resumenFila}>
+                  <AppText style={ms.resumenLabel}>Total</AppText>
+                  <AppText
+                    style={[ms.resumenValor, { color: RED, fontWeight: "800" }]}
+                  >
+                    {fmt(venta.total)}
+                  </AppText>
+                </View>
+                <View style={ms.resumenFila}>
+                  <AppText style={ms.resumenLabel}>Tipo</AppText>
+                  <AppText style={ms.resumenValor}>
+                    {venta.tipo === "contado" ? "Contado" : "Crédito"}
+                  </AppText>
+                </View>
+              </View>
+
+              <View style={ms.avisoAnulacion}>
+                <MaterialCommunityIcons
+                  name="alert-circle-outline"
+                  size={18}
+                  color="#92400E"
+                />
+                <AppText style={ms.avisoTxt}>
+                  Al anular: el stock de los productos se restaurará y la
+                  factura quedará excluida de las ventas activas. Esta acción no
+                  se puede deshacer.
+                </AppText>
+              </View>
+
+              <View style={{ gap: 8 }}>
+                <AppText style={mf.label}>Motivo de anulación</AppText>
+                <View
+                  style={[
+                    ms.inputAreaWrap,
+                    errorMotivo
+                      ? { borderColor: "#EF4444", backgroundColor: "#FFF5F5" }
+                      : null,
+                  ]}
+                >
+                  <TextInput
+                    style={ms.inputArea}
+                    value={motivo}
+                    onChangeText={(t) => {
+                      setMotivo(t);
+                      setErrorMotivo("");
+                    }}
+                    placeholder="Ej: Error en los productos, cliente canceló el pedido..."
+                    placeholderTextColor="#9CA3AF"
+                    multiline
+                    numberOfLines={3}
+                    maxLength={200}
+                    textAlignVertical="top"
+                  />
+                </View>
+                {!!errorMotivo && (
+                  <AppText style={mf.errorTxt}>{errorMotivo}</AppText>
+                )}
+                <AppText
+                  style={{ fontSize: 12, color: "#9CA3AF", textAlign: "right" }}
+                >
+                  {motivo.length}/200
+                </AppText>
+              </View>
+
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <TouchableOpacity
+                  style={[ms.btnCancelarAnulacion, { flex: 1 }]}
+                  onPress={onClose}
+                  activeOpacity={0.8}
+                  disabled={anulando}
+                >
+                  <AppText style={ms.btnCancelarAnulacionTxt}>Cancelar</AppText>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    ms.btnConfirmarAnulacion,
+                    { flex: 1 },
+                    (anulando || motivo.trim().length < 5) && { opacity: 0.5 },
+                  ]}
+                  onPress={handleConfirmar}
+                  activeOpacity={0.8}
+                  disabled={anulando || motivo.trim().length < 5}
+                >
+                  {anulando ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons
+                        name="cancel"
+                        size={18}
+                        color="#fff"
+                      />
+                      <AppText style={ms.btnConfirmarAnulacionTxt}>
+                        Anular
+                      </AppText>
+                    </>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </KeyboardAwareScrollView>
       </View>
     </Modal>
   );
@@ -285,17 +535,170 @@ export const VentaDelDiaScreen = () => {
   const { colors } = useTheme();
   const router = useRouter();
 
-  const [datos, setDatos] = React.useState<DatosDelDia | null>(null);
+  // Estados Base
+  const [todasVentasDeHoy, setTodasVentasDeHoy] = React.useState<Venta[]>([]);
   const [abonos, setAbonos] = React.useState<Abono[]>([]);
+  const [deudores, setDeudores] = React.useState<ResumenCredito[]>([]);
+
+  // Controles UI
+  const [filtroEstado, setFiltroEstado] = React.useState<TipoEstado>("todas");
   const [cargando, setCargando] = React.useState(true);
   const [refrescando, setRefrescando] = React.useState(false);
   const [mostrarTodas, setMostrarTodas] = React.useState(false);
   const [exportando, setExportando] = React.useState(false);
 
+  // Modales
   const [ventaSeleccionada, setVentaSeleccionada] =
     React.useState<Venta | null>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
 
+  // Anulación
+  const [ventaAAnular, setVentaAAnular] = React.useState<Venta | null>(null);
+  const [modalAnularVisible, setModalAnularVisible] = React.useState(false);
+  const [anulando, setAnulando] = React.useState(false);
+
+  // ── Saldo real por factura ────────────────────────────────────────────────
+  const saldoPorVenta = React.useMemo(() => {
+    const mapa = new Map<string, number>();
+    todasVentasDeHoy.forEach((v) => {
+      const totalAbonado = abonos
+        .filter((a) => a.ventaId === v.id)
+        .reduce((sum, a) => sum + a.monto, 0);
+      mapa.set(v.id, Math.max(0, v.total - totalAbonado));
+    });
+    return mapa;
+  }, [todasVentasDeHoy, abonos]);
+
+  const evaluarFacturaPagada = React.useCallback(
+    (venta: Venta) => {
+      if (venta.estado === "anulada") return false;
+      if (venta.tipo === "contado") return true;
+      if (venta.estado === "pagado") return true;
+      const totalAbonado = abonos
+        .filter((a) => a.ventaId === venta.id)
+        .reduce((sum, a) => sum + a.monto, 0);
+      return totalAbonado >= venta.total;
+    },
+    [abonos],
+  );
+
+  // ── Filtro Dinámico ───────────────────────────────────────────────────────
+  const ventasFiltradas = React.useMemo(() => {
+    let resultado = [...todasVentasDeHoy];
+    if (filtroEstado === "pazysalvo") {
+      resultado = resultado.filter(
+        (v) => v.estado !== "anulada" && evaluarFacturaPagada(v),
+      );
+    } else if (filtroEstado === "debe") {
+      resultado = resultado.filter(
+        (v) => v.estado !== "anulada" && !evaluarFacturaPagada(v),
+      );
+    } else if (filtroEstado === "anulada") {
+      resultado = resultado.filter((v) => v.estado === "anulada");
+    }
+    return resultado.sort(
+      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
+    );
+  }, [todasVentasDeHoy, filtroEstado, evaluarFacturaPagada]);
+
+  // ── Estadísticas y Restas Automáticas de las tarjetas ───────────────────
+  const stats = React.useMemo(() => {
+    // Para todas las cuentas de dinero e ingresos ignoramos las facturas "anuladas"
+    const ventasActivas = todasVentasDeHoy.filter(
+      (v) => v.estado !== "anulada",
+    );
+    const ventasAnuladas = todasVentasDeHoy.filter(
+      (v) => v.estado === "anulada",
+    );
+
+    const ventasHoy = ventasActivas.length;
+    const cantAnuladas = ventasAnuladas.length;
+    const clientesHoy = [...new Set(ventasActivas.map((v) => v.clienteId))]
+      .length;
+
+    // Abonos cobrados HOY (no importa de qué fecha es la factura)
+    const abonosDeHoy = abonos.filter((a: Abono) => esHoy(a.fecha));
+    const totalAbonosHoy = abonosDeHoy.reduce(
+      (s: number, a: Abono) => s + a.monto,
+      0,
+    );
+
+    // Dinero de contado cobrado HOY
+    const totalContadoHoy = ventasActivas
+      .filter((v) => v.tipo === "contado")
+      .reduce((a, v) => a + v.total, 0);
+
+    const recibiidoHoy = totalContadoHoy + totalAbonosHoy;
+
+    // Saldo real pendiente de las ventas a crédito de HOY
+    const creditoSaldoHoy = ventasActivas
+      .filter((v) => v.tipo === "credito")
+      .reduce((acc, v) => {
+        const abonado = abonosDeHoy
+          .filter((a: Abono) => a.ventaId === v.id)
+          .reduce((s: number, a: Abono) => s + a.monto, 0);
+        return acc + Math.max(0, v.total - abonado);
+      }, 0);
+
+    const creditoPendiente = deudores.reduce((a, r) => a + r.saldoActual, 0);
+
+    return {
+      ventasHoy,
+      cantAnuladas,
+      clientesHoy,
+      recibiidoHoy,
+      totalContadoHoy,
+      totalAbonosHoy,
+      creditoSaldoHoy,
+      creditoPendiente,
+    };
+  }, [todasVentasDeHoy, abonos, deudores]);
+
+  // ── Top 3 productos (excluyendo anuladas) ───────────────────────────────
+  const top3 = React.useMemo(() => {
+    const conteo: { [nombre: string]: number } = {};
+    todasVentasDeHoy
+      .filter((v) => v.estado !== "anulada")
+      .forEach((v) => {
+        (v.items ?? []).forEach((item: ItemVenta) => {
+          const nombre = item.nombreProducto ?? "Producto";
+          conteo[nombre] = (conteo[nombre] ?? 0) + (item.cantidad ?? 1);
+        });
+      });
+    return Object.entries(conteo)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([nombre, cantidad]) => ({ nombre, cantidad }));
+  }, [todasVentasDeHoy]);
+
+  const cargar = async (esRefresh = false) => {
+    if (esRefresh) setRefrescando(true);
+    else setCargando(true);
+
+    try {
+      const [todasVentas, resumenes, listaAbonos] = await Promise.all([
+        ventaRepo.getAll(),
+        creditoRepo.getResumenes(),
+        creditoRepo.getAbonos ? creditoRepo.getAbonos() : Promise.resolve([]),
+      ]);
+
+      const ventasDeHoy = todasVentas.filter((v) => esHoy(v.fecha));
+      setTodasVentasDeHoy(ventasDeHoy);
+      setAbonos(listaAbonos);
+      setDeudores(resumenes);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCargando(false);
+      setRefrescando(false);
+    }
+  };
+
+  React.useEffect(() => {
+    cargar();
+  }, []);
+
+  // ── Funciones Modales ───────────────────────────────────────────────────
   const abrirModal = (venta: Venta) => {
     setVentaSeleccionada(venta);
     setModalVisible(true);
@@ -306,111 +709,73 @@ export const VentaDelDiaScreen = () => {
     setTimeout(() => setVentaSeleccionada(null), 300);
   };
 
-  // ── Saldo real por factura ────────────────────────────────────────────────
-  const saldoPorVenta = React.useMemo(() => {
-    const mapa = new Map<string, number>();
-    if (!datos) return mapa;
-    datos.ventasDelDia.forEach((v) => {
-      const totalAbonado = abonos
-        .filter((a) => a.ventaId === v.id)
-        .reduce((sum, a) => sum + a.monto, 0);
-      mapa.set(v.id, Math.max(0, v.total - totalAbonado));
-    });
-    return mapa;
-  }, [datos, abonos]);
-
-  const cargar = async (esRefresh = false) => {
-    if (esRefresh) setRefrescando(true);
-    else setCargando(true);
-
-    const [todasVentas, resumenes, listaAbonos] = await Promise.all([
-      ventaRepo.getAll(),
-      creditoRepo.getResumenes(),
-      creditoRepo.getAbonos ? creditoRepo.getAbonos() : Promise.resolve([]),
-    ]);
-
-    const ventasDeHoy = todasVentas.filter((v) => esHoy(v.fecha));
-    const clientesIds = [...new Set(ventasDeHoy.map((v) => v.clienteId))];
-
-    // Abonos cobrados hoy (independiente de cuándo fue la venta)
-    const abonosDeHoy = listaAbonos.filter((a: Abono) => esHoy(a.fecha));
-    const totalAbonosHoy = abonosDeHoy.reduce(
-      (s: number, a: Abono) => s + a.monto,
-      0,
-    );
-
-    // Recibido hoy = ventas de contado de hoy + abonos cobrados hoy
-    const totalContadoHoy = ventasDeHoy
-      .filter((v) => v.tipo === "contado")
-      .reduce((a, v) => a + v.total, 0);
-    const recibiidoHoy = totalContadoHoy + totalAbonosHoy;
-
-    // Saldo real de ventas a crédito de HOY
-    // Solo descuenta abonos cobrados HOY (filtrado por fecha del abono)
-    // Así si alguien abonó ayer, no afecta el pendiente de hoy
-    const totalCreditoHoy = ventasDeHoy
-      .filter((v) => v.tipo === "credito")
-      .reduce((a, v) => a + v.total, 0);
-
-    const creditoSaldoHoy = ventasDeHoy
-      .filter((v) => v.tipo === "credito")
-      .reduce((acc, v) => {
-        const abonado = abonosDeHoy
-          .filter((a: Abono) => a.ventaId === v.id)
-          .reduce((s: number, a: Abono) => s + a.monto, 0);
-        return acc + Math.max(0, v.total - abonado);
-      }, 0);
-
-    setAbonos(listaAbonos);
-    setDatos({
-      recibiidoHoy,
-      totalHoy: ventasDeHoy.reduce((a, v) => a + v.total, 0),
-      ventasHoy: ventasDeHoy.length,
-      clientesHoy: clientesIds.length,
-      totalCreditoHoy,
-      creditoSaldoHoy,
-      creditoPendiente: resumenes.reduce((a, r) => a + r.saldoActual, 0),
-      ventasDelDia: ventasDeHoy,
-      deudores: resumenes,
-    });
-
-    setCargando(false);
-    setRefrescando(false);
+  const handleSolicitarAnular = (venta: Venta) => {
+    cerrarModal();
+    setTimeout(() => {
+      setVentaAAnular(venta);
+      setModalAnularVisible(true);
+    }, 350);
   };
 
-  React.useEffect(() => {
-    cargar();
-  }, []);
-
-  // ── Top 3 productos del día ───────────────────────────────────────────────
-  const top3 = React.useMemo(() => {
-    if (!datos) return [];
-    const conteo: { [nombre: string]: number } = {};
-    datos.ventasDelDia.forEach((v) => {
-      (v.items ?? []).forEach((item: ItemVenta) => {
-        const nombre = item.nombreProducto ?? "Producto";
-        conteo[nombre] = (conteo[nombre] ?? 0) + (item.cantidad ?? 1);
+  const handleConfirmarAnulacion = async (motivo: string) => {
+    if (!ventaAAnular) return;
+    setAnulando(true);
+    try {
+      await ventaRepo.anular(ventaAAnular.id, {
+        usuario: "Usuario",
+        motivo,
       });
-    });
-    return Object.entries(conteo)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([nombre, cantidad]) => ({ nombre, cantidad }));
-  }, [datos]);
+
+      // Actualizar el estado local en la matriz del día (Se recalcularán solos todos los memos de las tarjetas)
+      setTodasVentasDeHoy((prev) =>
+        prev.map((v) =>
+          v.id === ventaAAnular.id
+            ? {
+                ...v,
+                estado: "anulada" as const,
+                anulacion: {
+                  fecha: new Date().toISOString(),
+                  usuario: "Usuario",
+                  motivo,
+                },
+              }
+            : v,
+        ),
+      );
+
+      setModalAnularVisible(false);
+      setVentaAAnular(null);
+
+      Alert.alert(
+        "Factura anulada",
+        `La factura ${ventaAAnular.numeroFactura ?? ""} de hoy fue anulada y el stock restaurado.`,
+        [{ text: "Entendido" }],
+      );
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "No se pudo anular la factura.");
+    } finally {
+      setAnulando(false);
+    }
+  };
 
   // ── Exportar Excel ────────────────────────────────────────────────────────
   const exportarExcel = async () => {
-    if (!datos || datos.ventasDelDia.length === 0) {
-      Alert.alert("Sin datos", "No hay ventas hoy para exportar.");
+    if (ventasFiltradas.length === 0) {
+      Alert.alert(
+        "Sin datos",
+        "No hay ventas con el filtro actual para exportar.",
+      );
       return;
     }
     setExportando(true);
     try {
       const filas: object[] = [];
-      datos.ventasDelDia.forEach((v) => {
+      ventasFiltradas.forEach((v) => {
+        const esAnulada = v.estado === "anulada";
         const saldo = saldoPorVenta.get(v.id) ?? v.total;
-        const estadoReal =
-          v.tipo === "contado" || v.estado === "pagado"
+        const estReal = esAnulada
+          ? "Anulada"
+          : evaluarFacturaPagada(v)
             ? "Al día"
             : saldo < v.total
               ? "Abono parcial"
@@ -435,8 +800,9 @@ export const VentaDelDiaScreen = () => {
               Subtotal: item.subtotal,
               "Tipo de pago": v.tipo === "contado" ? "Contado" : "Crédito",
               "Total factura": v.total,
-              "Saldo pendiente": saldo,
-              Estado: estadoReal,
+              "Saldo pendiente": esAnulada ? 0 : saldo,
+              Estado: estReal,
+              "Motivo Anulación": esAnulada ? (v.anulacion?.motivo ?? "") : "",
             });
           });
         } else {
@@ -457,8 +823,9 @@ export const VentaDelDiaScreen = () => {
             Subtotal: "",
             "Tipo de pago": v.tipo === "contado" ? "Contado" : "Crédito",
             "Total factura": v.total,
-            "Saldo pendiente": saldo,
-            Estado: estadoReal,
+            "Saldo pendiente": esAnulada ? 0 : saldo,
+            Estado: estReal,
+            "Motivo Anulación": esAnulada ? (v.anulacion?.motivo ?? "") : "",
           });
         }
       });
@@ -477,6 +844,7 @@ export const VentaDelDiaScreen = () => {
         { wch: 14 },
         { wch: 16 },
         { wch: 14 },
+        { wch: 25 },
       ];
       const libro = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(libro, hoja, "Ventas del día");
@@ -526,12 +894,10 @@ export const VentaDelDiaScreen = () => {
     );
   }
 
-  if (!datos) return null;
-
-  const hayVentas = datos.ventasHoy > 0;
+  const hayVentasHistoricasHoy = todasVentasDeHoy.length > 0;
   const ventasVisibles = mostrarTodas
-    ? datos.ventasDelDia
-    : datos.ventasDelDia.slice(0, 5);
+    ? ventasFiltradas
+    : ventasFiltradas.slice(0, 5);
   const medallas = ["🥇", "🥈", "🥉"];
   const barColors = ["#F59E0B", "#9CA3AF", "#CD7C2F"];
   const maxCantidad = top3[0]?.cantidad ?? 1;
@@ -554,9 +920,72 @@ export const VentaDelDiaScreen = () => {
           />
         }
       >
+        {/* ══ FILTRO ESTADO ═════════════════════════════════════════════ */}
+        {hayVentasHistoricasHoy && (
+          <View style={s.filterSection}>
+            <AppText style={s.filterTitle}>Estado de facturas</AppText>
+            <View style={[s.filterRow, { flexWrap: "wrap" }]}>
+              {(
+                [
+                  { key: "todas", label: "Todas", color: colors.primary },
+                  { key: "pazysalvo", label: "Activas", color: "#16A34A" },
+                  { key: "debe", label: "En mora", color: "#D97706" },
+                  { key: "anulada", label: "Anuladas", color: "#DC2626" },
+                ] as { key: TipoEstado; label: string; color: string }[]
+              ).map(({ key, label, color }) => {
+                const activo = filtroEstado === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[
+                      s.filterBtn,
+                      activo
+                        ? { backgroundColor: color }
+                        : { backgroundColor: "#F3F4F6" },
+                      { flex: 1, minWidth: "22%" },
+                    ]}
+                    onPress={() => setFiltroEstado(key)}
+                    activeOpacity={0.8}
+                  >
+                    <AppText
+                      style={[
+                        s.filterBtnText,
+                        { color: activo ? "#FFF" : "#4B5563", fontSize: 14 },
+                      ]}
+                    >
+                      {label}
+                    </AppText>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[s.btnExcel, exportando && { opacity: 0.6 }]}
+          activeOpacity={0.8}
+          onPress={exportarExcel}
+          disabled={exportando}
+        >
+          {exportando ? (
+            <ActivityIndicator size="small" color="#15803D" />
+          ) : (
+            <MaterialCommunityIcons
+              name="file-excel"
+              size={24}
+              color="#15803D"
+            />
+          )}
+          <AppText style={s.btnExcelTxt}>
+            {exportando
+              ? "Generando archivo..."
+              : "Exportar ventas de hoy a Excel"}
+          </AppText>
+        </TouchableOpacity>
+
         {/* ══ TARJETA PRINCIPAL ══════════════════════════════════════════ */}
         <View style={[s.card, { marginBottom: 16 }]}>
-          {/* Encabezado: título + badge fecha larga */}
           <View
             style={{
               flexDirection: "row",
@@ -594,13 +1023,16 @@ export const VentaDelDiaScreen = () => {
           <AppText
             style={[
               s.totalGrande,
-              { color: hayVentas ? colors.primary : colors.grayText },
+              {
+                color: hayVentasHistoricasHoy
+                  ? colors.primary
+                  : colors.grayText,
+              },
             ]}
           >
-            {fmt(datos.recibiidoHoy)}
+            {fmt(stats.recibiidoHoy)}
           </AppText>
 
-          {/* Desglose siempre visible */}
           <View
             style={{
               backgroundColor: "#F8FAFF",
@@ -612,7 +1044,6 @@ export const VentaDelDiaScreen = () => {
               marginBottom: 14,
             }}
           >
-            {/* Fila: Ventas de contado */}
             <View
               style={{
                 flexDirection: "row",
@@ -663,17 +1094,12 @@ export const VentaDelDiaScreen = () => {
               <AppText
                 style={{ fontSize: 18, color: "#16A34A", fontWeight: "800" }}
               >
-                {fmt(
-                  datos.ventasDelDia
-                    .filter((v) => v.tipo === "contado")
-                    .reduce((a, v) => a + v.total, 0),
-                )}
+                {fmt(stats.totalContadoHoy)}
               </AppText>
             </View>
 
             <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
 
-            {/* Fila: Abonos recibidos */}
             <View
               style={{
                 flexDirection: "row",
@@ -724,18 +1150,12 @@ export const VentaDelDiaScreen = () => {
               <AppText
                 style={{ fontSize: 18, color: "#2563EB", fontWeight: "800" }}
               >
-                {fmt(
-                  datos.recibiidoHoy -
-                    datos.ventasDelDia
-                      .filter((v) => v.tipo === "contado")
-                      .reduce((a, v) => a + v.total, 0),
-                )}
+                {fmt(stats.totalAbonosHoy)}
               </AppText>
             </View>
           </View>
 
-          {/* Pendiente de cobro — solo si hay saldo */}
-          {datos.creditoSaldoHoy > 0 && (
+          {stats.creditoSaldoHoy > 0 && (
             <View
               style={{
                 flexDirection: "row",
@@ -782,7 +1202,59 @@ export const VentaDelDiaScreen = () => {
               <AppText
                 style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
               >
-                {fmt(datos.creditoSaldoHoy)}
+                {fmt(stats.creditoSaldoHoy)}
+              </AppText>
+            </View>
+          )}
+
+          {stats.cantAnuladas > 0 && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#FEF2F2",
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: "#FECACA",
+                paddingHorizontal: 14,
+                paddingVertical: 12,
+                marginBottom: 14,
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name="cancel"
+                  size={22}
+                  color="#DC2626"
+                />
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#7F1D1D",
+                      fontWeight: "700",
+                    }}
+                  >
+                    Facturas anuladas
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#991B1B",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Excluidas del total
+                  </AppText>
+                </View>
+              </View>
+              <AppText
+                style={{ fontSize: 18, color: "#DC2626", fontWeight: "800" }}
+              >
+                {stats.cantAnuladas}
               </AppText>
             </View>
           )}
@@ -799,7 +1271,7 @@ export const VentaDelDiaScreen = () => {
                 />
               </View>
               <View>
-                <AppText style={s.countNum}>{datos.ventasHoy}</AppText>
+                <AppText style={s.countNum}>{stats.ventasHoy}</AppText>
                 <AppText style={s.countLabel}>Ventas hoy</AppText>
               </View>
             </View>
@@ -813,7 +1285,7 @@ export const VentaDelDiaScreen = () => {
                 />
               </View>
               <View>
-                <AppText style={s.countNum}>{datos.clientesHoy}</AppText>
+                <AppText style={s.countNum}>{stats.clientesHoy}</AppText>
                 <AppText style={s.countLabel}>Clientes hoy</AppText>
               </View>
             </View>
@@ -901,138 +1373,201 @@ export const VentaDelDiaScreen = () => {
           )}
         </View>
 
-        {/* ══ BOTÓN EXPORTAR EXCEL ══════════════════════════════════════ */}
-        <TouchableOpacity
-          style={[s.btnExcel, exportando && { opacity: 0.6 }]}
-          activeOpacity={0.8}
-          onPress={exportarExcel}
-          disabled={exportando}
-        >
-          {exportando ? (
-            <ActivityIndicator size="small" color="#15803D" />
-          ) : (
-            <MaterialCommunityIcons
-              name="file-excel"
-              size={24}
-              color="#15803D"
-            />
-          )}
-          <AppText style={s.btnExcelTxt}>
-            {exportando
-              ? "Generando archivo..."
-              : "Exportar ventas de hoy a Excel"}
-          </AppText>
-        </TouchableOpacity>
-
         {/* ══ LISTA VENTAS DEL DÍA ══════════════════════════════════════ */}
-        {hayVentas && (
-          <>
-            <View style={s.seccionHeader}>
-              <AppText style={s.seccionTitulo}>Ventas de hoy</AppText>
-              {datos.ventasDelDia.length > 5 && (
-                <TouchableOpacity
-                  onPress={() => setMostrarTodas((v) => !v)}
-                  activeOpacity={0.7}
-                >
-                  <AppText style={[s.verTodasTxt, { color: colors.primary }]}>
-                    {mostrarTodas
-                      ? "Ver menos"
-                      : `Ver todas (${datos.ventasDelDia.length})`}
-                  </AppText>
-                </TouchableOpacity>
-              )}
-            </View>
+        {hayVentasHistoricasHoy ? (
+          ventasFiltradas.length > 0 ? (
+            <>
+              <View style={s.seccionHeader}>
+                <AppText style={s.seccionTitulo}>Ventas de hoy</AppText>
+                {ventasFiltradas.length > 5 && (
+                  <TouchableOpacity
+                    onPress={() => setMostrarTodas((v) => !v)}
+                    activeOpacity={0.7}
+                  >
+                    <AppText style={[s.verTodasTxt, { color: colors.primary }]}>
+                      {mostrarTodas
+                        ? "Ver menos"
+                        : `Ver todas (${ventasFiltradas.length})`}
+                    </AppText>
+                  </TouchableOpacity>
+                )}
+              </View>
 
-            <View style={{ gap: 10, marginBottom: 16 }}>
-              {ventasVisibles.map((venta, index) => {
-                const avatarColor = AVATAR_COLORS[index % AVATAR_COLORS.length];
-                const inicial = venta.nombreCliente.charAt(0).toUpperCase();
-                const esPagado =
-                  venta.tipo === "contado" || venta.estado === "pagado";
-                const saldo = saldoPorVenta.get(venta.id) ?? venta.total;
-                const tieneAbonosParciales = !esPagado && saldo < venta.total;
+              <View style={{ gap: 10, marginBottom: 16 }}>
+                {ventasVisibles.map((venta, index) => {
+                  const avatarColor =
+                    AVATAR_COLORS[index % AVATAR_COLORS.length];
+                  const inicial = venta.nombreCliente.charAt(0).toUpperCase();
+                  const esAnulada = venta.estado === "anulada";
+                  const esFacturaSaldada =
+                    !esAnulada && evaluarFacturaPagada(venta);
+                  const saldo = saldoPorVenta.get(venta.id) ?? venta.total;
+                  const tieneAbonosParciales =
+                    !esAnulada && !esFacturaSaldada && saldo < venta.total;
 
-                return (
-                  <View key={venta.id} style={s.ventaCard}>
+                  const badgeBg = esAnulada
+                    ? "#FEE2E2"
+                    : esFacturaSaldada
+                      ? "#DCFCE7"
+                      : "#FEF3C7";
+                  const badgeColor = esAnulada
+                    ? "#DC2626"
+                    : esFacturaSaldada
+                      ? "#16A34A"
+                      : "#D97706";
+                  const badgeLabel = esAnulada
+                    ? "Anulada"
+                    : esFacturaSaldada
+                      ? "Al día"
+                      : "En mora";
+
+                  return (
                     <View
-                      style={[s.avatar, { backgroundColor: avatarColor.bg }]}
+                      key={venta.id}
+                      style={[
+                        s.ventaCard,
+                        esAnulada && {
+                          opacity: 0.72,
+                          borderWidth: 1.5,
+                          borderColor: "#FECACA",
+                        },
+                      ]}
                     >
-                      <AppText
-                        style={[s.avatarLetra, { color: avatarColor.fg }]}
-                      >
-                        {inicial}
-                      </AppText>
-                    </View>
-                    <View style={{ flex: 1, marginLeft: 14 }}>
-                      <AppText style={s.ventaNombre} numberOfLines={1}>
-                        {venta.nombreCliente}
-                      </AppText>
-                      <AppText style={s.ventaHora}>
-                        {horaDeVenta(venta.fecha)}
-                      </AppText>
-                    </View>
-                    <View style={{ alignItems: "flex-end", marginRight: 12 }}>
-                      {!esPagado ? (
-                        <>
-                          <AppText style={[s.ventaMonto, { color: "#D97706" }]}>
-                            {fmt(saldo)}
-                          </AppText>
-                          {tieneAbonosParciales && (
-                            <AppText
-                              style={{
-                                fontSize: 11,
-                                color: "#9CA3AF",
-                                marginBottom: 1,
-                              }}
-                            >
-                              de {fmt(venta.total)}
-                            </AppText>
-                          )}
-                        </>
-                      ) : (
-                        <AppText style={s.ventaMonto}>
-                          {fmt(venta.total)}
-                        </AppText>
-                      )}
                       <View
                         style={[
-                          s.badge,
-                          { backgroundColor: esPagado ? "#DCFCE7" : "#FEF3C7" },
+                          s.avatar,
+                          {
+                            backgroundColor: esAnulada
+                              ? "#F3F4F6"
+                              : avatarColor.bg,
+                          },
                         ]}
                       >
                         <AppText
                           style={[
-                            s.badgeTxt,
-                            { color: esPagado ? "#16A34A" : "#D97706" },
+                            s.avatarLetra,
+                            { color: esAnulada ? "#9CA3AF" : avatarColor.fg },
                           ]}
                         >
-                          {esPagado ? "Al día" : "En mora"}
+                          {inicial}
                         </AppText>
                       </View>
+
+                      <View style={{ flex: 1, marginLeft: 14 }}>
+                        <AppText
+                          style={[
+                            s.ventaNombre,
+                            esAnulada && { color: "#9CA3AF" },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {venta.nombreCliente}
+                        </AppText>
+                        <AppText style={s.ventaHora}>
+                          {horaDeVenta(venta.fecha)}
+                        </AppText>
+                      </View>
+
+                      <View style={{ alignItems: "flex-end", marginRight: 12 }}>
+                        {!esAnulada && !esFacturaSaldada ? (
+                          <>
+                            <AppText
+                              style={[s.ventaMonto, { color: "#D97706" }]}
+                            >
+                              {fmt(saldo)}
+                            </AppText>
+                            {tieneAbonosParciales && (
+                              <AppText
+                                style={{
+                                  fontSize: 11,
+                                  color: "#9CA3AF",
+                                  marginBottom: 1,
+                                }}
+                              >
+                                de {fmt(venta.total)}
+                              </AppText>
+                            )}
+                          </>
+                        ) : (
+                          <AppText
+                            style={[
+                              s.ventaMonto,
+                              esAnulada && {
+                                color: "#9CA3AF",
+                                textDecorationLine: "line-through",
+                                fontSize: 15,
+                              },
+                            ]}
+                          >
+                            {fmt(venta.total)}
+                          </AppText>
+                        )}
+                        <View style={[s.badge, { backgroundColor: badgeBg }]}>
+                          <AppText style={[s.badgeTxt, { color: badgeColor }]}>
+                            {badgeLabel}
+                          </AppText>
+                        </View>
+                      </View>
+
+                      <TouchableOpacity
+                        style={[
+                          s.btnVer,
+                          {
+                            borderColor: colors.grayBorder,
+                            backgroundColor: "#F3F4F6",
+                          },
+                        ]}
+                        activeOpacity={0.7}
+                        onPress={() => abrirModal(venta)}
+                      >
+                        <MaterialCommunityIcons
+                          name="file-eye-outline"
+                          size={20}
+                          color={colors.primary}
+                        />
+                        <AppText
+                          style={[s.btnVerTxt, { color: colors.primary }]}
+                        >
+                          Ver
+                        </AppText>
+                      </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                      style={[s.btnVer, { borderColor: colors.grayBorder }]}
-                      activeOpacity={0.7}
-                      onPress={() => abrirModal(venta)}
-                    >
-                      <MaterialCommunityIcons
-                        name="file-eye-outline"
-                        size={20}
-                        color={colors.primary}
-                      />
-                      <AppText style={[s.btnVerTxt, { color: colors.primary }]}>
-                        Ver
-                      </AppText>
-                    </TouchableOpacity>
-                  </View>
-                );
-              })}
+                  );
+                })}
+              </View>
+            </>
+          ) : (
+            <View
+              style={[s.card, { alignItems: "center", paddingVertical: 48 }]}
+            >
+              <MaterialCommunityIcons
+                name="database-search-outline"
+                size={64}
+                color="#C4CBD8"
+                style={{ marginBottom: 16 }}
+              />
+              <AppText style={s.vacioCabeza}>
+                No hay ventas con este filtro
+              </AppText>
             </View>
-          </>
+          )
+        ) : (
+          <View style={[s.card, { alignItems: "center", paddingVertical: 48 }]}>
+            <MaterialCommunityIcons
+              name="cart-off"
+              size={64}
+              color="#C4CBD8"
+              style={{ marginBottom: 16 }}
+            />
+            <AppText style={s.vacioCabeza}>Sin ventas hoy</AppText>
+            <AppText style={s.vacioSub}>
+              Cuando registres una venta aparecerá aquí el resumen del día
+            </AppText>
+          </View>
         )}
 
         {/* ══ CRÉDITO PENDIENTE HISTÓRICO ═══════════════════════════════ */}
-        {datos.deudores.length > 0 && (
+        {deudores.length > 0 && (
           <View style={s.creditoCard}>
             <View
               style={[
@@ -1055,30 +1590,13 @@ export const VentaDelDiaScreen = () => {
               <AppText style={s.creditoTitulo}>Cartera total pendiente</AppText>
               <AppText style={s.creditoSubtitulo}>todos los días</AppText>
               <AppText style={s.creditoMonto}>
-                {fmt(datos.creditoPendiente)}
+                {fmt(stats.creditoPendiente)}
                 <AppText style={s.creditoClientes}>
                   {" · "}
-                  {datos.deudores.length} cliente
-                  {datos.deudores.length !== 1 ? "s" : ""}
+                  {deudores.length} cliente{deudores.length !== 1 ? "s" : ""}
                 </AppText>
               </AppText>
             </View>
-          </View>
-        )}
-
-        {/* ══ ESTADO VACÍO ══════════════════════════════════════════════ */}
-        {!hayVentas && (
-          <View style={[s.card, { alignItems: "center", paddingVertical: 48 }]}>
-            <MaterialCommunityIcons
-              name="cart-off"
-              size={64}
-              color="#C4CBD8"
-              style={{ marginBottom: 16 }}
-            />
-            <AppText style={s.vacioCabeza}>Sin ventas hoy</AppText>
-            <AppText style={s.vacioSub}>
-              Cuando registres una venta aparecerá aquí el resumen del día
-            </AppText>
           </View>
         )}
       </ScrollView>
@@ -1087,7 +1605,19 @@ export const VentaDelDiaScreen = () => {
         venta={ventaSeleccionada}
         visible={modalVisible}
         onClose={cerrarModal}
-        saldoPorVenta={saldoPorVenta}
+        evaluarFacturaPagada={evaluarFacturaPagada}
+        onAnular={handleSolicitarAnular}
+      />
+
+      <ModalAnular
+        venta={ventaAAnular}
+        visible={modalAnularVisible}
+        onClose={() => {
+          setModalAnularVisible(false);
+          setVentaAAnular(null);
+        }}
+        onConfirmar={handleConfirmarAnulacion}
+        anulando={anulando}
       />
     </ScreenWrapper>
   );
@@ -1146,6 +1676,24 @@ const s = StyleSheet.create({
     marginBottom: 16,
   },
   btnExcelTxt: { fontSize: 16, fontWeight: "700", color: "#15803D" },
+
+  filterSection: { marginBottom: 16 },
+  filterTitle: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#111827",
+    marginBottom: 12,
+  },
+  filterRow: { flexDirection: "row", gap: 8 },
+  filterBtn: {
+    height: 48,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  filterBtnText: { fontSize: 14, fontWeight: "700" },
+
   seccionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1242,10 +1790,7 @@ const ms = StyleSheet.create({
     backgroundColor: "rgba(0,0,0,0.45)",
   },
   sheet: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    marginTop: "auto",
     backgroundColor: "#fff",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
@@ -1364,4 +1909,109 @@ const ms = StyleSheet.create({
     justifyContent: "center",
   },
   facturaTxt: { fontSize: 13, color: "#7B8499" },
+
+  bloqueAnulacion: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
+    padding: 14,
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  anulacionFila: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
+  anulacionLabel: {
+    fontSize: 13,
+    color: "#9CA3AF",
+    fontWeight: "600",
+    width: 90,
+  },
+  anulacionValor: {
+    fontSize: 13,
+    color: "#7F1D1D",
+    fontWeight: "600",
+    flexShrink: 1,
+  },
+
+  btnAnular: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 16,
+    paddingVertical: 14,
+    borderRadius: 16,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1.5,
+    borderColor: "#FECACA",
+  },
+  btnAnularTxt: { fontSize: 16, fontWeight: "800", color: "#DC2626" },
+
+  resumenAnulacion: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 14,
+    gap: 8,
+  },
+  resumenFila: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  resumenLabel: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  resumenValor: { fontSize: 14, color: "#111827", fontWeight: "700" },
+  avisoAnulacion: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    backgroundColor: "#FFFBEB",
+    borderRadius: 12,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+  },
+  avisoTxt: { flex: 1, fontSize: 13, color: "#92400E", lineHeight: 19 },
+  inputAreaWrap: {
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    borderRadius: 16,
+    padding: 14,
+    minHeight: 90,
+  },
+  inputArea: { fontSize: 16, color: "#111827", fontWeight: "500" },
+  btnCancelarAnulacion: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnCancelarAnulacionTxt: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#4B5563",
+  },
+  btnConfirmarAnulacion: {
+    height: 52,
+    borderRadius: 16,
+    backgroundColor: "#DC2626",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  btnConfirmarAnulacionTxt: { fontSize: 16, fontWeight: "800", color: "#FFF" },
+});
+
+const mf = StyleSheet.create({
+  label: { fontSize: 15, fontWeight: "700", color: "#374151" },
+  errorTxt: {
+    fontSize: 13,
+    color: "#EF4444",
+    fontWeight: "500",
+    paddingLeft: 4,
+  },
 });
