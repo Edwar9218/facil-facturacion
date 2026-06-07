@@ -343,7 +343,30 @@ const ModalFactura = ({
             </View>
           )}
 
-          {/* Botón anular: solo visible en facturas activas */}
+          {!esAnulada && venta.tipo === "contado" && venta.metodoPago && (
+            <View style={[ms.facturaRow, { marginTop: 6 }]}>
+              <MaterialCommunityIcons
+                name={
+                  venta.metodoPago === "efectivo" ? "cash" : "bank-transfer"
+                }
+                size={14}
+                color={venta.metodoPago === "efectivo" ? "#16A34A" : "#7C3AED"}
+              />
+              <AppText
+                style={[
+                  ms.facturaTxt,
+                  {
+                    color:
+                      venta.metodoPago === "efectivo" ? "#16A34A" : "#7C3AED",
+                    fontWeight: "600",
+                  },
+                ]}
+              >
+                Pagado en{" "}
+                {venta.metodoPago === "efectivo" ? "efectivo" : "transferencia"}
+              </AppText>
+            </View>
+          )}
           {!esAnulada && (
             <TouchableOpacity
               style={ms.btnAnular}
@@ -892,6 +915,15 @@ export const HistorialScreen = () => {
               Cantidad: item.cantidad,
               "Precio unitario": item.precioUnitario,
               Subtotal: item.subtotal,
+              "Tipo de pago": v.tipo === "contado" ? "Contado" : "Crédito",
+              "Método de pago":
+                v.tipo === "contado"
+                  ? v.metodoPago === "efectivo"
+                    ? "Efectivo"
+                    : v.metodoPago === "transferencia"
+                      ? "Transferencia"
+                      : "No especificado"
+                  : "N/A",
               "Estado Factura": estReal,
               Total: v.total,
               "Motivo anulación": esAnulada ? (v.anulacion?.motivo ?? "") : "",
@@ -913,6 +945,15 @@ export const HistorialScreen = () => {
             Cantidad: "",
             "Precio unitario": "",
             Subtotal: "",
+            "Tipo de pago": v.tipo === "contado" ? "Contado" : "Crédito",
+            "Método de pago":
+              v.tipo === "contado"
+                ? v.metodoPago === "efectivo"
+                  ? "Efectivo"
+                  : v.metodoPago === "transferencia"
+                    ? "Transferencia"
+                    : "No especificado"
+                : "N/A",
             "Estado Factura": estReal,
             Total: v.total,
             "Motivo anulación": esAnulada ? (v.anulacion?.motivo ?? "") : "",
@@ -930,6 +971,8 @@ export const HistorialScreen = () => {
         { wch: 10 },
         { wch: 16 },
         { wch: 12 },
+        { wch: 14 },
+        { wch: 18 },
         { wch: 16 },
         { wch: 12 },
         { wch: 30 },
@@ -1113,6 +1156,14 @@ export const HistorialScreen = () => {
       .filter((v) => v.tipo === "contado")
       .reduce((a, v) => a + v.total, 0);
 
+    const totalEfectivo = ventasActivas
+      .filter((v) => v.tipo === "contado" && v.metodoPago === "efectivo")
+      .reduce((a, v) => a + v.total, 0);
+
+    const totalTransferencia = ventasActivas
+      .filter((v) => v.tipo === "contado" && v.metodoPago === "transferencia")
+      .reduce((a, v) => a + v.total, 0);
+
     const totalAbonosParciales = abonos
       .filter((ab) => {
         if (!rangoActivo) return true;
@@ -1155,6 +1206,8 @@ export const HistorialScreen = () => {
       cantVentas,
       cantAnuladas,
       totalContado,
+      totalEfectivo,
+      totalTransferencia,
       totalAbonosParciales,
       totalRecibido,
       totalDebe,
@@ -1461,51 +1514,97 @@ export const HistorialScreen = () => {
                 alignItems: "center",
               }}
             >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
-              >
-                <View
+              <View>
+                <AppText
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    backgroundColor: "#DCFCE7",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    fontSize: 18,
+                    color: "#374151",
+                    fontWeight: "700",
                   }}
                 >
-                  <MaterialCommunityIcons
-                    name="check-bold"
-                    size={20}
-                    color="#16A34A"
-                  />
-                </View>
-                <View>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#374151",
-                      fontWeight: "700",
-                    }}
-                  >
-                    Ventas pagadas
-                  </AppText>
-                  <AppText
-                    style={{
-                      fontSize: 12,
-                      color: "#9CA3AF",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Pago al contado
-                  </AppText>
-                </View>
+                  Ventas pagadas
+                </AppText>
+                <AppText
+                  style={{
+                    fontSize: 14,
+                    color: "#9CA3AF",
+                    fontWeight: "500",
+                  }}
+                >
+                  Pago al contado
+                </AppText>
               </View>
               <AppText
-                style={{ fontSize: 18, color: "#16A34A", fontWeight: "800" }}
+                style={{ fontSize: 20, color: "#16A34A", fontWeight: "800" }}
               >
                 {fmt(stats.totalContado)}
               </AppText>
+            </View>
+
+            {/* Desglose efectivo / transferencia */}
+            <View style={{ gap: 8 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <MaterialCommunityIcons
+                    name="cash"
+                    size={17}
+                    color="#6B7280"
+                  />
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#6B7280",
+                      fontWeight: "500",
+                    }}
+                  >
+                    efectivo
+                  </AppText>
+                </View>
+                <AppText
+                  style={{ fontSize: 16, color: "#16A34A", fontWeight: "700" }}
+                >
+                  {fmt(stats.totalEfectivo)}
+                </AppText>
+              </View>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <MaterialCommunityIcons
+                    name="bank-transfer"
+                    size={17}
+                    color="#6B7280"
+                  />
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#6B7280",
+                      fontWeight: "500",
+                    }}
+                  >
+                    tranferencia
+                  </AppText>
+                </View>
+                <AppText
+                  style={{ fontSize: 16, color: "#16A34A", fontWeight: "700" }}
+                >
+                  {fmt(stats.totalTransferencia)}
+                </AppText>
+              </View>
             </View>
 
             <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
@@ -1518,48 +1617,28 @@ export const HistorialScreen = () => {
                 alignItems: "center",
               }}
             >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
-              >
-                <View
+              <View>
+                <AppText
                   style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 18,
-                    backgroundColor: "#DBEAFE",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    fontSize: 18,
+                    color: "#374151",
+                    fontWeight: "700",
                   }}
                 >
-                  <MaterialCommunityIcons
-                    name="cash-plus"
-                    size={20}
-                    color="#2563EB"
-                  />
-                </View>
-                <View>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#374151",
-                      fontWeight: "700",
-                    }}
-                  >
-                    Abonos recibidos
-                  </AppText>
-                  <AppText
-                    style={{
-                      fontSize: 12,
-                      color: "#9CA3AF",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Pagos parciales de créditos
-                  </AppText>
-                </View>
+                  Abonos recibidos
+                </AppText>
+                <AppText
+                  style={{
+                    fontSize: 14,
+                    color: "#9CA3AF",
+                    fontWeight: "500",
+                  }}
+                >
+                  Pagos parciales de créditos
+                </AppText>
               </View>
               <AppText
-                style={{ fontSize: 18, color: "#2563EB", fontWeight: "800" }}
+                style={{ fontSize: 20, color: "#2563EB", fontWeight: "800" }}
               >
                 {fmt(stats.totalAbonosParciales)}
               </AppText>
@@ -1876,6 +1955,46 @@ export const HistorialScreen = () => {
                         <AppText style={s.ventaHora}>
                           {horaDeVenta(venta.fecha)}
                         </AppText>
+                        {!esAnulada &&
+                          venta.tipo === "contado" &&
+                          venta.metodoPago && (
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: 3,
+                                marginTop: 3,
+                              }}
+                            >
+                              <MaterialCommunityIcons
+                                name={
+                                  venta.metodoPago === "efectivo"
+                                    ? "cash"
+                                    : "bank-transfer"
+                                }
+                                size={13}
+                                color={
+                                  venta.metodoPago === "efectivo"
+                                    ? "#16A34A"
+                                    : "#7C3AED"
+                                }
+                              />
+                              <AppText
+                                style={{
+                                  fontSize: 12,
+                                  color:
+                                    venta.metodoPago === "efectivo"
+                                      ? "#16A34A"
+                                      : "#7C3AED",
+                                  fontWeight: "600",
+                                }}
+                              >
+                                {venta.metodoPago === "efectivo"
+                                  ? "Efectivo"
+                                  : "Transferencia"}
+                              </AppText>
+                            </View>
+                          )}
                       </View>
 
                       {/* Monto + badge */}

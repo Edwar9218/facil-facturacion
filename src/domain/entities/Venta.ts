@@ -22,6 +22,14 @@ export interface Venta {
    */
   estado: "pagado" | "debe" | "anulada";
 
+  /**
+   * Método de pago (solo aplica cuando tipo === 'contado')
+   * 'efectivo'      → el cliente pagó en efectivo
+   * 'transferencia' → el cliente pagó por transferencia
+   * null            → venta a crédito, no aplica
+   */
+  metodoPago: "efectivo" | "transferencia" | null;
+
   // ── Campos de anulación (solo presentes cuando estado === 'anulada') ──
   anulacion?: {
     fecha: string; // ISO timestamp del momento de anulación

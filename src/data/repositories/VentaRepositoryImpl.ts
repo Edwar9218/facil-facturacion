@@ -57,6 +57,7 @@ const mapearVenta = (r: any): Venta => {
     ...r,
     items: cargarItems(r.id, r.items),
     estado,
+    metodoPago: (r.metodoPago as "efectivo" | "transferencia" | null) ?? null,
     anulacion: estado === "anulada" ? cargarAnulacion(r.id) : undefined,
   };
 };
@@ -96,8 +97,8 @@ export class VentaRepositoryImpl implements VentaRepository {
     db.withTransactionSync(() => {
       db.runSync(
         `INSERT INTO ventas
-           (id, clienteId, nombreCliente, items, total, tipo, fecha, numeroFactura, estado)
-         VALUES (?, ?, ?, '[]', ?, ?, ?, ?, ?);`,
+           (id, clienteId, nombreCliente, items, total, tipo, fecha, numeroFactura, estado, metodoPago)
+         VALUES (?, ?, ?, '[]', ?, ?, ?, ?, ?, ?);`,
         [
           id,
           data.clienteId,
@@ -107,6 +108,7 @@ export class VentaRepositoryImpl implements VentaRepository {
           data.fecha,
           numeroFactura,
           estadoInicial,
+          data.metodoPago ?? null,
         ],
       );
 
@@ -142,6 +144,7 @@ export class VentaRepositoryImpl implements VentaRepository {
       ...data,
       numeroFactura,
       estado: estadoInicial,
+      metodoPago: data.metodoPago ?? null,
     };
   }
 
@@ -233,6 +236,8 @@ export class VentaRepositoryImpl implements VentaRepository {
       fecha: ventaRow.fecha,
       numeroFactura: ventaRow.numeroFactura,
       estado: "anulada",
+      metodoPago:
+        (ventaRow.metodoPago as "efectivo" | "transferencia" | null) ?? null,
       anulacion,
     };
   }

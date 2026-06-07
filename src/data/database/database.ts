@@ -45,6 +45,7 @@ export const initDatabase = (): void => {
       fecha         TEXT NOT NULL,
       numeroFactura TEXT,
       estado        TEXT NOT NULL DEFAULT 'debe',
+      metodoPago    TEXT,
       FOREIGN KEY (clienteId)
         REFERENCES clientes(id)
         ON DELETE RESTRICT
@@ -168,6 +169,10 @@ export const initDatabase = (): void => {
   }
   if (!ventasInfo.some((c: any) => c.name === "numeroFactura")) {
     db.execSync(`ALTER TABLE ventas ADD COLUMN numeroFactura TEXT;`);
+  }
+
+  if (!ventasInfo.some((c: any) => c.name === "metodoPago")) {
+    db.execSync(`ALTER TABLE ventas ADD COLUMN metodoPago TEXT;`);
   }
 
   const abonosInfo = db.getAllSync("PRAGMA table_info(abonos)");

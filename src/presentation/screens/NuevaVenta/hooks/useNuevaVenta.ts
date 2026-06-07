@@ -158,6 +158,10 @@ export const useNuevaVenta = () => {
   const [metodoPago, setMetodoPago] = useState<"contado" | "credito" | null>(
     null,
   );
+  // subMetodoPago: solo aplica cuando metodoPago === "contado"
+  const [subMetodoPago, setSubMetodoPago] = useState<
+    "efectivo" | "transferencia" | null
+  >(null);
   const [paganCon, setPaganCon] = useState("");
 
   // ── Refs ──────────────────────────────────────────────────────────────────
@@ -396,7 +400,14 @@ export const useNuevaVenta = () => {
   // ── Finalizar venta ───────────────────────────────────────────────────────
   const finalizarVenta = async () => {
     // ← CAMBIO 2: bloquear si no hay método seleccionado
+    // Validar selección completa
     if (!clienteSeleccionado || carrito.length === 0 || !metodoPago) return;
+    if (metodoPago === "contado" && !subMetodoPago) return;
+
+    // El metodoPago real que se guarda en BD:
+    // contado+efectivo → "efectivo", contado+transferencia → "transferencia", credito → null
+    const metodoPagoReal: "efectivo" | "transferencia" | null =
+      metodoPago === "contado" ? subMetodoPago : null;
 
     try {
       const venta = await ventaRepo.create({
@@ -411,14 +422,22 @@ export const useNuevaVenta = () => {
         })),
         total: totalCarrito,
         tipo: metodoPago,
+        metodoPago: metodoPagoReal,
         fecha: new Date()
           .toLocaleString("sv-SE", { timeZone: "America/Bogota" })
           .replace(" ", "T"),
       });
 
+      const labelMetodo =
+        metodoPago === "credito"
+          ? "Crédito"
+          : subMetodoPago === "efectivo"
+            ? "Contado · Efectivo"
+            : "Contado · Transferencia";
+
       Alert.alert(
         "✅ Venta registrada",
-        `Factura: ${venta.numeroFactura}\nCliente: ${clienteSeleccionado.nombre}\nTotal: ${fmt(totalCarrito)}\nTipo: ${metodoPago === "contado" ? "Contado" : "Crédito"}`,
+        `Factura: ${venta.numeroFactura}\nCliente: ${clienteSeleccionado.nombre}\nTotal: ${fmt(totalCarrito)}\nTipo: ${labelMetodo}`,
         [{ text: "Listo", onPress: resetVenta }],
       );
     } catch (e) {
@@ -436,6 +455,7 @@ export const useNuevaVenta = () => {
     setFiltroProducto("");
     // ← CAMBIO 3: reset a null, sin selección previa
     setMetodoPago(null);
+    setSubMetodoPago(null);
     setPaganCon("");
     scrollAlTop();
   };
@@ -494,6 +514,8 @@ export const useNuevaVenta = () => {
     precioInputRef,
     metodoPago,
     setMetodoPago,
+    subMetodoPago,
+    setSubMetodoPago,
     paganCon,
     paganConNum,
     devuelve,

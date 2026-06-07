@@ -141,6 +141,8 @@ export default function NuevaVentaScreen() {
     precioInputRef,
     metodoPago,
     setMetodoPago,
+    subMetodoPago,
+    setSubMetodoPago,
     paganCon,
     paganConNum,
     devuelve,
@@ -1336,6 +1338,7 @@ export default function NuevaVentaScreen() {
               </View>
             </View>
 
+            {/* ── 1. ¿Cómo pagó el cliente? ── */}
             <AppText
               variant="label"
               style={{ marginTop: spacing.lg, marginBottom: spacing.sm }}
@@ -1344,6 +1347,7 @@ export default function NuevaVentaScreen() {
             </AppText>
 
             <View style={s.metodoPagoGrid}>
+              {/* CONTADO */}
               <TouchableOpacity
                 style={[
                   s.metodoBtn,
@@ -1354,13 +1358,18 @@ export default function NuevaVentaScreen() {
                   },
                 ]}
                 onPress={() => {
-                  // console.log("💳 Método de pago seleccionado: CONTADO");
                   setMetodoPago("contado");
+                  setSubMetodoPago(null);
                   setTimeout(() => {
                     scrollRef.current?.scrollTo({ y: 99999, animated: true });
                   }, 100);
                 }}
               >
+                {metodoPago === "contado" && (
+                  <View style={{ position: "absolute", top: 10, right: 10 }}>
+                    <MaterialIcons name="check-circle" size={18} color="#fff" />
+                  </View>
+                )}
                 <View
                   style={[
                     s.metodoIconBox,
@@ -1386,28 +1395,34 @@ export default function NuevaVentaScreen() {
                 <Text
                   style={[
                     T.caption,
-                    metodoPago === "contado" && {
-                      color: "rgba(255,255,255,0.75)",
-                    },
+                    metodoPago === "contado"
+                      ? { color: "rgba(255,255,255,0.75)" }
+                      : {},
                   ]}
                 >
-                  Calcula el cambio
+                  Pago inmediato
                 </Text>
               </TouchableOpacity>
 
+              {/* CRÉDITO */}
               <TouchableOpacity
                 style={[
                   s.metodoBtn,
                   metodoPago === "credito" && s.metodoBtnCredito,
                 ]}
                 onPress={() => {
-                  // console.log("💳 Método de pago seleccionado: CRÉDITO");
                   setMetodoPago("credito");
+                  setSubMetodoPago(null);
                   setTimeout(() => {
                     scrollRef.current?.scrollTo({ y: 99999, animated: true });
                   }, 100);
                 }}
               >
+                {metodoPago === "credito" && (
+                  <View style={{ position: "absolute", top: 10, right: 10 }}>
+                    <MaterialIcons name="check-circle" size={18} color="#fff" />
+                  </View>
+                )}
                 <View
                   style={[
                     s.metodoIconBox,
@@ -1426,14 +1441,14 @@ export default function NuevaVentaScreen() {
                     metodoPago === "credito" && { color: "#fff" },
                   ]}
                 >
-                  Credito
+                  Crédito
                 </Text>
                 <Text
                   style={[
                     T.caption,
-                    metodoPago === "credito" && {
-                      color: "rgba(255,255,255,0.75)",
-                    },
+                    metodoPago === "credito"
+                      ? { color: "rgba(255,255,255,0.75)" }
+                      : {},
                   ]}
                 >
                   Queda pendiente
@@ -1441,7 +1456,162 @@ export default function NuevaVentaScreen() {
               </TouchableOpacity>
             </View>
 
+            {/* ── 2. Método de pago (solo si contado) ── */}
             {metodoPago === "contado" && (
+              <>
+                <AppText
+                  variant="label"
+                  style={{ marginTop: spacing.lg, marginBottom: 4 }}
+                >
+                  Método de pago
+                </AppText>
+                <Text style={[T.caption, { marginBottom: spacing.sm }]}>
+                  Selecciona cómo recibió el pago
+                </Text>
+
+                <View style={s.metodoPagoGrid}>
+                  {/* EFECTIVO */}
+                  <TouchableOpacity
+                    style={[
+                      s.metodoBtn,
+                      subMetodoPago === "efectivo" && {
+                        ...s.metodoBtnActive,
+                        backgroundColor: GREEN,
+                        borderColor: GREEN,
+                        shadowColor: GREEN,
+                      },
+                    ]}
+                    onPress={() => {
+                      setSubMetodoPago("efectivo");
+                      setTimeout(() => {
+                        scrollRef.current?.scrollTo({
+                          y: 99999,
+                          animated: true,
+                        });
+                      }, 100);
+                    }}
+                  >
+                    {subMetodoPago === "efectivo" && (
+                      <View
+                        style={{ position: "absolute", top: 10, right: 10 }}
+                      >
+                        <MaterialIcons
+                          name="check-circle"
+                          size={18}
+                          color="#fff"
+                        />
+                      </View>
+                    )}
+                    <View
+                      style={[
+                        s.metodoIconBox,
+                        subMetodoPago === "efectivo"
+                          ? s.metodoIconBoxActive
+                          : { backgroundColor: GREEN_LIGHT },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name="cash-multiple"
+                        size={32}
+                        color={subMetodoPago === "efectivo" ? "#fff" : GREEN}
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        s.metodoBtnLabel,
+                        subMetodoPago === "efectivo" && s.metodoBtnLabelActive,
+                      ]}
+                    >
+                      Efectivo
+                    </Text>
+                    <Text
+                      style={[
+                        T.caption,
+                        { textAlign: "center" },
+                        subMetodoPago === "efectivo"
+                          ? { color: "rgba(255,255,255,0.75)" }
+                          : {},
+                      ]}
+                    >
+                      El cliente paga{"\n"}en efectivo
+                    </Text>
+                  </TouchableOpacity>
+
+                  {/* TRANSFERENCIA */}
+                  <TouchableOpacity
+                    style={[
+                      s.metodoBtn,
+                      subMetodoPago === "transferencia" && {
+                        ...s.metodoBtnActive,
+                        backgroundColor: "#7C3AED",
+                        borderColor: "#7C3AED",
+                        shadowColor: "#7C3AED",
+                      },
+                    ]}
+                    onPress={() => {
+                      setSubMetodoPago("transferencia");
+                      setTimeout(() => {
+                        scrollRef.current?.scrollTo({
+                          y: 99999,
+                          animated: true,
+                        });
+                      }, 100);
+                    }}
+                  >
+                    {subMetodoPago === "transferencia" && (
+                      <View
+                        style={{ position: "absolute", top: 10, right: 10 }}
+                      >
+                        <MaterialIcons
+                          name="check-circle"
+                          size={18}
+                          color="#fff"
+                        />
+                      </View>
+                    )}
+                    <View
+                      style={[
+                        s.metodoIconBox,
+                        subMetodoPago === "transferencia"
+                          ? { backgroundColor: "rgba(255,255,255,0.2)" }
+                          : { backgroundColor: "#EDE9FE" },
+                      ]}
+                    >
+                      <MaterialCommunityIcons
+                        name="bank-transfer"
+                        size={32}
+                        color={
+                          subMetodoPago === "transferencia" ? "#fff" : "#7C3AED"
+                        }
+                      />
+                    </View>
+                    <Text
+                      style={[
+                        s.metodoBtnLabel,
+                        subMetodoPago === "transferencia" &&
+                          s.metodoBtnLabelActive,
+                      ]}
+                    >
+                      Transferencia
+                    </Text>
+                    <Text
+                      style={[
+                        T.caption,
+                        { textAlign: "center" },
+                        subMetodoPago === "transferencia"
+                          ? { color: "rgba(255,255,255,0.75)" }
+                          : {},
+                      ]}
+                    >
+                      El cliente paga{"\n"}por transferencia
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            {/* ── 3. Calculadora de cambio (solo efectivo) ── */}
+            {metodoPago === "contado" && subMetodoPago === "efectivo" && (
               <View style={s.calculadoraCard}>
                 <AppText variant="label" style={{ marginBottom: spacing.sm }}>
                   ¿Con cuánto pagó?
@@ -1451,22 +1621,11 @@ export default function NuevaVentaScreen() {
                   style={s.inputDinero}
                   keyboardType="numeric"
                   value={paganCon}
-                  onChangeText={(txt) => {
-                    /* console.log(
-                      "💵 Monto ingresado:",
-                      txt,
-                      "| total venta:",
-                      fmt(totalCarrito),
-                    ) */ manejarCambioDinero(txt);
-                  }}
+                  onChangeText={manejarCambioDinero}
                   placeholder="$ 0"
                   placeholderTextColor={GRAY_TEXT}
                   onFocus={() => {
-                    // console.log("🔍 FOCO en input: Monto de pago");
                     scrollRef.current?.scrollTo({ y: 99999, animated: true });
-                  }}
-                  onBlur={() => {
-                    /* console.log("👋 BLUR en input: Monto de pago") */
                   }}
                 />
                 {paganConNum > 0 && (
@@ -1517,6 +1676,31 @@ export default function NuevaVentaScreen() {
               </View>
             )}
 
+            {/* Info transferencia */}
+            {metodoPago === "contado" && subMetodoPago === "transferencia" && (
+              <View
+                style={[
+                  s.CreditoInfo,
+                  { borderColor: "#DDD6FE", backgroundColor: "#F5F3FF" },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="bank-transfer"
+                  size={16}
+                  color="#7C3AED"
+                />
+                <Text
+                  style={[
+                    T.caption,
+                    { flex: 1, marginLeft: 8, color: "#5B21B6" },
+                  ]}
+                >
+                  Pago por transferencia. No aplica cálculo de cambio.
+                </Text>
+              </View>
+            )}
+
+            {/* Info crédito */}
             {metodoPago === "credito" && (
               <View style={s.CreditoInfo}>
                 <MaterialIcons name="info-outline" size={16} color="#F59E0B" />
@@ -1535,11 +1719,11 @@ export default function NuevaVentaScreen() {
               </View>
             )}
 
+            {/* ── Botones Atrás / Listo vendido ── */}
             <View style={[s.botonesRow, { marginTop: 24 }]}>
               <TouchableOpacity
                 style={s.btnOutline}
                 onPress={() => {
-                  // console.log("⬅️ Retroceder paso 3 → 2");
                   retroceder();
                 }}
               >
@@ -1549,22 +1733,17 @@ export default function NuevaVentaScreen() {
               <TouchableOpacity
                 style={[
                   s.btnFinalizar,
+                  // Deshabilitar si:
+                  // - no hay tipo seleccionado
+                  // - es contado sin subMétodo
+                  // - es efectivo con pago insuficiente
                   (!metodoPago ||
-                    (metodoPago === "contado" && paganConNum < totalCarrito)) &&
+                    (metodoPago === "contado" && !subMetodoPago) ||
+                    (subMetodoPago === "efectivo" &&
+                      paganConNum < totalCarrito)) &&
                     s.btnDisabled,
                 ]}
-                onPress={() => {
-                  /* console.log(
-                    "✅ FINALIZAR VENTA | cliente:",
-                    clienteSeleccionado?.nombre,
-                    "| total:",
-                    fmt(totalCarrito),
-                    "| método:",
-                    metodoPago,
-                    "| productos:",
-                    carrito.length,
-                  ) */ finalizarVenta();
-                }}
+                onPress={finalizarVenta}
                 activeOpacity={0.85}
               >
                 <MaterialIcons name="check-circle" size={20} color="#fff" />
