@@ -1,8 +1,9 @@
 // src/presentation/screens/creditos/hooks/useCreditos.ts
 
-import { useCallback, useEffect, useState } from "react";
-import { Alert } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, Animated } from "react-native";
 import { CreditoRepositoryImpl } from "../../../../data/repositories/CreditoRepositoryImpl";
+import { Abono } from "../../../../domain/entities/Abono";
 import {
   DetalleCredito,
   ResumenCredito,
@@ -20,19 +21,24 @@ export const useCreditos = () => {
   const [busqueda, setBusqueda] = useState("");
   const [montoAbono, setMontoAbono] = useState("");
 
-  // ── Nuevo estado para saber a qué factura específica se le va a abonar ──
-  // Si está en null, significa que es un abono global (Cascada / FIFO)
   const [facturaSeleccionadaId, setFacturaSeleccionadaId] = useState<
     string | null
   >(null);
 
-  // ── 1. Nuevo estado para controlar qué se ve dentro del modal único ──
   const [vistaModal, setVistaModal] = useState<VistaGestor>("detalle");
 
-  // ── 2. Instanciamos un solo modal ──
+  // ── Estado modal de anulación ─────────────────────────────────────────────
+  const [abonoAAnular, setAbonoAAnular] = useState<Abono | null>(null);
+  const [motivoAnulacion, setMotivoAnulacion] = useState("");
+  const [modalAnulacionVisible, setModalAnulacionVisible] = useState(false);
+  const [anulando, setAnulando] = useState(false);
+
+  // Animación del bottom sheet de anulación
+  const anulacionSlide = useRef(new Animated.Value(400)).current;
+
   const modalGestor = useSlideModal(850);
 
-  // ── Cargar lista ────────────────────────────────────────────────────────
+  // ── Cargar lista ──────────────────────────────────────────────────────────
   const cargarResumenes = useCallback(async () => {
     setCargando(true);
     const data = await repo.getResumenes();
@@ -44,16 +50,16 @@ export const useCreditos = () => {
     cargarResumenes();
   }, [cargarResumenes]);
 
-  // ── Filtrado ────────────────────────────────────────────────────────────
+  // ── Filtrado ──────────────────────────────────────────────────────────────
   const resumenesFiltrados = resumenes.filter((r) =>
     r.nombreCliente.toLowerCase().includes(busqueda.toLowerCase().trim()),
   );
 
-  // ── Abrir detalle ───────────────────────────────────────────────────────
+  // ── Abrir detalle ─────────────────────────────────────────────────────────
   const abrirDetalle = async (clienteId: string) => {
     setVistaModal("detalle");
     setMontoAbono("");
-    setFacturaSeleccionadaId(null); // Resetear factura seleccionada al abrir un cliente nuevo
+    setFacturaSeleccionadaId(null);
     setCargandoDetalle(true);
     modalGestor.abrir();
 
@@ -62,7 +68,7 @@ export const useCreditos = () => {
     setCargandoDetalle(false);
   };
 
-  // ── Registrar abono (Corregido con ventaId) ─────────────────────────────
+  // ── Registrar abono ───────────────────────────────────────────────────────
   const registrarAbono = async () => {
     const monto = Number(montoAbono.replace(/\D/g, ""));
     if (!monto || monto <= 0 || !detalle) return;
@@ -77,9 +83,6 @@ export const useCreditos = () => {
     }
 
     try {
-      // 🚀 AQUÍ SE SOLUCIONA EL CRASH DE SQLITE:
-      // Si "facturaSeleccionadaId" tiene un ID, se manda. Si es null, enviamos ""
-      // y dejamos que la salvaguarda del Repositorio busque la factura más vieja automáticamente.
       await repo.registrarAbono({
         clienteId: detalle.clienteId,
         ventaId: facturaSeleccionadaId ?? "",
@@ -89,12 +92,10 @@ export const useCreditos = () => {
           .replace(" ", "T"),
       });
 
-      // Refrescar detalle local y lista global comercial
       const nuevoDetalle = await repo.getDetalle(detalle.clienteId);
       setDetalle(nuevoDetalle);
       await cargarResumenes();
 
-      // Limpiezas de estados post-abono
       setMontoAbono("");
       setFacturaSeleccionadaId(null);
       setVistaModal("detalle");
@@ -104,10 +105,87 @@ export const useCreditos = () => {
     }
   };
 
-  // ── Helper para cuando la UI decida abonar a una factura específica ──
+  // ── Abrir modal de anulación ──────────────────────────────────────────────
+  // En iOS no se puede abrir un Modal mientras otro está visible.
+  // Solución: cerrar el GestorDeudaModal primero, esperar la animación
+  // de cierre (~320ms), y luego mostrar el modal de anulación.
+  const abrirModalAnulacion = (abono: Abono) => {
+    setAbonoAAnular(abono);
+    setMotivoAnulacion("");
+
+    // 1. Cerrar el historial de abonos
+    modalGestor.cerrar();
+
+    // 2. Abrir el modal de anulación después de que termine la animación
+    setTimeout(() => {
+      setModalAnulacionVisible(true);
+      Animated.spring(anulacionSlide, {
+        toValue: 0,
+        useNativeDriver: true,
+        tension: 65,
+        friction: 11,
+      }).start();
+    }, 350);
+  };
+
+  const cerrarModalAnulacion = (reabrirGestor = true) => {
+    Animated.timing(anulacionSlide, {
+      toValue: 400,
+      duration: 220,
+      useNativeDriver: true,
+    }).start(() => {
+      setModalAnulacionVisible(false);
+      setAbonoAAnular(null);
+      setMotivoAnulacion("");
+      // Volver al historial de abonos una vez cerrado el modal de anulación
+      if (reabrirGestor) {
+        setTimeout(() => {
+          setVistaModal("historial");
+          modalGestor.abrir();
+        }, 100);
+      }
+    });
+  };
+
+  // ── Confirmar anulación ───────────────────────────────────────────────────
+  const confirmarAnulacion = async () => {
+    if (!abonoAAnular) return;
+    if (!motivoAnulacion.trim()) {
+      Alert.alert(
+        "Campo requerido",
+        "Debes escribir el motivo de la anulación.",
+      );
+      return;
+    }
+
+    setAnulando(true);
+    try {
+      await repo.anularAbono({
+        abonoId: abonoAAnular.id,
+        motivo: motivoAnulacion.trim(),
+      });
+
+      // Refrescar detalle y lista antes de cerrar
+      if (detalle) {
+        const nuevoDetalle = await repo.getDetalle(detalle.clienteId);
+        setDetalle(nuevoDetalle);
+      }
+      await cargarResumenes();
+
+      // Cerrar y volver al historial con datos actualizados
+      cerrarModalAnulacion(true);
+    } catch (error: any) {
+      console.error(error);
+      Alert.alert("Error", error.message || "No se pudo anular el abono.");
+    } finally {
+      setAnulando(false);
+    }
+  };
+
+  // ── Helper: ir directo a abonar una factura específica ───────────────────
   const irAAbonarFacturaEspecífica = (ventaId: string) => {
     setFacturaSeleccionadaId(ventaId);
-    setVistaModal("abono"); // Cambiamos la vista del modal directamente al formulario de abono
+    setVistaModal("abono");
   };
 
   return {
@@ -121,7 +199,6 @@ export const useCreditos = () => {
     montoAbono,
     setMontoAbono,
 
-    // Nuevos estados de control granular
     facturaSeleccionadaId,
     setFacturaSeleccionadaId,
     irAAbonarFacturaEspecífica,
@@ -129,6 +206,17 @@ export const useCreditos = () => {
     modalGestor,
     vistaModal,
     setVistaModal,
+
+    // Anulación
+    abonoAAnular,
+    motivoAnulacion,
+    setMotivoAnulacion,
+    modalAnulacionVisible,
+    anulacionSlide,
+    anulando,
+    abrirModalAnulacion,
+    cerrarModalAnulacion,
+    confirmarAnulacion,
 
     abrirDetalle,
     registrarAbono,

@@ -68,6 +68,7 @@ interface Abono {
   ventaId: string;
   monto: number;
   fecha: string;
+  estado?: string; // "activo" | "anulado"
 }
 
 const AVATAR_COLORS = [
@@ -567,6 +568,7 @@ export const VentaDelDiaScreen = () => {
 
   // Controles UI
   const [filtroEstado, setFiltroEstado] = React.useState<TipoEstado>("todas");
+  const [busqueda, setBusqueda] = React.useState("");
   const [cargando, setCargando] = React.useState(true);
   const [refrescando, setRefrescando] = React.useState(false);
   const [mostrarTodas, setMostrarTodas] = React.useState(false);
@@ -587,7 +589,7 @@ export const VentaDelDiaScreen = () => {
     const mapa = new Map<string, number>();
     todasVentasDeHoy.forEach((v) => {
       const totalAbonado = abonos
-        .filter((a) => a.ventaId === v.id)
+        .filter((a) => a.ventaId === v.id && a.estado !== "anulado")
         .reduce((sum, a) => sum + a.monto, 0);
       mapa.set(v.id, Math.max(0, v.total - totalAbonado));
     });
@@ -600,7 +602,7 @@ export const VentaDelDiaScreen = () => {
       if (venta.tipo === "contado") return true;
       if (venta.estado === "pagado") return true;
       const totalAbonado = abonos
-        .filter((a) => a.ventaId === venta.id)
+        .filter((a) => a.ventaId === venta.id && a.estado !== "anulado")
         .reduce((sum, a) => sum + a.monto, 0);
       return totalAbonado >= venta.total;
     },
@@ -621,18 +623,24 @@ export const VentaDelDiaScreen = () => {
     } else if (filtroEstado === "anulada") {
       resultado = resultado.filter((v) => v.estado === "anulada");
     }
+    if (busqueda.trim() !== "") {
+      const query = busqueda.toLowerCase();
+      resultado = resultado.filter(
+        (v) =>
+          v.nombreCliente.toLowerCase().includes(query) ||
+          (v.numeroFactura && v.numeroFactura.toLowerCase().includes(query)),
+      );
+    }
     return resultado.sort(
       (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
     );
-  }, [todasVentasDeHoy, filtroEstado, evaluarFacturaPagada]);
+  }, [todasVentasDeHoy, filtroEstado, busqueda, evaluarFacturaPagada]);
 
   // ── Estadísticas y Restas Automáticas de las tarjetas ───────────────────
   const stats = React.useMemo(() => {
-    // Para todas las cuentas de dinero e ingresos ignoramos las facturas "anuladas"
-    const ventasActivas = todasVentasDeHoy.filter(
-      (v) => v.estado !== "anulada",
-    );
-    const ventasAnuladas = todasVentasDeHoy.filter(
+    // Stats sobre ventasFiltradas para que cambien al filtrar (igual que Historial)
+    const ventasActivas = ventasFiltradas.filter((v) => v.estado !== "anulada");
+    const ventasAnuladas = ventasFiltradas.filter(
       (v) => v.estado === "anulada",
     );
 
@@ -641,14 +649,16 @@ export const VentaDelDiaScreen = () => {
     const clientesHoy = [...new Set(ventasActivas.map((v) => v.clienteId))]
       .length;
 
-    // Abonos cobrados HOY (no importa de qué fecha es la factura)
-    const abonosDeHoy = abonos.filter((a: Abono) => esHoy(a.fecha));
+    // Abonos cobrados HOY activos
+    const abonosDeHoy = abonos.filter(
+      (a: Abono) => esHoy(a.fecha) && a.estado !== "anulado",
+    );
     const totalAbonosHoy = abonosDeHoy.reduce(
       (s: number, a: Abono) => s + a.monto,
       0,
     );
 
-    // Dinero de contado cobrado HOY
+    // Ventas pagadas al contado (del filtro activo)
     const totalContadoHoy = ventasActivas
       .filter((v) => v.tipo === "contado")
       .reduce((a, v) => a + v.total, 0);
@@ -663,7 +673,20 @@ export const VentaDelDiaScreen = () => {
 
     const recibiidoHoy = totalContadoHoy + totalAbonosHoy;
 
-    // Saldo real pendiente de las ventas a crédito de HOY
+    // Total de facturas en mora (saldo pendiente real)
+    const totalEnMora = ventasActivas
+      .filter((v) => !evaluarFacturaPagada(v))
+      .reduce((acc, v) => {
+        const abonado = abonosDeHoy
+          .filter((a: Abono) => a.ventaId === v.id)
+          .reduce((s: number, a: Abono) => s + a.monto, 0);
+        return acc + Math.max(0, v.total - abonado);
+      }, 0);
+
+    // Total de facturas anuladas
+    const totalAnulado = ventasAnuladas.reduce((a, v) => a + v.total, 0);
+
+    // Saldo real pendiente de las ventas a crédito del filtro activo
     const creditoSaldoHoy = ventasActivas
       .filter((v) => v.tipo === "credito")
       .reduce((acc, v) => {
@@ -686,8 +709,10 @@ export const VentaDelDiaScreen = () => {
       totalAbonosHoy,
       creditoSaldoHoy,
       creditoPendiente,
+      totalEnMora,
+      totalAnulado,
     };
-  }, [todasVentasDeHoy, abonos, deudores]);
+  }, [ventasFiltradas, abonos, deudores, evaluarFacturaPagada]);
 
   // ── Top 3 productos (excluyendo anuladas) ───────────────────────────────
   const top3 = React.useMemo(() => {
@@ -975,38 +1000,136 @@ export const VentaDelDiaScreen = () => {
         {/* ══ FILTRO ESTADO ═════════════════════════════════════════════ */}
         {hayVentasHistoricasHoy && (
           <View style={s.filterSection}>
-            <AppText style={s.filterTitle}>Estado de facturas</AppText>
+            {/* Buscador */}
+            <View style={s.contenedorBuscador}>
+              <MaterialCommunityIcons
+                name="magnify"
+                size={24}
+                color="#7B8499"
+                style={{ marginLeft: 16 }}
+              />
+              <TextInput
+                style={s.inputBuscador}
+                placeholder="Buscar cliente o factura..."
+                placeholderTextColor="#7B8499"
+                value={busqueda}
+                onChangeText={setBusqueda}
+              />
+              {busqueda.length > 0 && (
+                <TouchableOpacity
+                  onPress={() => setBusqueda("")}
+                  style={{ padding: 10, marginRight: 8 }}
+                >
+                  <MaterialCommunityIcons
+                    name="close-circle"
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            <AppText style={[s.filterTitle, { marginTop: 16 }]}>
+              Estado de facturas
+            </AppText>
             <View style={[s.filterRow, { flexWrap: "wrap" }]}>
               {(
                 [
-                  { key: "todas", label: "Todas", color: colors.primary },
-                  { key: "pazysalvo", label: "Activas", color: "#16A34A" },
-                  { key: "debe", label: "En mora", color: "#D97706" },
-                  { key: "anulada", label: "Anuladas", color: "#DC2626" },
-                ] as { key: TipoEstado; label: string; color: string }[]
-              ).map(({ key, label, color }) => {
+                  {
+                    key: "todas",
+                    label: "Todas",
+                    color: colors.primary,
+                    bgSuave: "#EFF6FF",
+                  },
+                  {
+                    key: "pazysalvo",
+                    label: "Activas",
+                    color: "#16A34A",
+                    bgSuave: "#F0FDF4",
+                  },
+                  {
+                    key: "debe",
+                    label: "En mora",
+                    color: "#D97706",
+                    bgSuave: "#FFFBEB",
+                  },
+                  {
+                    key: "anulada",
+                    label: "Anuladas",
+                    color: "#DC2626",
+                    bgSuave: "#FEF2F2",
+                  },
+                ] as {
+                  key: TipoEstado;
+                  label: string;
+                  color: string;
+                  bgSuave: string;
+                }[]
+              ).map(({ key, label, color, bgSuave }) => {
                 const activo = filtroEstado === key;
+                const conteo =
+                  key === "todas"
+                    ? todasVentasDeHoy.length
+                    : key === "anulada"
+                      ? todasVentasDeHoy.filter((v) => v.estado === "anulada")
+                          .length
+                      : key === "pazysalvo"
+                        ? todasVentasDeHoy.filter(
+                            (v) =>
+                              v.estado !== "anulada" && evaluarFacturaPagada(v),
+                          ).length
+                        : todasVentasDeHoy.filter(
+                            (v) =>
+                              v.estado !== "anulada" &&
+                              !evaluarFacturaPagada(v),
+                          ).length;
                 return (
                   <TouchableOpacity
                     key={key}
                     style={[
                       s.filterBtn,
-                      activo
-                        ? { backgroundColor: color }
-                        : { backgroundColor: "#F3F4F6" },
-                      { flex: 1, minWidth: "22%" },
+                      { backgroundColor: activo ? color : bgSuave, flex: 1 },
                     ]}
-                    onPress={() => setFiltroEstado(key)}
+                    onPress={() => {
+                      setFiltroEstado(key);
+                      setMostrarTodas(false);
+                      setBusqueda("");
+                    }}
                     activeOpacity={0.8}
                   >
                     <AppText
                       style={[
                         s.filterBtnText,
-                        { color: activo ? "#FFF" : "#4B5563", fontSize: 14 },
+                        { color: activo ? "#FFF" : "#4B5563", fontSize: 13 },
                       ]}
+                      numberOfLines={1}
                     >
                       {label}
                     </AppText>
+                    <View
+                      style={{
+                        marginTop: 3,
+                        backgroundColor: activo
+                          ? "rgba(255,255,255,0.25)"
+                          : color,
+                        borderRadius: 10,
+                        minWidth: 22,
+                        height: 20,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        paddingHorizontal: 5,
+                      }}
+                    >
+                      <AppText
+                        style={{
+                          fontSize: 11,
+                          fontWeight: "800",
+                          color: "#FFF",
+                        }}
+                      >
+                        {conteo}
+                      </AppText>
+                    </View>
                   </TouchableOpacity>
                 );
               })}
@@ -1046,7 +1169,13 @@ export const VentaDelDiaScreen = () => {
               marginBottom: 2,
             }}
           >
-            <AppText style={s.labelGris}>Dinero recibido</AppText>
+            <AppText style={s.labelGris}>
+              {filtroEstado === "debe"
+                ? "Dinero en mora"
+                : filtroEstado === "anulada"
+                  ? "Dinero anulado"
+                  : "Dinero recibido"}
+            </AppText>
             <View
               style={{
                 flexDirection: "row",
@@ -1076,214 +1205,251 @@ export const VentaDelDiaScreen = () => {
             style={[
               s.totalGrande,
               {
-                color: hayVentasHistoricasHoy
-                  ? colors.primary
-                  : colors.grayText,
+                color:
+                  filtroEstado === "debe"
+                    ? "#D97706"
+                    : filtroEstado === "anulada"
+                      ? "#DC2626"
+                      : hayVentasHistoricasHoy
+                        ? colors.primary
+                        : colors.grayText,
               },
             ]}
           >
-            {fmt(stats.recibiidoHoy)}
+            {filtroEstado === "debe"
+              ? fmt(stats.totalEnMora)
+              : filtroEstado === "anulada"
+                ? fmt(stats.totalAnulado)
+                : fmt(stats.recibiidoHoy)}
           </AppText>
 
-          <View
-            style={{
-              backgroundColor: "#F8FAFF",
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: "#E8EEFB",
-              padding: 14,
-              gap: 10,
-              marginBottom: 14,
-            }}
-          >
+          {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
             <View
               style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <View>
-                <AppText
-                  style={{
-                    fontSize: 18,
-                    color: "#374151",
-                    fontWeight: "700",
-                  }}
-                >
-                  ✅ Ventas de contado
-                </AppText>
-                <AppText
-                  style={{
-                    fontSize: 14,
-                    color: "#9CA3AF",
-                    fontWeight: "500",
-                  }}
-                >
-                  Pago al contado
-                </AppText>
-              </View>
-              <AppText
-                style={{ fontSize: 20, color: "#16A34A", fontWeight: "800" }}
-              >
-                {fmt(stats.totalContadoHoy)}
-              </AppText>
-            </View>
-
-            {/* Desglose efectivo / transferencia */}
-            <View style={{ gap: 8 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="cash"
-                    size={17}
-                    color="#6B7280"
-                  />
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#6B7280",
-                      fontWeight: "500",
-                    }}
-                  >
-                    efectivo
-                  </AppText>
-                </View>
-                <AppText
-                  style={{ fontSize: 16, color: "#16A34A", fontWeight: "700" }}
-                >
-                  {fmt(stats.totalEfectivoHoy)}
-                </AppText>
-              </View>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="bank-transfer"
-                    size={17}
-                    color="#6B7280"
-                  />
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#6B7280",
-                      fontWeight: "500",
-                    }}
-                  >
-                    tranferencia
-                  </AppText>
-                </View>
-                <AppText
-                  style={{ fontSize: 16, color: "#16A34A", fontWeight: "700" }}
-                >
-                  {fmt(stats.totalTransferenciaHoy)}
-                </AppText>
-              </View>
-            </View>
-
-            <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
-
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <View>
-                <AppText
-                  style={{
-                    fontSize: 18,
-                    color: "#374151",
-                    fontWeight: "700",
-                  }}
-                >
-                  💵 Abonos recibidos
-                </AppText>
-                <AppText
-                  style={{
-                    fontSize: 14,
-                    color: "#9CA3AF",
-                    fontWeight: "500",
-                  }}
-                >
-                  Pagos parciales de créditos
-                </AppText>
-              </View>
-              <AppText
-                style={{ fontSize: 20, color: "#2563EB", fontWeight: "800" }}
-              >
-                {fmt(stats.totalAbonosHoy)}
-              </AppText>
-            </View>
-          </View>
-
-          {stats.creditoSaldoHoy > 0 && (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                backgroundColor: "#FFFBEB",
-                borderRadius: 12,
+                backgroundColor: "#F8FAFF",
+                borderRadius: 14,
                 borderWidth: 1,
-                borderColor: "#FDE68A",
-                paddingHorizontal: 14,
-                paddingVertical: 12,
+                borderColor: "#E8EEFB",
+                padding: 14,
+                gap: 10,
                 marginBottom: 14,
               }}
             >
+              {/* Ventas pagadas */}
               <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
               >
-                <MaterialCommunityIcons
-                  name="clock-alert-outline"
-                  size={22}
-                  color="#D97706"
-                />
                 <View>
                   <AppText
                     style={{
-                      fontSize: 16,
-                      color: "#92400E",
+                      fontSize: 18,
+                      color: "#374151",
                       fontWeight: "700",
                     }}
                   >
-                    Pendiente de cobro
+                    Ventas pagadas
                   </AppText>
                   <AppText
                     style={{
-                      fontSize: 12,
-                      color: "#B45309",
+                      fontSize: 14,
+                      color: "#9CA3AF",
                       fontWeight: "500",
                     }}
                   >
-                    Créditos sin saldar hoy
+                    Pago al contado
+                  </AppText>
+                </View>
+                <AppText
+                  style={{ fontSize: 20, color: "#16A34A", fontWeight: "800" }}
+                >
+                  {fmt(stats.totalContadoHoy)}
+                </AppText>
+              </View>
+
+              {/* Desglose efectivo / transferencia */}
+              <View style={{ gap: 8 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="cash"
+                      size={17}
+                      color="#6B7280"
+                    />
+                    <AppText
+                      style={{
+                        fontSize: 16,
+                        color: "#6B7280",
+                        fontWeight: "500",
+                      }}
+                    >
+                      efectivo
+                    </AppText>
+                  </View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#16A34A",
+                      fontWeight: "700",
+                    }}
+                  >
+                    {fmt(stats.totalEfectivoHoy)}
+                  </AppText>
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="bank-transfer"
+                      size={17}
+                      color="#6B7280"
+                    />
+                    <AppText
+                      style={{
+                        fontSize: 16,
+                        color: "#6B7280",
+                        fontWeight: "500",
+                      }}
+                    >
+                      tranferencia
+                    </AppText>
+                  </View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#16A34A",
+                      fontWeight: "700",
+                    }}
+                  >
+                    {fmt(stats.totalTransferenciaHoy)}
                   </AppText>
                 </View>
               </View>
-              <AppText
-                style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
-              >
-                {fmt(stats.creditoSaldoHoy)}
-              </AppText>
+
+              {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
+                <>
+                  <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
+
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <View>
+                      <AppText
+                        style={{
+                          fontSize: 18,
+                          color: "#374151",
+                          fontWeight: "700",
+                        }}
+                      >
+                        Abonos recibidos
+                      </AppText>
+                      <AppText
+                        style={{
+                          fontSize: 14,
+                          color: "#9CA3AF",
+                          fontWeight: "500",
+                        }}
+                      >
+                        Pagos parciales de créditos
+                      </AppText>
+                    </View>
+                    <AppText
+                      style={{
+                        fontSize: 20,
+                        color: "#2563EB",
+                        fontWeight: "800",
+                      }}
+                    >
+                      {fmt(stats.totalAbonosHoy)}
+                    </AppText>
+                  </View>
+                </>
+              )}
             </View>
           )}
+
+          {stats.creditoSaldoHoy > 0 &&
+            (filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  backgroundColor: "#FFFBEB",
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: "#FDE68A",
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  marginBottom: 14,
+                }}
+              >
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <MaterialCommunityIcons
+                    name="clock-alert-outline"
+                    size={22}
+                    color="#D97706"
+                  />
+                  <View>
+                    <AppText
+                      style={{
+                        fontSize: 16,
+                        color: "#92400E",
+                        fontWeight: "700",
+                      }}
+                    >
+                      Pendiente de cobro
+                    </AppText>
+                    <AppText
+                      style={{
+                        fontSize: 12,
+                        color: "#B45309",
+                        fontWeight: "500",
+                      }}
+                    >
+                      Créditos sin saldar hoy
+                    </AppText>
+                  </View>
+                </View>
+                <AppText
+                  style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
+                >
+                  {fmt(stats.creditoSaldoHoy)}
+                </AppText>
+              </View>
+            )}
 
           {stats.cantAnuladas > 0 && (
             <View
@@ -1796,6 +1962,22 @@ const s = StyleSheet.create({
   btnExcelTxt: { fontSize: 16, fontWeight: "700", color: "#15803D" },
 
   filterSection: { marginBottom: 16 },
+  contenedorBuscador: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#E2E6EF",
+    borderRadius: 18,
+    height: 52,
+  },
+  inputBuscador: {
+    flex: 1,
+    fontSize: 16,
+    color: "#111827",
+    paddingHorizontal: 12,
+    fontWeight: "500",
+  },
   filterTitle: {
     fontSize: 18,
     fontWeight: "800",
@@ -1804,8 +1986,9 @@ const s = StyleSheet.create({
   },
   filterRow: { flexDirection: "row", gap: 8 },
   filterBtn: {
-    height: 48,
-    paddingHorizontal: 12,
+    minHeight: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",

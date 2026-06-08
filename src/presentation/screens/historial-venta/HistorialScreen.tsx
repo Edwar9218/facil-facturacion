@@ -34,6 +34,7 @@ interface Abono {
   ventaId: string;
   monto: number;
   fecha: string;
+  estado?: string; // "activo" | "anulado"
 }
 
 const fmt = (n: number) =>
@@ -820,7 +821,7 @@ export const HistorialScreen = () => {
       if (venta.tipo === "contado") return true;
       if (venta.estado === "pagado") return true;
       const totalAbonado = abonos
-        .filter((a) => a.ventaId === venta.id)
+        .filter((a) => a.ventaId === venta.id && a.estado !== "anulado")
         .reduce((sum, a) => sum + a.monto, 0);
       return totalAbonado >= venta.total;
     },
@@ -1141,6 +1142,18 @@ export const HistorialScreen = () => {
     );
   }, [rangoActivo, filtroPeriodo]);
 
+  // Ventas del período activo sin filtro de estado — para conteos de botones
+  const ventasDelPeriodo = React.useMemo(() => {
+    let resultado = [...todasVentas];
+    if (rangoActivo) {
+      resultado = resultado.filter((v) => {
+        const f = v.fecha.substring(0, 10);
+        return f >= rangoActivo.inicio && f <= rangoActivo.fin;
+      });
+    }
+    return resultado;
+  }, [todasVentas, rangoActivo]);
+
   // ── Stats: las anuladas se excluyen del total recibido ────────────────────
   const stats = React.useMemo(() => {
     const ventasActivas = ventasFiltradas.filter((v) => v.estado !== "anulada");
@@ -1164,8 +1177,10 @@ export const HistorialScreen = () => {
       .filter((v) => v.tipo === "contado" && v.metodoPago === "transferencia")
       .reduce((a, v) => a + v.total, 0);
 
+    // Abonos activos dentro del rango (fecha del abono, no de la venta)
     const totalAbonosParciales = abonos
       .filter((ab) => {
+        if (ab.estado === "anulado") return false;
         if (!rangoActivo) return true;
         const fechaAbono = ab.fecha.substring(0, 10);
         return (
@@ -1176,11 +1191,14 @@ export const HistorialScreen = () => {
 
     const totalRecibido = totalContado + totalAbonosParciales;
 
+    // Total en dinero de facturas anuladas del período
+    const totalAnulado = ventasAnuladas.reduce((a, v) => a + v.total, 0);
+
     const totalDebe = ventasActivas
       .filter((v) => !evaluarFacturaPagada(v))
       .reduce((a, v) => {
         const totalAbonado = abonos
-          .filter((ab) => ab.ventaId === v.id)
+          .filter((ab) => ab.ventaId === v.id && ab.estado !== "anulado")
           .reduce((s, ab) => s + ab.monto, 0);
         return a + Math.max(0, v.total - totalAbonado);
       }, 0);
@@ -1211,6 +1229,7 @@ export const HistorialScreen = () => {
       totalAbonosParciales,
       totalRecibido,
       totalDebe,
+      totalAnulado,
       clientesUnicos,
       top3,
     };
@@ -1220,7 +1239,7 @@ export const HistorialScreen = () => {
     const mapa = new Map<string, number>();
     todasVentas.forEach((v) => {
       const totalAbonado = abonos
-        .filter((a) => a.ventaId === v.id)
+        .filter((a) => a.ventaId === v.id && a.estado !== "anulado")
         .reduce((sum, a) => sum + a.monto, 0);
       mapa.set(v.id, Math.max(0, v.total - totalAbonado));
     });
@@ -1338,34 +1357,100 @@ export const HistorialScreen = () => {
           <View style={[s.filterRow, { flexWrap: "wrap" }]}>
             {(
               [
-                { key: "todas", label: "Todas", color: colors.primary },
-                { key: "pazysalvo", label: "Activas", color: "#16A34A" },
-                { key: "debe", label: "En mora", color: "#D97706" },
-                { key: "anulada", label: "Anuladas", color: "#DC2626" },
-              ] as { key: TipoEstado; label: string; color: string }[]
-            ).map(({ key, label, color }) => {
+                {
+                  key: "todas",
+                  label: "Todas",
+                  color: colors.primary,
+                  bgSuave: "#EFF6FF",
+                },
+                {
+                  key: "pazysalvo",
+                  label: "Activas",
+                  color: "#16A34A",
+                  bgSuave: "#F0FDF4",
+                },
+                {
+                  key: "debe",
+                  label: "En mora",
+                  color: "#D97706",
+                  bgSuave: "#FFFBEB",
+                },
+                {
+                  key: "anulada",
+                  label: "Anuladas",
+                  color: "#DC2626",
+                  bgSuave: "#FEF2F2",
+                },
+              ] as {
+                key: TipoEstado;
+                label: string;
+                color: string;
+                bgSuave: string;
+              }[]
+            ).map(({ key, label, color, bgSuave }) => {
               const activo = filtroEstado === key;
+              const conteo =
+                key === "todas"
+                  ? ventasDelPeriodo.length
+                  : key === "anulada"
+                    ? ventasDelPeriodo.filter((v) => v.estado === "anulada")
+                        .length
+                    : key === "pazysalvo"
+                      ? ventasDelPeriodo.filter(
+                          (v) =>
+                            v.estado !== "anulada" && evaluarFacturaPagada(v),
+                        ).length
+                      : ventasDelPeriodo.filter(
+                          (v) =>
+                            v.estado !== "anulada" && !evaluarFacturaPagada(v),
+                        ).length;
               return (
                 <TouchableOpacity
                   key={key}
                   style={[
                     s.filterBtn,
-                    activo
-                      ? { backgroundColor: color }
-                      : { backgroundColor: "#F3F4F6" },
-                    { flex: 1, minWidth: "22%" },
+                    { backgroundColor: activo ? color : bgSuave, flex: 1 },
                   ]}
-                  onPress={() => setFiltroEstado(key)}
+                  onPress={() => {
+                    setFiltroEstado(key);
+                    setPagina(1);
+                    setBusqueda("");
+                  }}
                   activeOpacity={0.8}
                 >
                   <AppText
                     style={[
                       s.filterBtnText,
-                      { color: activo ? "#FFF" : "#4B5563", fontSize: 14 },
+                      { color: activo ? "#FFF" : "#4B5563", fontSize: 13 },
                     ]}
+                    numberOfLines={1}
                   >
                     {label}
                   </AppText>
+                  <View
+                    style={{
+                      marginTop: 3,
+                      backgroundColor: activo
+                        ? "rgba(255,255,255,0.25)"
+                        : color,
+                      borderRadius: 10,
+                      minWidth: 22,
+                      height: 20,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingHorizontal: 5,
+                    }}
+                  >
+                    <AppText
+                      style={{
+                        fontSize: 11,
+                        fontWeight: "800",
+                        color: "#FFF",
+                      }}
+                    >
+                      {conteo}
+                    </AppText>
+                  </View>
                 </TouchableOpacity>
               );
             })}
@@ -1464,7 +1549,13 @@ export const HistorialScreen = () => {
               marginBottom: 2,
             }}
           >
-            <AppText style={s.labelGris}>Dinero recibido</AppText>
+            <AppText style={s.labelGris}>
+              {filtroEstado === "debe"
+                ? "Dinero en mora"
+                : filtroEstado === "anulada"
+                  ? "Dinero anulado"
+                  : "Dinero recibido"}
+            </AppText>
             {!!etiquetaRango && (
               <View
                 style={{
@@ -1491,212 +1582,255 @@ export const HistorialScreen = () => {
             )}
           </View>
 
-          <AppText style={[s.totalGrande, { color: colors.primary }]}>
-            {fmt(stats.totalRecibido)}
+          <AppText
+            style={[
+              s.totalGrande,
+              {
+                color:
+                  filtroEstado === "debe"
+                    ? "#D97706"
+                    : filtroEstado === "anulada"
+                      ? "#DC2626"
+                      : colors.primary,
+              },
+            ]}
+          >
+            {filtroEstado === "debe"
+              ? fmt(stats.totalDebe)
+              : filtroEstado === "anulada"
+                ? fmt(stats.totalAnulado)
+                : fmt(stats.totalRecibido)}
           </AppText>
 
-          <View
-            style={{
-              backgroundColor: "#F8FAFF",
-              borderRadius: 14,
-              borderWidth: 1,
-              borderColor: "#E8EEFB",
-              padding: 14,
-              gap: 10,
-              marginBottom: 14,
-            }}
-          >
-            {/* Ventas pagadas */}
+          {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
             <View
               style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <View>
-                <AppText
-                  style={{
-                    fontSize: 18,
-                    color: "#374151",
-                    fontWeight: "700",
-                  }}
-                >
-                  Ventas pagadas
-                </AppText>
-                <AppText
-                  style={{
-                    fontSize: 14,
-                    color: "#9CA3AF",
-                    fontWeight: "500",
-                  }}
-                >
-                  Pago al contado
-                </AppText>
-              </View>
-              <AppText
-                style={{ fontSize: 20, color: "#16A34A", fontWeight: "800" }}
-              >
-                {fmt(stats.totalContado)}
-              </AppText>
-            </View>
-
-            {/* Desglose efectivo / transferencia */}
-            <View style={{ gap: 8 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="cash"
-                    size={17}
-                    color="#6B7280"
-                  />
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#6B7280",
-                      fontWeight: "500",
-                    }}
-                  >
-                    efectivo
-                  </AppText>
-                </View>
-                <AppText
-                  style={{ fontSize: 16, color: "#16A34A", fontWeight: "700" }}
-                >
-                  {fmt(stats.totalEfectivo)}
-                </AppText>
-              </View>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="bank-transfer"
-                    size={17}
-                    color="#6B7280"
-                  />
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#6B7280",
-                      fontWeight: "500",
-                    }}
-                  >
-                    tranferencia
-                  </AppText>
-                </View>
-                <AppText
-                  style={{ fontSize: 16, color: "#16A34A", fontWeight: "700" }}
-                >
-                  {fmt(stats.totalTransferencia)}
-                </AppText>
-              </View>
-            </View>
-
-            <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
-
-            {/* Abonos recibidos */}
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-              }}
-            >
-              <View>
-                <AppText
-                  style={{
-                    fontSize: 18,
-                    color: "#374151",
-                    fontWeight: "700",
-                  }}
-                >
-                  Abonos recibidos
-                </AppText>
-                <AppText
-                  style={{
-                    fontSize: 14,
-                    color: "#9CA3AF",
-                    fontWeight: "500",
-                  }}
-                >
-                  Pagos parciales de créditos
-                </AppText>
-              </View>
-              <AppText
-                style={{ fontSize: 20, color: "#2563EB", fontWeight: "800" }}
-              >
-                {fmt(stats.totalAbonosParciales)}
-              </AppText>
-            </View>
-          </View>
-
-          {/* Pendiente de cobro */}
-          {stats.totalDebe > 0 && (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                backgroundColor: "#FFFBEB",
-                borderRadius: 12,
+                backgroundColor: "#F8FAFF",
+                borderRadius: 14,
                 borderWidth: 1,
-                borderColor: "#FDE68A",
-                paddingHorizontal: 14,
-                paddingVertical: 12,
+                borderColor: "#E8EEFB",
+                padding: 14,
+                gap: 10,
                 marginBottom: 14,
               }}
             >
+              {/* Ventas pagadas */}
               <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
               >
-                <MaterialCommunityIcons
-                  name="clock-alert-outline"
-                  size={22}
-                  color="#D97706"
-                />
                 <View>
                   <AppText
                     style={{
-                      fontSize: 16,
-                      color: "#92400E",
+                      fontSize: 18,
+                      color: "#374151",
                       fontWeight: "700",
                     }}
                   >
-                    Pendiente de cobro
+                    Ventas pagadas
                   </AppText>
                   <AppText
                     style={{
-                      fontSize: 12,
-                      color: "#B45309",
+                      fontSize: 14,
+                      color: "#9CA3AF",
                       fontWeight: "500",
                     }}
                   >
-                    Créditos sin saldar
+                    Pago al contado
+                  </AppText>
+                </View>
+                <AppText
+                  style={{ fontSize: 20, color: "#16A34A", fontWeight: "800" }}
+                >
+                  {fmt(stats.totalContado)}
+                </AppText>
+              </View>
+
+              {/* Desglose efectivo / transferencia */}
+              <View style={{ gap: 8 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="cash"
+                      size={17}
+                      color="#6B7280"
+                    />
+                    <AppText
+                      style={{
+                        fontSize: 16,
+                        color: "#6B7280",
+                        fontWeight: "500",
+                      }}
+                    >
+                      efectivo
+                    </AppText>
+                  </View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#16A34A",
+                      fontWeight: "700",
+                    }}
+                  >
+                    {fmt(stats.totalEfectivo)}
+                  </AppText>
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="bank-transfer"
+                      size={17}
+                      color="#6B7280"
+                    />
+                    <AppText
+                      style={{
+                        fontSize: 16,
+                        color: "#6B7280",
+                        fontWeight: "500",
+                      }}
+                    >
+                      tranferencia
+                    </AppText>
+                  </View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#16A34A",
+                      fontWeight: "700",
+                    }}
+                  >
+                    {fmt(stats.totalTransferencia)}
                   </AppText>
                 </View>
               </View>
-              <AppText
-                style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
-              >
-                {fmt(stats.totalDebe)}
-              </AppText>
+
+              {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
+                <>
+                  <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
+
+                  {/* Abonos recibidos */}
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <View>
+                      <AppText
+                        style={{
+                          fontSize: 18,
+                          color: "#374151",
+                          fontWeight: "700",
+                        }}
+                      >
+                        Abonos recibidos
+                      </AppText>
+                      <AppText
+                        style={{
+                          fontSize: 14,
+                          color: "#9CA3AF",
+                          fontWeight: "500",
+                        }}
+                      >
+                        Pagos parciales de créditos
+                      </AppText>
+                    </View>
+                    <AppText
+                      style={{
+                        fontSize: 20,
+                        color: "#2563EB",
+                        fontWeight: "800",
+                      }}
+                    >
+                      {fmt(stats.totalAbonosParciales)}
+                    </AppText>
+                  </View>
+                </>
+              )}
             </View>
           )}
+
+          {/* Pendiente de cobro — solo en todas/activas */}
+          {stats.totalDebe > 0 &&
+            (filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  backgroundColor: "#FFFBEB",
+                  borderRadius: 12,
+                  borderWidth: 1,
+                  borderColor: "#FDE68A",
+                  paddingHorizontal: 14,
+                  paddingVertical: 12,
+                  marginBottom: 14,
+                }}
+              >
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <MaterialCommunityIcons
+                    name="clock-alert-outline"
+                    size={22}
+                    color="#D97706"
+                  />
+                  <View>
+                    <AppText
+                      style={{
+                        fontSize: 16,
+                        color: "#92400E",
+                        fontWeight: "700",
+                      }}
+                    >
+                      Pendiente de cobro
+                    </AppText>
+                    <AppText
+                      style={{
+                        fontSize: 12,
+                        color: "#B45309",
+                        fontWeight: "500",
+                      }}
+                    >
+                      Créditos sin saldar
+                    </AppText>
+                  </View>
+                </View>
+                <AppText
+                  style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
+                >
+                  {fmt(stats.totalDebe)}
+                </AppText>
+              </View>
+            )}
 
           {/* Anuladas del periodo */}
           {stats.cantAnuladas > 0 && (
@@ -2201,8 +2335,9 @@ const s = StyleSheet.create({
   },
   filterRow: { flexDirection: "row", gap: 8 },
   filterBtn: {
-    height: 48,
-    paddingHorizontal: 12,
+    minHeight: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",

@@ -1,7 +1,7 @@
 // src/presentation/screens/creditos/components/GestorDeudaModal.tsx
 
 import { Feather } from "@expo/vector-icons";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Keyboard,
@@ -15,6 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { Abono } from "../../../../domain/entities/Abono";
 import { DetalleCredito } from "../../../../domain/entities/Credito";
 import { useTheme } from "../../../../theme";
 import { AppCard } from "../../../components/ui/AppCard";
@@ -32,10 +33,13 @@ interface Props {
   onRegistrarAbono: () => void;
   vistaActiva: VistaGestor;
   setVistaActiva: (vista: VistaGestor) => void;
+  onAbrirModalAnulacion: (abono: Abono) => void;
 }
 
 const fmt = (n: number) =>
   "$ " + Number(n).toLocaleString("es-CO", { minimumFractionDigits: 0 });
+
+const MAX_MOTIVO = 250;
 
 export const GestorDeudaModal = ({
   modal,
@@ -46,10 +50,16 @@ export const GestorDeudaModal = ({
   onRegistrarAbono,
   vistaActiva,
   setVistaActiva,
+  onAbrirModalAnulacion,
 }: Props) => {
   const { colors, spacing, radius, sizes, typography } = useTheme();
 
-  // ── Android: escuchar teclado y animar el modal hacia arriba manualmente ──
+  // ── Tab activo en historial: "activos" | "anulados" ─────────────────────
+  const [tabHistorial, setTabHistorial] = useState<"activos" | "anulados">(
+    "activos",
+  );
+
+  // ── Android: animar modal con teclado ────────────────────────────────────
   const androidBottom = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (Platform.OS !== "android") return;
@@ -86,9 +96,17 @@ export const GestorDeudaModal = ({
   };
 
   const isVisible = modal?.visible ?? false;
-  const closeModal = () => modal?.cerrar();
+  const closeModal = () => {
+    modal?.cerrar();
+  };
 
-  // ── Contenido del modal (compartido iOS y Android) ──────────────────────
+  // ── Separar abonos activos / anulados ────────────────────────────────────
+  const abonosActivos =
+    detalle?.abonos.filter((a) => a.estado === "activo" || !a.estado) ?? [];
+  const abonosAnulados =
+    detalle?.abonos.filter((a) => a.estado === "anulado") ?? [];
+
+  // ── Contenido principal del modal ────────────────────────────────────────
   const modalInner = (
     <View
       style={[
@@ -101,7 +119,7 @@ export const GestorDeudaModal = ({
         },
       ]}
     >
-      {/* Header: drag indicator + botón cerrar */}
+      {/* Header */}
       <View style={styles.headerRow}>
         <View style={{ width: 32 }} />
         <View
@@ -133,6 +151,7 @@ export const GestorDeudaModal = ({
               {titulos[vistaActiva]}
             </AppText>
 
+            {/* Cliente */}
             <View
               style={[
                 styles.rowCenter,
@@ -147,6 +166,7 @@ export const GestorDeudaModal = ({
               <AppText variant="bodyBold">{detalle.nombreCliente}</AppText>
             </View>
 
+            {/* Resumen financiero */}
             <AppCard style={{ marginBottom: spacing.md }}>
               <View style={[styles.rowSpace, { marginBottom: spacing.xs }]}>
                 <AppText variant="body" color={colors.grayText}>
@@ -172,6 +192,7 @@ export const GestorDeudaModal = ({
               </View>
             </AppCard>
 
+            {/* ── Vista: Detalle ─────────────────────────────────────────── */}
             {vistaActiva === "detalle" &&
               (detalle.ventas.length === 0 ? (
                 <View
@@ -199,47 +220,261 @@ export const GestorDeudaModal = ({
                 ))
               ))}
 
-            {vistaActiva === "historial" &&
-              (detalle.abonos.length === 0 ? (
+            {/* ── Vista: Historial ───────────────────────────────────────── */}
+            {vistaActiva === "historial" && (
+              <>
+                {/* Tabs Activos / Anulados */}
                 <View
-                  style={{
-                    alignItems: "center",
-                    paddingVertical: spacing.xxxl,
-                  }}
+                  style={[
+                    styles.tabContainer,
+                    {
+                      backgroundColor: colors.grayBg,
+                      borderRadius: radius.lg,
+                      marginBottom: spacing.md,
+                      padding: 4,
+                    },
+                  ]}
                 >
-                  <AppText variant="body" color={colors.grayText}>
-                    Sin abonos registrados
-                  </AppText>
-                </View>
-              ) : (
-                detalle.abonos.map((item) => (
-                  <AppCard key={item.id} style={{ marginBottom: spacing.sm }}>
-                    <View style={[styles.rowCenter, { gap: spacing.md }]}>
-                      <View
-                        style={[
-                          styles.iconCheckContainer,
-                          { backgroundColor: colors.successLight },
-                        ]}
-                      >
-                        <Feather
-                          name="check"
-                          size={sizes.iconSm}
-                          color={colors.success}
-                        />
-                      </View>
-                      <View style={styles.flexRowSpace}>
-                        <AppText variant="caption" color={colors.grayText}>
-                          {item.fecha}
-                        </AppText>
-                        <AppText variant="captionBold" color={colors.danger}>
-                          -{fmt(item.monto)}
-                        </AppText>
-                      </View>
-                    </View>
-                  </AppCard>
-                ))
-              ))}
+                  <TouchableOpacity
+                    style={[
+                      styles.tab,
+                      {
+                        borderRadius: radius.md,
+                        backgroundColor:
+                          tabHistorial === "activos"
+                            ? colors.primary
+                            : "transparent",
+                      },
+                    ]}
+                    onPress={() => setTabHistorial("activos")}
+                    activeOpacity={0.8}
+                  >
+                    <AppText
+                      variant="captionBold"
+                      color={
+                        tabHistorial === "activos"
+                          ? colors.white
+                          : colors.grayText
+                      }
+                    >
+                      Activos {abonosActivos.length}
+                    </AppText>
+                  </TouchableOpacity>
 
+                  <TouchableOpacity
+                    style={[
+                      styles.tab,
+                      {
+                        borderRadius: radius.md,
+                        backgroundColor:
+                          tabHistorial === "anulados"
+                            ? colors.grayText
+                            : "transparent",
+                      },
+                    ]}
+                    onPress={() => setTabHistorial("anulados")}
+                    activeOpacity={0.8}
+                  >
+                    <AppText
+                      variant="captionBold"
+                      color={
+                        tabHistorial === "anulados"
+                          ? colors.white
+                          : colors.grayText
+                      }
+                    >
+                      Anulados {abonosAnulados.length}
+                    </AppText>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Pagos activos */}
+                {tabHistorial === "activos" && (
+                  <>
+                    {abonosActivos.length === 0 ? (
+                      <View
+                        style={{
+                          alignItems: "center",
+                          paddingVertical: spacing.xxxl,
+                        }}
+                      >
+                        <AppText variant="body" color={colors.grayText}>
+                          Sin abonos activos
+                        </AppText>
+                      </View>
+                    ) : (
+                      <>
+                        <AppText
+                          variant="label"
+                          style={{ marginBottom: spacing.sm }}
+                        >
+                          Pagos activos
+                        </AppText>
+                        {abonosActivos.map((item) => (
+                          <View key={item.id} style={{ position: "relative" }}>
+                            <AppCard style={{ marginBottom: spacing.sm }}>
+                              <View style={styles.rowCenter}>
+                                {/* Ícono check */}
+                                <View
+                                  style={[
+                                    styles.iconContainer,
+                                    { backgroundColor: colors.successLight },
+                                  ]}
+                                >
+                                  <Feather
+                                    name="check"
+                                    size={sizes.iconSm}
+                                    color={colors.success}
+                                  />
+                                </View>
+
+                                {/* Info del abono */}
+                                <View style={[styles.abonoInfo, { gap: 2 }]}>
+                                  <AppText variant="captionBold">
+                                    {fmt(item.monto)}
+                                  </AppText>
+                                  <AppText
+                                    variant="caption"
+                                    color={colors.grayText}
+                                  >
+                                    {item.fecha}
+                                  </AppText>
+                                  {item.metodoPago && (
+                                    <View style={styles.rowCenter}>
+                                      <Feather
+                                        name="credit-card"
+                                        size={11}
+                                        color={colors.primary}
+                                        style={{ marginRight: 4 }}
+                                      />
+                                      <AppText
+                                        variant="caption"
+                                        color={colors.primary}
+                                      >
+                                        {item.metodoPago}
+                                      </AppText>
+                                    </View>
+                                  )}
+                                </View>
+
+                                {/* Botón anular directo */}
+                                <TouchableOpacity
+                                  onPress={(e) => {
+                                    e.stopPropagation();
+                                    onAbrirModalAnulacion(item);
+                                  }}
+                                  hitSlop={{
+                                    top: 8,
+                                    bottom: 8,
+                                    left: 8,
+                                    right: 8,
+                                  }}
+                                  style={[
+                                    styles.anularBtn,
+                                    {
+                                      backgroundColor:
+                                        colors.dangerLight ?? "#FEE2E2",
+                                    },
+                                  ]}
+                                >
+                                  <Feather
+                                    name="trash-2"
+                                    size={15}
+                                    color={colors.danger}
+                                  />
+                                </TouchableOpacity>
+                              </View>
+                            </AppCard>
+                          </View>
+                        ))}
+                      </>
+                    )}
+                  </>
+                )}
+
+                {/* Abonos anulados */}
+                {tabHistorial === "anulados" && (
+                  <>
+                    {abonosAnulados.length === 0 ? (
+                      <View
+                        style={{
+                          alignItems: "center",
+                          paddingVertical: spacing.xxxl,
+                        }}
+                      >
+                        <AppText variant="body" color={colors.grayText}>
+                          Sin abonos anulados
+                        </AppText>
+                      </View>
+                    ) : (
+                      abonosAnulados.map((item) => (
+                        <AppCard
+                          key={item.id}
+                          style={{
+                            marginBottom: spacing.sm,
+                            opacity: 0.7,
+                            borderLeftWidth: 3,
+                            borderLeftColor: colors.danger,
+                          }}
+                        >
+                          <View style={styles.rowCenter}>
+                            <View
+                              style={[
+                                styles.iconContainer,
+                                {
+                                  backgroundColor:
+                                    colors.dangerLight ?? "#FEE2E2",
+                                },
+                              ]}
+                            >
+                              <Feather
+                                name="x"
+                                size={sizes.iconSm}
+                                color={colors.danger}
+                              />
+                            </View>
+                            <View style={[styles.abonoInfo, { gap: 2 }]}>
+                              <AppText
+                                variant="captionBold"
+                                color={colors.grayText}
+                                style={{ textDecorationLine: "line-through" }}
+                              >
+                                {fmt(item.monto)}
+                              </AppText>
+                              <AppText
+                                variant="caption"
+                                color={colors.grayText}
+                              >
+                                {item.fecha}
+                              </AppText>
+                              {item.motivoAnulacion && (
+                                <AppText
+                                  variant="caption"
+                                  color={colors.danger}
+                                  numberOfLines={2}
+                                >
+                                  Motivo: {item.motivoAnulacion}
+                                </AppText>
+                              )}
+                              {item.fechaAnulacion && (
+                                <AppText
+                                  variant="caption"
+                                  color={colors.grayText}
+                                >
+                                  Anulado: {item.fechaAnulacion}
+                                </AppText>
+                              )}
+                            </View>
+                          </View>
+                        </AppCard>
+                      ))
+                    )}
+                  </>
+                )}
+              </>
+            )}
+
+            {/* ── Vista: Abono ───────────────────────────────────────────── */}
             {vistaActiva === "abono" && (
               <>
                 <AppText variant="label" style={{ marginBottom: spacing.sm }}>
@@ -292,7 +527,7 @@ export const GestorDeudaModal = ({
             )}
           </ScrollView>
 
-          {/* Botones fijos */}
+          {/* Footer con botones */}
           <View
             style={[
               styles.fixedFooter,
@@ -310,7 +545,10 @@ export const GestorDeudaModal = ({
                       padding: spacing.md,
                     },
                   ]}
-                  onPress={() => setVistaActiva("historial")}
+                  onPress={() => {
+                    setTabHistorial("activos");
+                    setVistaActiva("historial");
+                  }}
                   activeOpacity={0.8}
                 >
                   <AppText variant="bodyBold" color={colors.white}>
@@ -378,34 +616,34 @@ export const GestorDeudaModal = ({
   );
 
   return (
-    <Modal
-      visible={isVisible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={closeModal}
-    >
-      <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={closeModal} />
-
-        {/* ── iOS: KeyboardAvoidingView sube el modal sin encogerlo ── */}
-        {Platform.OS === "ios" ? (
-          <KeyboardAvoidingView
-            behavior="padding"
-            style={styles.keyboardView}
-            keyboardVerticalOffset={0}
-          >
-            {modalInner}
-          </KeyboardAvoidingView>
-        ) : (
-          /* ── Android: Animated.View sube el modal con bottomPadding ── */
-          <Animated.View
-            style={[styles.keyboardView, { marginBottom: androidBottom }]}
-          >
-            {modalInner}
-          </Animated.View>
-        )}
-      </View>
-    </Modal>
+    <>
+      {/* ── Modal principal ───────────────────────────────────────────────── */}
+      <Modal
+        visible={isVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={closeModal}
+      >
+        <View style={styles.overlay}>
+          <Pressable style={styles.backdrop} onPress={closeModal} />
+          {Platform.OS === "ios" ? (
+            <KeyboardAvoidingView
+              behavior="padding"
+              style={styles.keyboardView}
+              keyboardVerticalOffset={0}
+            >
+              {modalInner}
+            </KeyboardAvoidingView>
+          ) : (
+            <Animated.View
+              style={[styles.keyboardView, { marginBottom: androidBottom }]}
+            >
+              {modalInner}
+            </Animated.View>
+          )}
+        </View>
+      </Modal>
+    </>
   );
 };
 
@@ -472,17 +710,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  flexRowSpace: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  iconCheckContainer: {
+  iconContainer: {
     width: 36,
     height: 36,
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 12,
+  },
+  abonoInfo: {
+    flex: 1,
   },
   inputContainer: {
     flexDirection: "row",
@@ -491,5 +728,30 @@ const styles = StyleSheet.create({
   },
   button: {
     alignItems: "center",
+  },
+  tabContainer: {
+    flexDirection: "row",
+  },
+  tab: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 8,
+  },
+  anularBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  anulacionSheet: {
+    width: "100%",
+  },
+  textAreaContainer: {
+    borderWidth: 1,
+    minHeight: 100,
+  },
+  textArea: {
+    minHeight: 80,
   },
 });

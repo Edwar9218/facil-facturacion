@@ -1,6 +1,7 @@
+// src/data/repositories/CreditoRepositoryImpl.ts
+
 import { Abono } from "../../domain/entities/Abono";
 import { DetalleCredito, ResumenCredito } from "../../domain/entities/Credito";
-import { Venta } from "../../domain/entities/Venta";
 import { CreditoRepository } from "../../domain/repositories/CreditoRepository";
 import db from "../database/database";
 
@@ -19,18 +20,19 @@ const formatearFecha = (fecha: string): string => {
 };
 
 export class CreditoRepositoryImpl implements CreditoRepository {
-  // ── NUEVO: Retorna todos los abonos para que el Historial pueda
-  //          calcular el estado real de cada factura sin lógica duplicada ──
+  // ── Todos los abonos (sin filtrar) ────────────────────────────────────────
   async getAbonos(): Promise<Abono[]> {
     return db.getAllSync<Abono>("SELECT * FROM abonos;");
   }
 
-  // ── Resúmenes de Cartera ──────────────────────────────────────────────────
+  // ── Resúmenes de Cartera (solo abonos activos cuentan) ────────────────────
   async getResumenes(): Promise<ResumenCredito[]> {
     const ventas = db.getAllSync<any>(
       "SELECT * FROM ventas WHERE tipo = 'credito';",
     );
-    const abonos = db.getAllSync<Abono>("SELECT * FROM abonos;");
+    const abonos = db.getAllSync<Abono>(
+      "SELECT * FROM abonos WHERE estado = 'activo' OR estado IS NULL;",
+    );
     const clientes = db.getAllSync<any>("SELECT * FROM clientes;");
 
     const abonosPorVenta = new Map<string, number>();
@@ -45,7 +47,6 @@ export class CreditoRepositoryImpl implements CreditoRepository {
       const totalAbonadoAFactura = abonosPorVenta.get(venta.id) ?? 0;
       const saldoRestanteFactura = venta.total - totalAbonadoAFactura;
 
-      // Factura saldada → no suma a cartera
       if (saldoRestanteFactura <= 0) continue;
 
       const existente = mapaClientes.get(venta.clienteId);
@@ -72,13 +73,19 @@ export class CreditoRepositoryImpl implements CreditoRepository {
 
   // ── Detalle de estado de cuenta de un Cliente ─────────────────────────────
   async getDetalle(clienteId: string): Promise<DetalleCredito> {
+    // Todos los abonos del cliente (activos y anulados) para el historial
     const abonosRaw = db.getAllSync<Abono>(
       "SELECT * FROM abonos WHERE clienteId = ? ORDER BY rowid DESC;",
       [clienteId],
     );
 
+    // Solo abonos activos para calcular saldo
+    const abonosActivos = abonosRaw.filter(
+      (a) => a.estado === "activo" || !a.estado,
+    );
+
     const abonosPorVenta = new Map<string, number>();
-    for (const abono of abonosRaw) {
+    for (const abono of abonosActivos) {
       const acumulado = abonosPorVenta.get(abono.ventaId) ?? 0;
       abonosPorVenta.set(abono.ventaId, acumulado + abono.monto);
     }
@@ -92,7 +99,7 @@ export class CreditoRepositoryImpl implements CreditoRepository {
     let acumuladorTotalAbonos = 0;
     let acumuladorSaldoActual = 0;
 
-    const ventas: Venta[] = ventasRaw.map((v) => {
+    const ventas = ventasRaw.map((v) => {
       const abonadoAFactura = abonosPorVenta.get(v.id) ?? 0;
 
       acumuladorDeudaTotal += v.total;
@@ -111,6 +118,9 @@ export class CreditoRepositoryImpl implements CreditoRepository {
     const abonosFormateados: Abono[] = abonosRaw.map((a) => ({
       ...a,
       fecha: formatearFecha(a.fecha),
+      fechaAnulacion: a.fechaAnulacion
+        ? formatearFecha(a.fechaAnulacion)
+        : undefined,
     }));
 
     const clientes = db.getAllSync<any>(
@@ -138,35 +148,27 @@ export class CreditoRepositoryImpl implements CreditoRepository {
     ventaId,
     monto,
     fecha,
+    metodoPago,
   }: {
     clienteId: string;
     ventaId: string;
     monto: number;
     fecha: string;
+    metodoPago?: string;
   }) {
     try {
       let montoRestante = monto;
 
       if (ventaId && ventaId !== "") {
         // Abono directo a factura específica
-        await this.guardarAbonoEnDB(clienteId, ventaId, monto, fecha);
-
-        // Recalcular saldo de esta factura y actualizar estado
-        const abonoAcumulado = db.getFirstSync<any>(
-          "SELECT SUM(monto) as total FROM abonos WHERE ventaId = ?",
-          [ventaId],
+        await this.guardarAbonoEnDB(
+          clienteId,
+          ventaId,
+          monto,
+          fecha,
+          metodoPago,
         );
-        const ventaRow = db.getFirstSync<any>(
-          "SELECT total FROM ventas WHERE id = ?",
-          [ventaId],
-        );
-        if (ventaRow) {
-          const saldoRestante = ventaRow.total - (abonoAcumulado?.total ?? 0);
-          db.runSync("UPDATE ventas SET estado = ? WHERE id = ?", [
-            saldoRestante <= 0 ? "pagado" : "debe",
-            ventaId,
-          ]);
-        }
+        this.recalcularEstadoVenta(ventaId);
       } else {
         // Abono global FIFO — aplica a las facturas más antiguas primero
         const ventasPendientes = db.getAllSync<any>(
@@ -178,21 +180,22 @@ export class CreditoRepositoryImpl implements CreditoRepository {
           if (montoRestante <= 0) break;
 
           const abonoAcumulado = db.getFirstSync<any>(
-            "SELECT SUM(monto) as total FROM abonos WHERE ventaId = ?",
+            "SELECT SUM(monto) as total FROM abonos WHERE ventaId = ? AND (estado = 'activo' OR estado IS NULL)",
             [venta.id],
           );
           const saldoFactura = venta.total - (abonoAcumulado?.total ?? 0);
 
           if (saldoFactura > 0) {
             const aPagar = Math.min(montoRestante, saldoFactura);
-            await this.guardarAbonoEnDB(clienteId, venta.id, aPagar, fecha);
-            montoRestante -= aPagar;
-
-            const saldoTrasAbono = saldoFactura - aPagar;
-            db.runSync("UPDATE ventas SET estado = ? WHERE id = ?", [
-              saldoTrasAbono <= 0 ? "pagado" : "debe",
+            await this.guardarAbonoEnDB(
+              clienteId,
               venta.id,
-            ]);
+              aPagar,
+              fecha,
+              metodoPago,
+            );
+            montoRestante -= aPagar;
+            this.recalcularEstadoVenta(venta.id);
           }
         }
       }
@@ -203,15 +206,103 @@ export class CreditoRepositoryImpl implements CreditoRepository {
     }
   }
 
+  // ── Anular abono ──────────────────────────────────────────────────────────
+  async anularAbono({
+    abonoId,
+    motivo,
+    usuario = "admin",
+  }: {
+    abonoId: string;
+    motivo: string;
+    usuario?: string;
+  }): Promise<boolean> {
+    try {
+      const abono = db.getFirstSync<Abono>(
+        "SELECT * FROM abonos WHERE id = ?;",
+        [abonoId],
+      );
+
+      if (!abono) throw new Error("Abono no encontrado.");
+      if (abono.estado === "anulado")
+        throw new Error("El abono ya fue anulado.");
+
+      const fechaAnulacion = new Date()
+        .toLocaleString("sv-SE", { timeZone: "America/Bogota" })
+        .replace(" ", "T");
+
+      // 1. Marcar el abono como anulado
+      db.runSync(
+        `UPDATE abonos
+         SET estado = 'anulado', motivoAnulacion = ?, fechaAnulacion = ?
+         WHERE id = ?;`,
+        [motivo, fechaAnulacion, abonoId],
+      );
+
+      // 2. Registrar en tabla de auditoría
+      const anulacionId = `${Date.now()}${Math.random()}`;
+      db.runSync(
+        `INSERT INTO anulaciones_abonos (id, abonoId, clienteId, ventaId, motivo, fecha, usuario)
+         VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        [
+          anulacionId,
+          abonoId,
+          abono.clienteId,
+          abono.ventaId,
+          motivo,
+          fechaAnulacion,
+          usuario,
+        ],
+      );
+
+      // 3. Recalcular estado de la venta afectada
+      this.recalcularEstadoVenta(abono.ventaId);
+
+      return true;
+    } catch (error) {
+      console.error("Error al anular abono:", error);
+      throw error;
+    }
+  }
+
+  // ── Helpers privados ──────────────────────────────────────────────────────
   private async guardarAbonoEnDB(
     clienteId: string,
     ventaId: string,
     monto: number,
     fecha: string,
+    metodoPago?: string,
   ) {
     db.runSync(
-      "INSERT INTO abonos (id, clienteId, ventaId, monto, fecha) VALUES (?, ?, ?, ?, ?)",
-      [Date.now().toString() + Math.random(), clienteId, ventaId, monto, fecha],
+      `INSERT INTO abonos (id, clienteId, ventaId, monto, fecha, metodoPago, estado)
+       VALUES (?, ?, ?, ?, ?, ?, 'activo');`,
+      [
+        Date.now().toString() + Math.random(),
+        clienteId,
+        ventaId,
+        monto,
+        fecha,
+        metodoPago ?? null,
+      ],
     );
+  }
+
+  // Recalcula si la venta queda 'pagado' o 'debe' considerando solo abonos activos
+  private recalcularEstadoVenta(ventaId: string) {
+    const venta = db.getFirstSync<any>(
+      "SELECT total FROM ventas WHERE id = ?;",
+      [ventaId],
+    );
+    if (!venta) return;
+
+    const abonoAcumulado = db.getFirstSync<any>(
+      "SELECT SUM(monto) as total FROM abonos WHERE ventaId = ? AND (estado = 'activo' OR estado IS NULL);",
+      [ventaId],
+    );
+
+    const saldoRestante = venta.total - (abonoAcumulado?.total ?? 0);
+    db.runSync("UPDATE ventas SET estado = ? WHERE id = ?;", [
+      saldoRestante <= 0 ? "pagado" : "debe",
+      ventaId,
+    ]);
   }
 }

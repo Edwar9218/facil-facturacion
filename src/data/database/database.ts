@@ -1,9 +1,10 @@
+// src/data/database/database.ts
+
 import * as SQLite from "expo-sqlite";
 
 const db = SQLite.openDatabaseSync("facil.db");
 
 export const initDatabase = (): void => {
-  // SIEMPRE activar FK antes de cualquier operación
   db.execSync(`PRAGMA foreign_keys = ON;`);
 
   db.execSync(`
@@ -37,8 +38,6 @@ export const initDatabase = (): void => {
       id            TEXT PRIMARY KEY NOT NULL,
       clienteId     TEXT NOT NULL,
       nombreCliente TEXT NOT NULL,
-      -- 'items' se conserva por retrocompatibilidad con registros previos.
-      -- Las nuevas ventas lo dejan vacío ('[]'); leer siempre desde venta_items.
       items         TEXT NOT NULL DEFAULT '[]',
       total         REAL NOT NULL,
       tipo          TEXT NOT NULL,
@@ -52,7 +51,6 @@ export const initDatabase = (): void => {
         ON UPDATE CASCADE
     );
 
-    -- ── TABLA NORMALIZADA DE ÍTEMS ─────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS venta_items (
       id              TEXT PRIMARY KEY NOT NULL,
       ventaId         TEXT NOT NULL,
@@ -72,11 +70,15 @@ export const initDatabase = (): void => {
     );
 
     CREATE TABLE IF NOT EXISTS abonos (
-      id        TEXT PRIMARY KEY NOT NULL,
-      clienteId TEXT NOT NULL,
-      ventaId   TEXT NOT NULL,
-      monto     REAL NOT NULL,
-      fecha     TEXT NOT NULL,
+      id              TEXT PRIMARY KEY NOT NULL,
+      clienteId       TEXT NOT NULL,
+      ventaId         TEXT NOT NULL,
+      monto           REAL NOT NULL,
+      fecha           TEXT NOT NULL,
+      metodoPago      TEXT,
+      estado          TEXT NOT NULL DEFAULT 'activo',
+      motivoAnulacion TEXT,
+      fechaAnulacion  TEXT,
       FOREIGN KEY (clienteId)
         REFERENCES clientes(id)
         ON DELETE RESTRICT
@@ -87,18 +89,28 @@ export const initDatabase = (): void => {
         ON UPDATE CASCADE
     );
 
-    -- ── TABLA DE ANULACIONES ───────────────────────────────────────────────
-    -- Guarda la auditoría de cada factura anulada.
-    -- Se relaciona con ventas pero NO en cascada: el historial debe
-    -- mantenerse incluso si (hipotéticamente) se eliminara la venta.
     CREATE TABLE IF NOT EXISTS anulaciones (
       id        TEXT PRIMARY KEY NOT NULL,
-      ventaId   TEXT NOT NULL UNIQUE,   -- una venta solo puede anularse una vez
-      fecha     TEXT NOT NULL,           -- ISO timestamp del momento de anulación
-      usuario   TEXT NOT NULL,           -- quién anuló
-      motivo    TEXT NOT NULL,           -- por qué se anuló
+      ventaId   TEXT NOT NULL UNIQUE,
+      fecha     TEXT NOT NULL,
+      usuario   TEXT NOT NULL,
+      motivo    TEXT NOT NULL,
       FOREIGN KEY (ventaId)
         REFERENCES ventas(id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS anulaciones_abonos (
+      id        TEXT PRIMARY KEY NOT NULL,
+      abonoId   TEXT NOT NULL UNIQUE,
+      clienteId TEXT NOT NULL,
+      ventaId   TEXT NOT NULL,
+      motivo    TEXT NOT NULL,
+      fecha     TEXT NOT NULL,
+      usuario   TEXT NOT NULL DEFAULT 'admin',
+      FOREIGN KEY (abonoId)
+        REFERENCES abonos(id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE
     );
@@ -170,7 +182,6 @@ export const initDatabase = (): void => {
   if (!ventasInfo.some((c: any) => c.name === "numeroFactura")) {
     db.execSync(`ALTER TABLE ventas ADD COLUMN numeroFactura TEXT;`);
   }
-
   if (!ventasInfo.some((c: any) => c.name === "metodoPago")) {
     db.execSync(`ALTER TABLE ventas ADD COLUMN metodoPago TEXT;`);
   }
@@ -181,19 +192,31 @@ export const initDatabase = (): void => {
       `ALTER TABLE abonos ADD COLUMN ventaId TEXT NOT NULL DEFAULT '';`,
     );
   }
+  if (!abonosInfo.some((c: any) => c.name === "metodoPago")) {
+    db.execSync(`ALTER TABLE abonos ADD COLUMN metodoPago TEXT;`);
+  }
+  if (!abonosInfo.some((c: any) => c.name === "estado")) {
+    db.execSync(
+      `ALTER TABLE abonos ADD COLUMN estado TEXT NOT NULL DEFAULT 'activo';`,
+    );
+  }
+  if (!abonosInfo.some((c: any) => c.name === "motivoAnulacion")) {
+    db.execSync(`ALTER TABLE abonos ADD COLUMN motivoAnulacion TEXT;`);
+  }
+  if (!abonosInfo.some((c: any) => c.name === "fechaAnulacion")) {
+    db.execSync(`ALTER TABLE abonos ADD COLUMN fechaAnulacion TEXT;`);
+  }
 
-  // ── Migración: tabla anulaciones (usuarios con app previa no la tienen) ──
-  // CREATE TABLE IF NOT EXISTS ya la crea arriba para instalaciones nuevas.
-  // Para las existentes el CREATE IF NOT EXISTS también aplica, pero dejamos
-  // este bloque explícito como documentación y para garantizar el índice.
+  // ── Índices ───────────────────────────────────────────────────────────────
   try {
     db.execSync(`
       CREATE INDEX IF NOT EXISTS idx_anulaciones_ventaId
         ON anulaciones(ventaId);
+      CREATE INDEX IF NOT EXISTS idx_anulaciones_abonos_abonoId
+        ON anulaciones_abonos(abonoId);
     `);
   } catch {
-    // Si la tabla aún no existía en una BD muy vieja, el CREATE TABLE
-    // de arriba ya la habrá creado; el índice se intenta igual.
+    // Tabla muy vieja: el CREATE TABLE IF NOT EXISTS ya la habrá creado.
   }
 
   // ── Migración: poblar venta_items desde la columna JSON 'items' ──────────
@@ -236,7 +259,7 @@ export const initDatabase = (): void => {
         );
       }
     } catch {
-      // Si el JSON estaba corrupto, se omite esa venta.
+      // JSON corrupto: se omite esa venta.
     }
   }
 };
