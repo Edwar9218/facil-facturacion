@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   AppState,
   AppStateStatus,
@@ -28,6 +29,7 @@ import { runOnJS } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
 import { ResumenCredito } from "../../../domain/entities/Credito";
+import { getEstadoStock } from "../../../domain/entities/Producto";
 import { useTheme } from "../../../theme";
 import { AppText } from "../../components/ui/AppText";
 import { FormularioModal } from "../../components/ui/FormularioModal";
@@ -150,6 +152,7 @@ export default function NuevaVentaScreen() {
     finalizarVenta,
     inputPagoRef,
     scrollRef,
+    inventarioActivo,
   } = useNuevaVenta();
 
   React.useEffect(() => {
@@ -983,22 +986,41 @@ export default function NuevaVentaScreen() {
                               <ProductoCard
                                 key={p.id}
                                 producto={p}
+                                mostrarStock={inventarioActivo}
+                                ocultarMenu={true}
                                 enCarrito={enCarrito}
                                 itemCarrito={itemCarrito}
                                 onPress={() => {
                                   if (!enCarrito) {
-                                    /* console.log(
-                                      "📦 Abrir modal producto:",
-                                      p.nombre,
-                                    ) */ abrirModal(p);
+                                    if (
+                                      inventarioActivo &&
+                                      getEstadoStock(p) === "agotado"
+                                    ) {
+                                      Alert.alert(
+                                        "Producto agotado",
+                                        `"${p.nombre}" no tiene stock disponible y no puede agregarse a la venta.`,
+                                        [
+                                          {
+                                            text: "Entendido",
+                                            style: "cancel",
+                                          },
+                                        ],
+                                      );
+                                      return;
+                                    }
+                                    abrirModal(p);
                                   }
                                 }}
-                                onPressMenu={() => {
-                                  /* console.log(
+                                onPressMenu={
+                                  enCarrito
+                                    ? () => {
+                                        /* console.log(
                                     "⚙️ Menú opciones abierto para:",
                                     itemCarrito?.nombre,
                                   ) */ abrirMenu(itemCarrito);
-                                }}
+                                      }
+                                    : undefined
+                                }
                               />
                             );
                           };

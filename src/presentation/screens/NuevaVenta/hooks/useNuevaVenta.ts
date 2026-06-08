@@ -9,9 +9,11 @@ import {
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { ClienteRepositoryImpl } from "../../../../data/repositories/ClienteRepositoryImpl";
+import { ConfiguracionRepositoryImpl } from "../../../../data/repositories/ConfiguracionRepositoryImpl";
 import { ProductoRepositoryImpl } from "../../../../data/repositories/ProductoRepositoryImpl";
 import { VentaRepositoryImpl } from "../../../../data/repositories/VentaRepositoryImpl";
 import { Cliente } from "../../../../domain/entities/Cliente";
+import { CONFIG_KEYS } from "../../../../domain/entities/Configuracion";
 import { Producto } from "../../../../domain/entities/Producto";
 import { useSlideModal } from "../../../hooks/useSlideModal";
 
@@ -26,6 +28,7 @@ if (
 const clienteRepo = new ClienteRepositoryImpl();
 const productoRepo = new ProductoRepositoryImpl();
 const ventaRepo = new VentaRepositoryImpl();
+const configRepo = new ConfiguracionRepositoryImpl();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export const smoothLayout = () =>
@@ -153,6 +156,8 @@ export const useNuevaVenta = () => {
     imagen: "",
   });
 
+  const [inventarioActivo, setInventarioActivo] = useState(false);
+
   // ── Paso 3 — Cobro ────────────────────────────────────────────────────────
   // ← CAMBIO 1: null por defecto, sin selección previa
   const [metodoPago, setMetodoPago] = useState<"contado" | "credito" | null>(
@@ -197,12 +202,14 @@ export const useNuevaVenta = () => {
   // ── Cargar BD al montar ───────────────────────────────────────────────────
   const cargarDatos = async () => {
     setCargandoGlobal(true);
-    const [cs, ps] = await Promise.all([
+    const [cs, ps, valorConfig] = await Promise.all([
       clienteRepo.getAll(),
       productoRepo.getAll(),
+      configRepo.get(CONFIG_KEYS.INVENTARIO_ACTIVO),
     ]);
     setClientes(cs);
     setProductos(ps);
+    setInventarioActivo(valorConfig === "1");
     setCargandoGlobal(false);
   };
 
@@ -309,6 +316,20 @@ export const useNuevaVenta = () => {
     const qty = parseInt(cantidadModal, 10) || 1;
     const precio =
       parseFloat(precioModal.replace(/\./g, "")) || productoActivo.precio;
+
+    // Validar stock si el inventario está activo y el producto tiene control de stock
+    if (
+      inventarioActivo &&
+      productoActivo.controlStock &&
+      qty > (productoActivo.stock ?? 0)
+    ) {
+      Alert.alert(
+        "Stock insuficiente",
+        `Solo hay ${productoActivo.stock ?? 0} ${productoActivo.unidad} disponibles de "${productoActivo.nombre}".`,
+        [{ text: "Entendido", style: "cancel" }],
+      );
+      return;
+    }
     setCarrito((prev) => {
       const existe = prev.find((i) => i.id === productoActivo.id);
       if (existe)
@@ -524,5 +545,6 @@ export const useNuevaVenta = () => {
     inputPagoRef,
     scrollRef,
     cargarDatos,
+    inventarioActivo,
   };
 };

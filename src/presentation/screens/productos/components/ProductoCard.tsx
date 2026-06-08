@@ -28,12 +28,14 @@ interface Props {
   producto: Producto;
   onPress: (producto: Producto) => void;
   mostrarStock?: boolean; // viene de AjustesScreen (toggle global)
+  ocultarMenu?: boolean; // para NuevaVenta: oculta los 3 puntos
 }
 
 export const ProductoCard = ({
   producto,
   onPress,
   mostrarStock = false,
+  ocultarMenu = false,
 }: Props) => {
   const { colors, spacing, radius, sizes } = useTheme();
 
@@ -118,11 +120,13 @@ export const ProductoCard = ({
         </View>
 
         {/* 3 puntos visual */}
-        <MaterialIcons
-          name="more-vert"
-          size={sizes.iconLg}
-          color={colors.grayText}
-        />
+        {!ocultarMenu && (
+          <MaterialIcons
+            name="more-vert"
+            size={sizes.iconLg}
+            color={colors.grayText}
+          />
+        )}
       </View>
     </AppCard>
   );
