@@ -1210,14 +1210,15 @@ export const HistorialScreen = () => {
     ventasActivas.forEach((v) => {
       (v.items ?? []).forEach((item: ItemVenta) => {
         const nombre = item.nombreProducto ?? item.productoId ?? "Producto";
-        conteoProductos[nombre] =
-          (conteoProductos[nombre] ?? 0) + (item.cantidad ?? 1);
+        const subtotal =
+          item.subtotal ?? (item.precioUnitario ?? 0) * (item.cantidad ?? 1);
+        conteoProductos[nombre] = (conteoProductos[nombre] ?? 0) + subtotal;
       });
     });
     const top3 = Object.entries(conteoProductos)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
-      .map(([nombre, cantidad]) => ({ nombre, cantidad }));
+      .map(([nombre, total]) => ({ nombre, total }));
 
     return {
       total,
@@ -1921,7 +1922,7 @@ export const HistorialScreen = () => {
             (() => {
               const medallas = ["🥇", "🥈", "🥉"];
               const barColors = ["#F59E0B", "#9CA3AF", "#CD7C2F"];
-              const maxCantidad = stats.top3[0]?.cantidad ?? 1;
+              const maxTotal = stats.top3[0]?.total ?? 1;
               return (
                 <>
                   <View
@@ -1977,7 +1978,7 @@ export const HistorialScreen = () => {
                               marginLeft: 8,
                             }}
                           >
-                            {p.cantidad} uds
+                            $ {Number(p.total).toLocaleString("es-CO")}
                           </AppText>
                         </View>
                         <View
@@ -1993,7 +1994,7 @@ export const HistorialScreen = () => {
                               height: 5,
                               borderRadius: 4,
                               backgroundColor: barColors[i],
-                              width: `${Math.round((p.cantidad / maxCantidad) * 100)}%`,
+                              width: `${Math.round((p.total / maxTotal) * 100)}%`,
                             }}
                           />
                         </View>

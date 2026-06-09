@@ -722,13 +722,15 @@ export const VentaDelDiaScreen = () => {
       .forEach((v) => {
         (v.items ?? []).forEach((item: ItemVenta) => {
           const nombre = item.nombreProducto ?? "Producto";
-          conteo[nombre] = (conteo[nombre] ?? 0) + (item.cantidad ?? 1);
+          const subtotal =
+            item.subtotal ?? (item.precioUnitario ?? 0) * (item.cantidad ?? 1);
+          conteo[nombre] = (conteo[nombre] ?? 0) + subtotal;
         });
       });
     return Object.entries(conteo)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 3)
-      .map(([nombre, cantidad]) => ({ nombre, cantidad }));
+      .map(([nombre, total]) => ({ nombre, total }));
   }, [todasVentasDeHoy]);
 
   const cargar = async (esRefresh = false) => {
@@ -977,7 +979,7 @@ export const VentaDelDiaScreen = () => {
     : ventasFiltradas.slice(0, 5);
   const medallas = ["🥇", "🥈", "🥉"];
   const barColors = ["#F59E0B", "#9CA3AF", "#CD7C2F"];
-  const maxCantidad = top3[0]?.cantidad ?? 1;
+  const maxTotal = top3[0]?.total ?? 1;
 
   return (
     <ScreenWrapper title="Venta del día" showBtnB={false}>
@@ -1590,7 +1592,7 @@ export const VentaDelDiaScreen = () => {
                           marginLeft: 8,
                         }}
                       >
-                        {p.cantidad} uds
+                        $ {Number(p.total).toLocaleString("es-CO")}
                       </AppText>
                     </View>
                     <View
@@ -1606,7 +1608,7 @@ export const VentaDelDiaScreen = () => {
                           height: 5,
                           borderRadius: 4,
                           backgroundColor: barColors[i],
-                          width: `${Math.round((p.cantidad / maxCantidad) * 100)}%`,
+                          width: `${Math.round((p.total / maxTotal) * 100)}%`,
                         }}
                       />
                     </View>

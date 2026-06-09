@@ -1888,6 +1888,14 @@ export default function NuevaVentaScreen() {
           ref={scrollRef}
           bottomOffset={250}
           extraKeyboardSpace={0}
+          scrollEnabled={
+            productoActivo != null ||
+            step === 3 ||
+            (!filtroActivo &&
+              !filtroClienteActivo &&
+              filtroCliente.trim() === "" &&
+              filtroProducto.trim() === "")
+          }
           contentContainerStyle={{
             flexGrow: 1,
             paddingHorizontal: spacing.lg,
