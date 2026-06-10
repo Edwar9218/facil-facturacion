@@ -14,7 +14,7 @@ export interface VentaRepository {
   /**
    * Anula una factura activa:
    * 1. Marca estado = 'anulada' en ventas
-   * 2. Guarda fecha, usuario y motivo en la tabla anulaciones
+   * 2. Guarda fecha, usuario y motivo en la tabla anulaciones_venta
    * 3. Restaura el stock de cada ítem
    * 4. La venta permanece visible en el historial
    *

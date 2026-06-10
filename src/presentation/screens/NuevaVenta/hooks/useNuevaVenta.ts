@@ -285,9 +285,13 @@ export const useNuevaVenta = () => {
   };
 
   // ── Productos ─────────────────────────────────────────────────────────────
-  const productosFiltrados = productos.filter((p) =>
-    norm(p.nombre).includes(norm(filtroProducto)),
-  );
+  const productosFiltrados = productos.filter((p) => {
+    const coincideNombre = norm(p.nombre).includes(norm(filtroProducto));
+    if (!coincideNombre) return false;
+    // Si el inventario global está activo, solo mostrar productos con controlStock activo
+    if (inventarioActivo && !p.controlStock) return false;
+    return true;
+  });
 
   const idsEnCarrito = carrito.map((i) => i.id);
 
@@ -330,13 +334,29 @@ export const useNuevaVenta = () => {
       );
       return;
     }
+    /* console.log(
+      "🛒 Producto a agregar:",
+      productoActivo.nombre,
+      "| unidad:",
+      productoActivo.unidad,
+    ); */
     setCarrito((prev) => {
       const existe = prev.find((i) => i.id === productoActivo.id);
       if (existe)
         return prev.map((i) =>
-          i.id === productoActivo.id ? { ...i, qty, precio } : i,
+          i.id === productoActivo.id
+            ? { ...i, qty, precio, unidad: productoActivo.unidad ?? "Und" } // ← agregar unidad
+            : i,
         );
-      return [...prev, { ...productoActivo, precio, qty }];
+      return [
+        ...prev,
+        {
+          ...productoActivo,
+          precio,
+          qty,
+          unidad: productoActivo.unidad ?? "Und", // ← garantizar unidad
+        },
+      ];
     });
     setCarritoExpandido(false);
     cerrarModal();
@@ -440,10 +460,12 @@ export const useNuevaVenta = () => {
           precioUnitario: i.precio,
           cantidad: i.qty,
           subtotal: i.precio * i.qty,
+          unidad: i.unidad ?? "und",
         })),
         total: totalCarrito,
         tipo: metodoPago,
         metodoPago: metodoPagoReal,
+        estado: metodoPago === "credito" ? "debe" : "pagado", // ← agregar esto
         fecha: new Date()
           .toLocaleString("sv-SE", { timeZone: "America/Bogota" })
           .replace(" ", "T"),

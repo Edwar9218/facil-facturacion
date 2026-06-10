@@ -244,7 +244,7 @@ const ModalFactura = ({
                   {item.nombreProducto}
                 </AppText>
                 <AppText style={ms.productoPrecioUnit}>
-                  {fmt(item.precioUnitario)} c/u
+                  {fmt(item.precioUnitario)} / {item.unidad ?? "und"}
                 </AppText>
               </View>
               <AppText style={[ms.colValor, ms.colCant]}>

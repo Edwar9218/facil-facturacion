@@ -1185,10 +1185,18 @@ export default function NuevaVentaScreen() {
                   <TouchableOpacity
                     style={s.totalRow}
                     onPress={() => {
-                      /* console.log(
-                        "📋 Toggle carrito expandido:",
-                        !carritoExpandido,
-                      ) */ setCarritoExpandido((v) => !v);
+                      setCarritoExpandido((v) => {
+                        if (v) {
+                          // Al colapsar → volver al top
+                          setTimeout(() => {
+                            scrollRef.current?.scrollTo({
+                              y: 0,
+                              animated: true,
+                            });
+                          }, 50);
+                        }
+                        return !v;
+                      });
                     }}
                     activeOpacity={0.7}
                   >
@@ -1891,6 +1899,7 @@ export default function NuevaVentaScreen() {
           scrollEnabled={
             productoActivo != null ||
             step === 3 ||
+            carritoExpandido || // ← esto es todo lo que agrego
             (!filtroActivo &&
               !filtroClienteActivo &&
               filtroCliente.trim() === "" &&
@@ -2005,15 +2014,14 @@ const s = StyleSheet.create({
     top: 56,
     left: 0,
     right: 0,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: GRAY_BORDER,
+    backgroundColor: "#F0F2F7",
+    borderRadius: 16,
+    borderWidth: 0,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 4,
     zIndex: 20,
     padding: 8,
   },
@@ -2097,9 +2105,8 @@ const s = StyleSheet.create({
   guiaBox: {
     alignItems: "center",
     paddingVertical: 28,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: GRAY_BORDER,
+    backgroundColor: "transparent",
+    borderWidth: 0,
     borderRadius: 14,
   },
   tablaHeaderRow: {
@@ -2370,9 +2377,9 @@ const s = StyleSheet.create({
     gap: 8,
     marginVertical: 10,
   },
-  separadorLinea: { flex: 1, height: 1, backgroundColor: GRAY_BORDER },
+  separadorLinea: { flex: 1, height: 1, backgroundColor: "#D8DCE8" },
   separadorTexto: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "600" as const,
     color: GRAY_TEXT,
     letterSpacing: 0.4,

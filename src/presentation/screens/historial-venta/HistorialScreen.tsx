@@ -143,6 +143,11 @@ const ModalFactura = ({
       : "clock-outline";
   const badgeLabel = esAnulada ? "Anulada" : esPazYSalvo ? "Al día" : "En mora";
 
+  /* console.log(
+    "🧾 Items de venta:",
+    JSON.stringify(venta?.items ?? [], null, 2),
+  );*/
+
   return (
     <Modal
       visible={visible}
@@ -274,7 +279,7 @@ const ModalFactura = ({
                   {item.nombreProducto}
                 </AppText>
                 <AppText style={ms.productoPrecioUnit}>
-                  {fmt(item.precioUnitario)} c/u
+                  {fmt(item.precioUnitario)} / {item.unidad ?? "und"}
                 </AppText>
               </View>
               <AppText style={[ms.colValor, ms.colCant]}>

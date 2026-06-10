@@ -4,6 +4,7 @@ export interface ItemVenta {
   precioUnitario: number;
   cantidad: number;
   subtotal: number;
+  unidad: string;
 }
 
 export interface Venta {

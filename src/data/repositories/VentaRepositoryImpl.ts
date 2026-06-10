@@ -11,7 +11,7 @@ const productoRepo = new ProductoRepositoryImpl();
 // ── Helper: construye el array de ItemVenta desde venta_items ─────────────────
 const cargarItems = (ventaId: string, itemsJson: string): ItemVenta[] => {
   const filas = db.getAllSync<any>(
-    `SELECT productoId, nombreProducto, precioUnitario, cantidad, subtotal
+    `SELECT productoId, nombreProducto, precioUnitario, cantidad, subtotal, unidad
      FROM venta_items
      WHERE ventaId = ?
      ORDER BY rowid ASC;`,
@@ -33,9 +33,10 @@ const cargarAnulacion = (ventaId: string): Venta["anulacion"] | undefined => {
     fecha: string;
     usuario: string;
     motivo: string;
-  }>(`SELECT fecha, usuario, motivo FROM anulaciones WHERE ventaId = ?;`, [
-    ventaId,
-  ]);
+  }>(
+    `SELECT fecha, usuario, motivo FROM anulaciones_venta WHERE ventaId = ?;`,
+    [ventaId],
+  );
   return row ?? undefined;
 };
 
@@ -116,8 +117,8 @@ export class VentaRepositoryImpl implements VentaRepository {
         const itemId = `${id}_${item.productoId}`;
         db.runSync(
           `INSERT INTO venta_items
-             (id, ventaId, productoId, nombreProducto, precioUnitario, cantidad, subtotal)
-           VALUES (?, ?, ?, ?, ?, ?, ?);`,
+             (id, ventaId, productoId, nombreProducto, precioUnitario, cantidad, subtotal, unidad)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
           [
             itemId,
             id,
@@ -126,6 +127,7 @@ export class VentaRepositoryImpl implements VentaRepository {
             item.precioUnitario,
             item.cantidad,
             item.subtotal,
+            item.unidad ?? "Und", // ← corregido
           ],
         );
       }
@@ -159,7 +161,7 @@ export class VentaRepositoryImpl implements VentaRepository {
    * 1. Verifica que la venta existe, NO está ya anulada, y NO tiene abonos
    * 2. Dentro de una transacción:
    * a. Cambia estado → 'anulada' en ventas
-   * b. Inserta el registro de auditoría en anulaciones
+   * b. Inserta el registro de auditoría en anulaciones_venta
    * 3. Fuera de la transacción: restaura stock de cada ítem
    * (best-effort, igual que el descuento al crear)
    * 4. Devuelve la venta actualizada con el bloque anulacion incluido
@@ -203,7 +205,7 @@ export class VentaRepositoryImpl implements VentaRepository {
 
       // b) Registrar auditoría
       db.runSync(
-        `INSERT INTO anulaciones (id, ventaId, fecha, usuario, motivo)
+        `INSERT INTO anulaciones_venta (id, ventaId, fecha, usuario, motivo)
          VALUES (?, ?, ?, ?, ?);`,
         [anulacionId, id, fechaAnulacion, data.usuario, data.motivo],
       );
