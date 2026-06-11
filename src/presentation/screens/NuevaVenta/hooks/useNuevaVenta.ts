@@ -303,7 +303,11 @@ export const useNuevaVenta = () => {
     setModoModal("agregar");
     setFiltroProducto("");
     setFiltroActivo(false);
-    setTimeout(() => precioInputRef.current?.focus(), 350);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        precioInputRef.current?.focus();
+      });
+    });
   };
 
   const cerrarModal = () => {
@@ -376,7 +380,11 @@ export const useNuevaVenta = () => {
     setModoModal("editar");
     setFiltroProducto("");
     setFiltroActivo(false);
-    setTimeout(() => precioInputRef.current?.focus(), 350);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        precioInputRef.current?.focus();
+      });
+    });
   };
 
   const eliminarConMenu = (item: any) => {
