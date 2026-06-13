@@ -38,6 +38,8 @@ export const CreditosScreen = () => {
     detalle,
     montoAbono,
     setMontoAbono,
+    metodoPagoAbono,
+    setMetodoPagoAbono,
     modalGestor,
     vistaModal,
     setVistaModal,
@@ -147,6 +149,8 @@ export const CreditosScreen = () => {
         setVistaActiva={setVistaModal}
         montoAbono={montoAbono}
         onChangeMonto={setMontoAbono}
+        metodoPago={metodoPagoAbono}
+        onChangeMetodoPago={setMetodoPagoAbono}
         onRegistrarAbono={registrarAbono}
         onAbrirModalAnulacion={abrirModalAnulacion}
       />

@@ -34,7 +34,7 @@ interface Abono {
   ventaId: string;
   monto: number;
   fecha: string;
-  estado?: string; // "activo" | "anulado"
+  estado?: string;
 }
 
 const fmt = (n: number) =>
@@ -91,22 +91,18 @@ const obtenerEtiquetaAgrupacion = (fechaStr: string) => {
 const ventaRepo = new VentaRepositoryImpl();
 const creditoRepo = new CreditoRepositoryImpl();
 
-// ── Tipos de filtro ──────────────────────────────────────────────────────────
-// "anulada" es el nuevo valor que se agrega al filtro de estado
 type TipoEstado = "todas" | "pazysalvo" | "debe" | "anulada";
 type TipoPeriodo = "hoy" | "semana" | "mes" | "personalizado";
 
 const AVATAR_COLORS = [
-  { bg: "#FCE4EC", fg: "#E91E63" },
-  { bg: "#E8F5E9", fg: "#2E7D32" },
-  { bg: "#EDE9FE", fg: "#7C3AED" },
-  { bg: "#FFF3E0", fg: "#F59E0B" },
-  { bg: "#E3F2FD", fg: "#1565C0" },
+  { bg: "#EBF3FF", fg: "#2563EB" },
+  { bg: "#FEF3C7", fg: "#D97706" },
+  { bg: "#EBF7EE", fg: "#16A34A" },
   { bg: "#F3E8FF", fg: "#9333EA" },
+  { bg: "#FCE4EC", fg: "#E91E63" },
 ];
 
-// ── Modal detalle de factura ─────────────────────────────────────────────────
-// Actualizado: muestra bloque de anulación si la venta está anulada
+// ── MODAL DETALLE DE FACTURA ─────────────────────────────────────────────────
 const ModalFactura = ({
   venta,
   visible,
@@ -133,7 +129,6 @@ const ModalFactura = ({
   const GRAY = "#7B8499";
   const INK = "#111827";
 
-  // Badge adaptado al estado
   const badgeBg = esAnulada ? "#FEE2E2" : esPazYSalvo ? "#DCFCE7" : "#FEF3C7";
   const badgeColor = esAnulada ? RED : esPazYSalvo ? GREEN : AMBER;
   const badgeIcon = esAnulada
@@ -142,11 +137,6 @@ const ModalFactura = ({
       ? "check-circle"
       : "clock-outline";
   const badgeLabel = esAnulada ? "Anulada" : esPazYSalvo ? "Al día" : "En mora";
-
-  /* console.log(
-    "🧾 Items de venta:",
-    JSON.stringify(venta?.items ?? [], null, 2),
-  );*/
 
   return (
     <Modal
@@ -168,7 +158,7 @@ const ModalFactura = ({
             <AppText style={ms.headerFecha}>{fechaLarga(venta.fecha)}</AppText>
           </View>
           <TouchableOpacity style={ms.btnClose} onPress={onClose}>
-            <MaterialCommunityIcons name="close" size={18} color="#fff" />
+            <MaterialCommunityIcons name="close" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -176,7 +166,6 @@ const ModalFactura = ({
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 8 }}
         >
-          {/* Fila cliente + badge de estado */}
           <View style={ms.clienteRow}>
             <View
               style={[
@@ -197,7 +186,7 @@ const ModalFactura = ({
             <View style={[ms.badge, { backgroundColor: badgeBg }]}>
               <MaterialCommunityIcons
                 name={badgeIcon as any}
-                size={14}
+                size={16}
                 color={badgeColor}
               />
               <AppText style={[ms.badgeTxt, { color: badgeColor }]}>
@@ -206,7 +195,6 @@ const ModalFactura = ({
             </View>
           </View>
 
-          {/* Bloque de anulación: solo visible cuando está anulada */}
           {esAnulada && venta.anulacion && (
             <View style={ms.bloqueAnulacion}>
               <View
@@ -217,14 +205,14 @@ const ModalFactura = ({
                   marginBottom: 8,
                 }}
               >
-                <MaterialCommunityIcons name="cancel" size={18} color={RED} />
+                <MaterialCommunityIcons name="cancel" size={22} color={RED} />
                 <AppText
-                  style={{ fontSize: 15, fontWeight: "800", color: RED }}
+                  style={{ fontSize: 18, fontWeight: "800", color: RED }}
                 >
                   Factura anulada
                 </AppText>
               </View>
-              <View style={{ gap: 4 }}>
+              <View style={{ gap: 6 }}>
                 <View style={ms.anulacionFila}>
                   <AppText style={ms.anulacionLabel}>Fecha:</AppText>
                   <AppText style={ms.anulacionValor}>
@@ -256,7 +244,6 @@ const ModalFactura = ({
 
           <View style={ms.divisor} />
 
-          {/* Tabla de productos */}
           <View style={ms.tablaHeader}>
             <AppText style={[ms.colHead, { flex: 1 }]}>Producto</AppText>
             <AppText style={[ms.colHead, ms.colCant]}>Cant.</AppText>
@@ -304,7 +291,7 @@ const ModalFactura = ({
             >
               <MaterialCommunityIcons
                 name="shopping-outline"
-                size={15}
+                size={18}
                 color={GRAY}
               />
               <AppText style={ms.totalLabel}>
@@ -330,7 +317,7 @@ const ModalFactura = ({
             <View style={ms.fiadoInfo}>
               <MaterialCommunityIcons
                 name="information-outline"
-                size={16}
+                size={20}
                 color={AMBER}
               />
               <AppText style={ms.fiadoTxt}>
@@ -342,44 +329,69 @@ const ModalFactura = ({
 
           {venta.numeroFactura && (
             <View style={ms.facturaRow}>
-              <MaterialCommunityIcons name="receipt" size={14} color={GRAY} />
+              <MaterialCommunityIcons name="receipt" size={16} color={GRAY} />
               <AppText style={ms.facturaTxt}>
                 Factura #{venta.numeroFactura}
               </AppText>
             </View>
           )}
 
-          {!esAnulada && venta.tipo === "contado" && venta.metodoPago && (
-            <View style={[ms.facturaRow, { marginTop: 6 }]}>
-              <MaterialCommunityIcons
-                name={
-                  venta.metodoPago === "efectivo" ? "cash" : "bank-transfer"
-                }
-                size={14}
-                color={venta.metodoPago === "efectivo" ? "#16A34A" : "#7C3AED"}
-              />
-              <AppText
-                style={[
-                  ms.facturaTxt,
-                  {
-                    color:
-                      venta.metodoPago === "efectivo" ? "#16A34A" : "#7C3AED",
-                    fontWeight: "600",
-                  },
-                ]}
-              >
-                Pagado en{" "}
-                {venta.metodoPago === "efectivo" ? "efectivo" : "transferencia"}
-              </AppText>
-            </View>
-          )}
+          {!esAnulada &&
+            (venta.metodoPago || (venta as any).metodoCuotaInicial) && (
+              <View style={[ms.facturaRow, { marginTop: 6 }]}>
+                <MaterialCommunityIcons
+                  name={
+                    String(
+                      venta.metodoPago || (venta as any).metodoCuotaInicial,
+                    )
+                      .toLowerCase()
+                      .includes("transferencia")
+                      ? "bank-transfer"
+                      : "cash"
+                  }
+                  size={18}
+                  color={
+                    String(
+                      venta.metodoPago || (venta as any).metodoCuotaInicial,
+                    )
+                      .toLowerCase()
+                      .includes("transferencia")
+                      ? "#1565C0"
+                      : "#16A34A"
+                  }
+                />
+                <AppText
+                  style={[
+                    ms.facturaTxt,
+                    {
+                      color: String(
+                        venta.metodoPago || (venta as any).metodoCuotaInicial,
+                      )
+                        .toLowerCase()
+                        .includes("transferencia")
+                        ? "#1565C0"
+                        : "#16A34A",
+                      fontWeight: "700",
+                    },
+                  ]}
+                >
+                  Gestionado en{" "}
+                  {String(venta.metodoPago || (venta as any).metodoCuotaInicial)
+                    .toLowerCase()
+                    .includes("transferencia")
+                    ? "transferencia"
+                    : "efectivo"}
+                </AppText>
+              </View>
+            )}
+
           {!esAnulada && (
             <TouchableOpacity
               style={ms.btnAnular}
               activeOpacity={0.8}
               onPress={() => onAnular(venta)}
             >
-              <MaterialCommunityIcons name="cancel" size={20} color={RED} />
+              <MaterialCommunityIcons name="cancel" size={22} color={RED} />
               <AppText style={ms.btnAnularTxt}>Anular factura</AppText>
             </TouchableOpacity>
           )}
@@ -389,7 +401,7 @@ const ModalFactura = ({
   );
 };
 
-// ── Modal para capturar motivo de anulación ──────────────────────────────────
+// ── MODAL MOTIVO DE ANULACIÓN ────────────────────────────────────────────────
 const ModalAnular = ({
   venta,
   visible,
@@ -403,7 +415,6 @@ const ModalAnular = ({
   onConfirmar: (motivo: string) => void;
   anulando: boolean;
 }) => {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [motivo, setMotivo] = React.useState("");
   const [errorMotivo, setErrorMotivo] = React.useState("");
@@ -435,30 +446,22 @@ const ModalAnular = ({
       onRequestClose={onClose}
     >
       <View style={ms.overlay}>
-        {/* Fondo interactivo para cerrar */}
         <TouchableOpacity
           style={StyleSheet.absoluteFill}
           activeOpacity={1}
           onPress={onClose}
         />
-
         <KeyboardAwareScrollView
           style={{ flex: 1, width: "100%" }}
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "flex-end",
-          }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}
           bounces={false}
           keyboardShouldPersistTaps="handled"
-          enableOnAndroid={true}
+          enableOnAndroid
           bottomOffset={20}
           extraScrollHeight={60}
         >
-          {/* Tarjeta blanca (sheet) */}
           <View style={[ms.sheet, { paddingBottom: insets.bottom + 24 }]}>
             <View style={ms.handle} />
-
-            {/* Header */}
             <View style={[ms.header, { borderBottomColor: "#FEE2E2" }]}>
               <View style={{ flex: 1 }}>
                 <AppText style={[ms.headerTitulo, { color: RED }]}>
@@ -474,12 +477,11 @@ const ModalAnular = ({
                 style={[ms.btnClose, { backgroundColor: "#FCA5A5" }]}
                 onPress={onClose}
               >
-                <MaterialCommunityIcons name="close" size={18} color="#fff" />
+                <MaterialCommunityIcons name="close" size={22} color="#fff" />
               </TouchableOpacity>
             </View>
 
             <View style={{ padding: 20, gap: 20 }}>
-              {/* Resumen de la factura */}
               <View style={ms.resumenAnulacion}>
                 <View style={ms.resumenFila}>
                   <AppText style={ms.resumenLabel}>Cliente</AppText>
@@ -503,11 +505,10 @@ const ModalAnular = ({
                 </View>
               </View>
 
-              {/* Aviso de consecuencias */}
               <View style={ms.avisoAnulacion}>
                 <MaterialCommunityIcons
                   name="alert-circle-outline"
-                  size={18}
+                  size={22}
                   color="#92400E"
                 />
                 <AppText style={ms.avisoTxt}>
@@ -517,7 +518,6 @@ const ModalAnular = ({
                 </AppText>
               </View>
 
-              {/* Campo motivo */}
               <View style={{ gap: 8 }}>
                 <AppText style={mf.label}>Motivo de anulación</AppText>
                 <View
@@ -535,7 +535,7 @@ const ModalAnular = ({
                       setMotivo(t);
                       setErrorMotivo("");
                     }}
-                    placeholder="Ej: Error en los productos, cliente canceló el pedido..."
+                    placeholder="Ej: Error en los productos, el cliente canceló..."
                     placeholderTextColor="#9CA3AF"
                     multiline
                     numberOfLines={3}
@@ -547,13 +547,12 @@ const ModalAnular = ({
                   <AppText style={mf.errorTxt}>{errorMotivo}</AppText>
                 )}
                 <AppText
-                  style={{ fontSize: 12, color: "#9CA3AF", textAlign: "right" }}
+                  style={{ fontSize: 14, color: "#9CA3AF", textAlign: "right" }}
                 >
                   {motivo.length}/200
                 </AppText>
               </View>
 
-              {/* Botones */}
               <View style={{ flexDirection: "row", gap: 12 }}>
                 <TouchableOpacity
                   style={[ms.btnCancelarAnulacion, { flex: 1 }]}
@@ -579,7 +578,7 @@ const ModalAnular = ({
                     <>
                       <MaterialCommunityIcons
                         name="cancel"
-                        size={18}
+                        size={20}
                         color="#fff"
                       />
                       <AppText style={ms.btnConfirmarAnulacionTxt}>
@@ -607,6 +606,7 @@ const formatearFecha = (raw: string): string => {
 const fechaValida = (f: string): boolean =>
   /^\d{4}-\d{2}-\d{2}$/.test(f) && !isNaN(new Date(f).getTime());
 
+// ── MODAL SELECCIONAR RANGO FECHAS ───────────────────────────────────────────
 const ModalElegirFecha = ({
   visible,
   onClose,
@@ -616,9 +616,7 @@ const ModalElegirFecha = ({
   onClose: () => void;
   onAplicar: (inicio: string, fin: string) => void;
 }) => {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-
   const hoy = fechaHoy();
   const [fInicio, setFInicio] = React.useState(hoy);
   const [fFin, setFFin] = React.useState(hoy);
@@ -634,28 +632,18 @@ const ModalElegirFecha = ({
     }
   }, [visible]);
 
-  const handleInicio = (texto: string) => {
-    setFInicio(formatearFecha(texto));
-    setErrorInicio("");
-  };
-
-  const handleFin = (texto: string) => {
-    setFFin(formatearFecha(texto));
-    setErrorFin("");
-  };
-
   const handleBuscar = () => {
     let valido = true;
     if (!fechaValida(fInicio)) {
-      setErrorInicio("Fecha inválida. Usa el formato AAAA-MM-DD");
+      setErrorInicio("Fecha inválida (AAAA-MM-DD)");
       valido = false;
     }
     if (!fechaValida(fFin)) {
-      setErrorFin("Fecha inválida. Usa el formato AAAA-MM-DD");
+      setErrorFin("Fecha inválida (AAAA-MM-DD)");
       valido = false;
     }
     if (valido && fInicio > fFin) {
-      setErrorInicio("La fecha inicial no puede ser mayor que la final");
+      setErrorInicio("La fecha inicial no puede superar a la final");
       valido = false;
     }
     if (!valido) return;
@@ -675,7 +663,6 @@ const ModalElegirFecha = ({
         activeOpacity={1}
         onPress={onClose}
       />
-
       <KeyboardAwareScrollView
         style={{ marginTop: "auto" }}
         contentContainerStyle={[
@@ -684,7 +671,7 @@ const ModalElegirFecha = ({
         ]}
         bounces={false}
         keyboardShouldPersistTaps="handled"
-        enableOnAndroid={true}
+        enableOnAndroid
         extraScrollHeight={20}
       >
         <View style={ms.handle} />
@@ -694,7 +681,7 @@ const ModalElegirFecha = ({
             <AppText style={ms.headerFecha}>Formato: AAAA-MM-DD</AppText>
           </View>
           <TouchableOpacity style={ms.btnClose} onPress={onClose}>
-            <MaterialCommunityIcons name="close" size={18} color="#fff" />
+            <MaterialCommunityIcons name="close" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -703,16 +690,19 @@ const ModalElegirFecha = ({
             <AppText style={mf.label}>
               <MaterialCommunityIcons
                 name="calendar-start"
-                size={16}
+                size={18}
                 color="#7B8499"
-              />
-              {"  "}Fecha inicial
+              />{" "}
+              Fecha inicial
             </AppText>
             <View style={[mf.inputRow, errorInicio ? mf.inputError : null]}>
               <TextInput
                 style={mf.input}
                 value={fInicio}
-                onChangeText={handleInicio}
+                onChangeText={(t) => {
+                  setFInicio(formatearFecha(t));
+                  setErrorInicio("");
+                }}
                 placeholder="2026-01-01"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric"
@@ -721,7 +711,7 @@ const ModalElegirFecha = ({
               {fechaValida(fInicio) && (
                 <MaterialCommunityIcons
                   name="check-circle"
-                  size={22}
+                  size={26}
                   color="#16A34A"
                   style={{ marginRight: 14 }}
                 />
@@ -736,16 +726,19 @@ const ModalElegirFecha = ({
             <AppText style={mf.label}>
               <MaterialCommunityIcons
                 name="calendar-end"
-                size={16}
+                size={18}
                 color="#7B8499"
-              />
-              {"  "}Fecha final
+              />{" "}
+              Fecha final
             </AppText>
             <View style={[mf.inputRow, errorFin ? mf.inputError : null]}>
               <TextInput
                 style={mf.input}
                 value={fFin}
-                onChangeText={handleFin}
+                onChangeText={(t) => {
+                  setFFin(formatearFecha(t));
+                  setErrorFin("");
+                }}
                 placeholder="2026-12-31"
                 placeholderTextColor="#9CA3AF"
                 keyboardType="numeric"
@@ -755,7 +748,7 @@ const ModalElegirFecha = ({
               {fechaValida(fFin) && (
                 <MaterialCommunityIcons
                   name="check-circle"
-                  size={22}
+                  size={26}
                   color="#16A34A"
                   style={{ marginRight: 14 }}
                 />
@@ -773,7 +766,7 @@ const ModalElegirFecha = ({
             onPress={handleBuscar}
             activeOpacity={0.8}
           >
-            <MaterialCommunityIcons name="magnify" size={24} color="#FFF" />
+            <MaterialCommunityIcons name="magnify" size={26} color="#FFF" />
             <AppText style={s.btnPrincipalAnchoTxt}>Buscar ventas</AppText>
           </TouchableOpacity>
         </View>
@@ -782,42 +775,37 @@ const ModalElegirFecha = ({
   );
 };
 
+// ── COMPONENTE PRINCIPAL HISTORIAL SCREEN ────────────────────────────────────
 export const HistorialScreen = () => {
   const { colors } = useTheme();
 
-  // Estados de control
   const [todasVentas, setTodasVentas] = React.useState<Venta[]>([]);
   const [abonos, setAbonos] = React.useState<Abono[]>([]);
   const [ventasFiltradas, setVentasFiltradas] = React.useState<Venta[]>([]);
   const [cargando, setCargando] = React.useState(true);
   const [refrescando, setRefrescando] = React.useState(false);
 
-  // Filtros
   const [busqueda, setBusqueda] = React.useState("");
   const [filtroEstado, setFiltroEstado] = React.useState<TipoEstado>("todas");
+  const [filtrosVisibles, setFiltrosVisibles] = React.useState(false);
   const [filtroPeriodo, setFiltroPeriodo] = React.useState<TipoPeriodo>("hoy");
   const [rangoPersonalizado, setRangoPersonalizado] = React.useState({
     inicio: "",
     fin: "",
   });
 
-  // Modales
   const [ventaSeleccionada, setVentaSeleccionada] =
     React.useState<Venta | null>(null);
   const [modalFacturaVisible, setModalFacturaVisible] = React.useState(false);
   const [modalFechaVisible, setModalFechaVisible] = React.useState(false);
 
-  // Modal anulación
   const [ventaAAnular, setVentaAAnular] = React.useState<Venta | null>(null);
   const [modalAnularVisible, setModalAnularVisible] = React.useState(false);
   const [anulando, setAnulando] = React.useState(false);
 
-  // Paginación
-  const PAGE_SIZE = 10;
+  const PAGE_SIZE = 15;
   const [pagina, setPagina] = React.useState(1);
   const [cargandoMas, setCargandoMas] = React.useState(false);
-
-  // Exportar
   const [exportando, setExportando] = React.useState(false);
 
   const evaluarFacturaPagada = React.useCallback(
@@ -833,9 +821,7 @@ export const HistorialScreen = () => {
     [abonos],
   );
 
-  // ── Abrir modal de anulación ────────────────────────────────────────────────
   const handleSolicitarAnular = (venta: Venta) => {
-    // Cerrar el modal de detalle primero
     setModalFacturaVisible(false);
     setTimeout(() => {
       setVentaAAnular(venta);
@@ -843,17 +829,12 @@ export const HistorialScreen = () => {
     }, 350);
   };
 
-  // ── Confirmar anulación ────────────────────────────────────────────────────
   const handleConfirmarAnulacion = async (motivo: string) => {
     if (!ventaAAnular) return;
     setAnulando(true);
     try {
-      await ventaRepo.anular(ventaAAnular.id, {
-        usuario: "Usuario", // Puedes reemplazar por el usuario real de sesión
-        motivo,
-      });
+      await ventaRepo.anular(ventaAAnular.id, { usuario: "Admin", motivo });
 
-      // Actualizar lista local sin recargar todo
       setTodasVentas((prev) =>
         prev.map((v) =>
           v.id === ventaAAnular.id
@@ -862,7 +843,7 @@ export const HistorialScreen = () => {
                 estado: "anulada" as const,
                 anulacion: {
                   fecha: new Date().toISOString(),
-                  usuario: "Usuario",
+                  usuario: "Admin",
                   motivo,
                 },
               }
@@ -872,14 +853,9 @@ export const HistorialScreen = () => {
 
       setModalAnularVisible(false);
       setVentaAAnular(null);
-
-      Alert.alert(
-        "Factura anulada",
-        `La factura ${ventaAAnular.numeroFactura ?? ""} fue anulada y el stock restaurado.`,
-        [{ text: "Entendido" }],
-      );
+      Alert.alert("Éxito", "Factura anulada y stock devuelto correctamente.");
     } catch (e: any) {
-      Alert.alert("Error", e?.message ?? "No se pudo anular la factura.");
+      Alert.alert("Error", e?.message ?? "No se pudo anular.");
     } finally {
       setAnulando(false);
     }
@@ -887,15 +863,12 @@ export const HistorialScreen = () => {
 
   const exportarExcel = async () => {
     if (ventasFiltradas.length === 0) {
-      Alert.alert(
-        "Sin datos",
-        "No hay ventas para exportar con los filtros actuales.",
-      );
+      Alert.alert("Sin datos", "No hay registros bajo los filtros actuales.");
       return;
     }
     setExportando(true);
     try {
-      const filas: object[] = [];
+      const filas: any[] = [];
       ventasFiltradas.forEach((v) => {
         const esAnulada = v.estado === "anulada";
         const estReal = esAnulada
@@ -904,114 +877,40 @@ export const HistorialScreen = () => {
             ? "Al día"
             : "En mora";
 
-        if (v.items && v.items.length > 0) {
-          v.items.forEach((item: ItemVenta) => {
-            filas.push({
-              Factura: v.numeroFactura ?? v.id,
-              Fecha: new Date(v.fecha).toLocaleDateString("es-CO", {
-                timeZone: "America/Bogota",
-              }),
-              Hora: new Date(v.fecha).toLocaleTimeString("es-CO", {
-                timeZone: "America/Bogota",
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-              Cliente: v.nombreCliente,
-              Producto: item.nombreProducto,
-              Cantidad: item.cantidad,
-              "Precio unitario": item.precioUnitario,
-              Subtotal: item.subtotal,
-              "Tipo de pago": v.tipo === "contado" ? "Contado" : "Crédito",
-              "Método de pago":
-                v.tipo === "contado"
-                  ? v.metodoPago === "efectivo"
-                    ? "Efectivo"
-                    : v.metodoPago === "transferencia"
-                      ? "Transferencia"
-                      : "No especificado"
-                  : "N/A",
-              "Estado Factura": estReal,
-              Total: v.total,
-              "Motivo anulación": esAnulada ? (v.anulacion?.motivo ?? "") : "",
-            });
-          });
-        } else {
+        v.items.forEach((item: ItemVenta) => {
           filas.push({
-            Factura: v.numeroFactura ?? v.id,
-            Fecha: new Date(v.fecha).toLocaleDateString("es-CO", {
-              timeZone: "America/Bogota",
-            }),
-            Hora: new Date(v.fecha).toLocaleTimeString("es-CO", {
-              timeZone: "America/Bogota",
-              hour: "2-digit",
-              minute: "2-digit",
-            }),
+            Factura: v.numeroFactura ?? v.id.substring(0, 8),
+            Fecha: v.fecha.substring(0, 10),
             Cliente: v.nombreCliente,
-            Producto: "",
-            Cantidad: "",
-            "Precio unitario": "",
-            Subtotal: "",
-            "Tipo de pago": v.tipo === "contado" ? "Contado" : "Crédito",
-            "Método de pago":
-              v.tipo === "contado"
-                ? v.metodoPago === "efectivo"
-                  ? "Efectivo"
-                  : v.metodoPago === "transferencia"
-                    ? "Transferencia"
-                    : "No especificado"
-                : "N/A",
-            "Estado Factura": estReal,
-            Total: v.total,
-            "Motivo anulación": esAnulada ? (v.anulacion?.motivo ?? "") : "",
+            Producto: item.nombreProducto,
+            Cantidad: item.cantidad,
+            Precio: item.precioUnitario,
+            Subtotal: item.subtotal,
+            Tipo: v.tipo,
+            Estado: estReal,
+            MotivoAnulacion: esAnulada ? (v.anulacion?.motivo ?? "") : "",
           });
-        }
+        });
       });
 
       const hoja = XLSX.utils.json_to_sheet(filas);
-      hoja["!cols"] = [
-        { wch: 20 },
-        { wch: 12 },
-        { wch: 8 },
-        { wch: 20 },
-        { wch: 22 },
-        { wch: 10 },
-        { wch: 16 },
-        { wch: 12 },
-        { wch: 14 },
-        { wch: 18 },
-        { wch: 16 },
-        { wch: 12 },
-        { wch: 30 },
-      ];
-
       const libro = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(libro, hoja, "Historial");
-
+      XLSX.utils.book_append_sheet(libro, hoja, "Ventas");
       const base64 = XLSX.write(libro, { type: "base64", bookType: "xlsx" });
-      const fechaArchivo = new Date().toISOString().substring(0, 10);
-      const ruta = `${FileSystem.cacheDirectory}historial_${fechaArchivo}.xlsx`;
+      const ruta = `${FileSystem.cacheDirectory}Reporte_Ventas.xlsx`;
 
       await FileSystem.writeAsStringAsync(ruta, base64, {
-        encoding: "base64" as FileSystem.EncodingType,
+        encoding: FileSystem.EncodingType.Base64,
       });
-
-      const puedoCompartir = await Sharing.isAvailableAsync();
-      if (puedoCompartir) {
+      if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(ruta, {
           mimeType:
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          dialogTitle: "Exportar historial de ventas",
-          UTI: "com.microsoft.excel.xlsx",
+          dialogTitle: "Exportar ventas",
         });
-      } else {
-        Alert.alert(
-          "No disponible",
-          "Tu dispositivo no soporta compartir archivos.",
-        );
       }
     } catch (e) {
-      console.error("Error exportando Excel:", e);
-      Alert.alert("Error", "No se pudo generar el archivo. Intenta de nuevo.");
+      Alert.alert("Error", "No se pudo exportar.");
     } finally {
       setExportando(false);
     }
@@ -1020,7 +919,6 @@ export const HistorialScreen = () => {
   const cargarDatos = async (esRefresh = false) => {
     if (esRefresh) setRefrescando(true);
     else setCargando(true);
-
     try {
       const [ventas, listaAbonos] = await Promise.all([
         ventaRepo.getAll(),
@@ -1029,7 +927,7 @@ export const HistorialScreen = () => {
       setTodasVentas(ventas);
       setAbonos(listaAbonos);
     } catch (e) {
-      console.error("Error cargando datos:", e);
+      console.error(e);
     } finally {
       setCargando(false);
       setRefrescando(false);
@@ -1040,53 +938,44 @@ export const HistorialScreen = () => {
     cargarDatos();
   }, []);
 
-  // ── Filtros ────────────────────────────────────────────────────────────────
   React.useEffect(() => {
     let resultado = [...todasVentas];
 
-    // Filtro por estado (ahora incluye "anulada")
-    if (filtroEstado === "pazysalvo") {
+    if (filtroEstado === "pazysalvo")
       resultado = resultado.filter(
         (v) => v.estado !== "anulada" && evaluarFacturaPagada(v),
       );
-    } else if (filtroEstado === "debe") {
+    else if (filtroEstado === "debe")
       resultado = resultado.filter(
         (v) => v.estado !== "anulada" && !evaluarFacturaPagada(v),
       );
-    } else if (filtroEstado === "anulada") {
+    else if (filtroEstado === "anulada")
       resultado = resultado.filter((v) => v.estado === "anulada");
-    }
-    // "todas" no filtra por estado
 
-    // Filtro por periodo
     const hoyStr = fechaHoy();
-    if (filtroPeriodo === "hoy") {
+    if (filtroPeriodo === "hoy")
       resultado = resultado.filter((v) => v.fecha.startsWith(hoyStr));
-    } else if (filtroPeriodo === "semana") {
-      const haceUnaSemana = new Date();
-      haceUnaSemana.setDate(haceUnaSemana.getDate() - 7);
-      resultado = resultado.filter((v) => new Date(v.fecha) >= haceUnaSemana);
+    else if (filtroPeriodo === "semana") {
+      const limite = new Date();
+      limite.setDate(limite.getDate() - 7);
+      resultado = resultado.filter((v) => new Date(v.fecha) >= limite);
     } else if (filtroPeriodo === "mes") {
-      const inicioMes = new Date();
-      inicioMes.setDate(1);
-      resultado = resultado.filter((v) => new Date(v.fecha) >= inicioMes);
+      const limite = new Date();
+      limite.setDate(1);
+      resultado = resultado.filter((v) => new Date(v.fecha) >= limite);
     } else if (filtroPeriodo === "personalizado" && rangoPersonalizado.inicio) {
       resultado = resultado.filter((v) => {
-        const fVenta = v.fecha.substring(0, 10);
-        return (
-          fVenta >= rangoPersonalizado.inicio &&
-          fVenta <= rangoPersonalizado.fin
-        );
+        const f = v.fecha.substring(0, 10);
+        return f >= rangoPersonalizado.inicio && f <= rangoPersonalizado.fin;
       });
     }
 
-    // Filtro por búsqueda
     if (busqueda.trim() !== "") {
-      const query = busqueda.toLowerCase();
+      const q = busqueda.toLowerCase();
       resultado = resultado.filter(
         (v) =>
-          v.nombreCliente.toLowerCase().includes(query) ||
-          (v.numeroFactura && v.numeroFactura.toLowerCase().includes(query)),
+          v.nombreCliente.toLowerCase().includes(q) ||
+          (v.numeroFactura && v.numeroFactura.toLowerCase().includes(q)),
       );
     }
 
@@ -1100,15 +989,6 @@ export const HistorialScreen = () => {
     busqueda,
     evaluarFacturaPagada,
   ]);
-
-  const fmtFechaCorta = (svStr: string) => {
-    const d = new Date(svStr + "T00:00:00");
-    return d.toLocaleDateString("es-CO", {
-      timeZone: "America/Bogota",
-      day: "numeric",
-      month: "short",
-    });
-  };
 
   const rangoActivo = React.useMemo(() => {
     const hoyStr = fechaHoy();
@@ -1129,181 +1009,107 @@ export const HistorialScreen = () => {
         fin: hoyStr,
       };
     }
-    if (filtroPeriodo === "personalizado" && rangoPersonalizado.inicio)
-      return { inicio: rangoPersonalizado.inicio, fin: rangoPersonalizado.fin };
+    if (filtroPeriodo === "personalizado") return rangoPersonalizado;
     return null;
   }, [filtroPeriodo, rangoPersonalizado]);
 
-  const etiquetaRango = React.useMemo(() => {
-    if (!rangoActivo) return "";
-    if (filtroPeriodo === "hoy")
-      return "Hoy, " + fmtFechaCorta(rangoActivo.inicio);
-    if (rangoActivo.inicio === rangoActivo.fin)
-      return fmtFechaCorta(rangoActivo.inicio);
-    return (
-      fmtFechaCorta(rangoActivo.inicio) +
-      " al " +
-      fmtFechaCorta(rangoActivo.fin)
-    );
-  }, [rangoActivo, filtroPeriodo]);
-
-  // Ventas del período activo sin filtro de estado — para conteos de botones
-  const ventasDelPeriodo = React.useMemo(() => {
-    let resultado = [...todasVentas];
-    if (rangoActivo) {
-      resultado = resultado.filter((v) => {
-        const f = v.fecha.substring(0, 10);
-        return f >= rangoActivo.inicio && f <= rangoActivo.fin;
-      });
-    }
-    return resultado;
-  }, [todasVentas, rangoActivo]);
-
-  // ── Stats: las anuladas se excluyen del total recibido ────────────────────
   const stats = React.useMemo(() => {
-    const ventasActivas = ventasFiltradas.filter((v) => v.estado !== "anulada");
-    const ventasAnuladas = ventasFiltradas.filter(
-      (v) => v.estado === "anulada",
-    );
+    const activas = ventasFiltradas.filter((v) => v.estado !== "anulada");
+    const anuladas = ventasFiltradas.filter((v) => v.estado === "anulada");
 
-    const total = ventasActivas.reduce((a, v) => a + v.total, 0);
-    const cantVentas = ventasActivas.length;
-    const cantAnuladas = ventasAnuladas.length;
+    const cantVentas = activas.length;
+    const cantAnuladas = anuladas.length;
 
-    const totalContado = ventasActivas
-      .filter((v) => v.tipo === "contado")
-      .reduce((a, v) => a + v.total, 0);
+    let efectivoVenta = 0;
+    let transferenciaVenta = 0;
 
-    const totalEfectivo = ventasActivas
-      .filter((v) => v.tipo === "contado" && v.metodoPago === "efectivo")
-      .reduce((a, v) => a + v.total, 0);
+    activas.forEach((v) => {
+      if (v.tipo === "contado") {
+        if (v.metodoPago && v.metodoPago.toLowerCase() === "transferencia") {
+          transferenciaVenta += v.total;
+        } else {
+          efectivoVenta += v.total;
+        }
+      } else {
+        const cuota = (v as any).cuotaInicial || 0;
+        const mCuota = (
+          (v as any).metodoCuotaInicial || "efectivo"
+        ).toLowerCase();
+        if (cuota > 0) {
+          if (mCuota === "transferencia") {
+            transferenciaVenta += cuota;
+          } else {
+            efectivoVenta += cuota;
+          }
+        }
+      }
+    });
 
-    const totalTransferencia = ventasActivas
-      .filter((v) => v.tipo === "contado" && v.metodoPago === "transferencia")
-      .reduce((a, v) => a + v.total, 0);
+    let efectivoAbono = 0;
+    let transferenciaAbono = 0;
 
-    // Abonos activos dentro del rango (fecha del abono, no de la venta)
-    const totalAbonosParciales = abonos
+    abonos
       .filter((ab) => {
         if (ab.estado === "anulado") return false;
         if (!rangoActivo) return true;
-        const fechaAbono = ab.fecha.substring(0, 10);
-        return (
-          fechaAbono >= rangoActivo.inicio && fechaAbono <= rangoActivo.fin
-        );
+        const f = ab.fecha.substring(0, 10);
+        return f >= rangoActivo.inicio && f <= rangoActivo.fin;
       })
-      .reduce((s, ab) => s + ab.monto, 0);
+      .forEach((ab) => {
+        const metodo = ((ab as any).metodoPago || "efectivo").toLowerCase();
+        if (metodo === "transferencia") {
+          transferenciaAbono += ab.monto;
+        } else {
+          efectivoAbono += ab.monto;
+        }
+      });
 
-    const totalRecibido = totalContado + totalAbonosParciales;
-
-    // Total en dinero de facturas anuladas del período
-    const totalAnulado = ventasAnuladas.reduce((a, v) => a + v.total, 0);
-
-    const totalDebe = ventasActivas
+    const totalDebe = activas
       .filter((v) => !evaluarFacturaPagada(v))
       .reduce((a, v) => {
-        const totalAbonado = abonos
+        const abonado = abonos
           .filter((ab) => ab.ventaId === v.id && ab.estado !== "anulado")
           .reduce((s, ab) => s + ab.monto, 0);
-        return a + Math.max(0, v.total - totalAbonado);
+        return a + Math.max(0, v.total - abonado);
       }, 0);
 
-    const clientesUnicos = [...new Set(ventasActivas.map((v) => v.clienteId))]
-      .length;
-
-    const conteoProductos: { [nombre: string]: number } = {};
-    ventasActivas.forEach((v) => {
-      (v.items ?? []).forEach((item: ItemVenta) => {
-        const nombre = item.nombreProducto ?? item.productoId ?? "Producto";
-        const subtotal =
-          item.subtotal ?? (item.precioUnitario ?? 0) * (item.cantidad ?? 1);
-        conteoProductos[nombre] = (conteoProductos[nombre] ?? 0) + subtotal;
-      });
-    });
-    const top3 = Object.entries(conteoProductos)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([nombre, total]) => ({ nombre, total }));
-
     return {
-      total,
       cantVentas,
       cantAnuladas,
-      totalContado,
-      totalEfectivo,
-      totalTransferencia,
-      totalAbonosParciales,
-      totalRecibido,
+      efectivoVenta,
+      efectivoAbono,
+      transferenciaVenta,
+      transferenciaAbono,
       totalDebe,
-      totalAnulado,
-      clientesUnicos,
-      top3,
     };
-  }, [ventasFiltradas, evaluarFacturaPagada, abonos, rangoActivo]);
+  }, [ventasFiltradas, abonos, rangoActivo, evaluarFacturaPagada]);
 
-  const saldoPorVenta = React.useMemo(() => {
-    const mapa = new Map<string, number>();
-    todasVentas.forEach((v) => {
-      const totalAbonado = abonos
-        .filter((a) => a.ventaId === v.id && a.estado !== "anulado")
-        .reduce((sum, a) => sum + a.monto, 0);
-      mapa.set(v.id, Math.max(0, v.total - totalAbonado));
+  const salesAgrupadas = React.useMemo(() => {
+    const grupos: { [key: string]: Venta[] } = {};
+    const visibles = [...ventasFiltradas]
+      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+      .slice(0, pagina * PAGE_SIZE);
+    visibles.forEach((v) => {
+      const titulo = obtenerEtiquetaAgrupacion(v.fecha.substring(0, 10));
+      if (!grupos[titulo]) grupos[titulo] = [];
+      grupos[titulo].push(v);
     });
-    return mapa;
-  }, [todasVentas, abonos]);
-
-  const ventasVisibles = React.useMemo(() => {
-    const ordenadas = [...ventasFiltradas].sort(
-      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
-    );
-    return ordenadas.slice(0, pagina * PAGE_SIZE);
+    return grupos;
   }, [ventasFiltradas, pagina]);
 
-  const hayMas = ventasVisibles.length < ventasFiltradas.length;
-
   const cargarMas = () => {
-    if (cargandoMas || !hayMas) return;
+    if (cargandoMas || pagina * PAGE_SIZE >= ventasFiltradas.length) return;
     setCargandoMas(true);
     setTimeout(() => {
       setPagina((p) => p + 1);
       setCargandoMas(false);
-    }, 400);
+    }, 300);
   };
-
-  const ventasAgrupadas = React.useMemo(() => {
-    const grupos: { [key: string]: Venta[] } = {};
-    const ordenadas = [...ventasVisibles].sort(
-      (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime(),
-    );
-    ordenadas.forEach((venta) => {
-      const fechaClave = venta.fecha.substring(0, 10);
-      const titulo = obtenerEtiquetaAgrupacion(fechaClave);
-      if (!grupos[titulo]) grupos[titulo] = [];
-      grupos[titulo].push(venta);
-    });
-    return grupos;
-  }, [ventasVisibles]);
-
-  if (cargando) {
-    return (
-      <ScreenWrapper title="Historial" showBtnB={false}>
-        <View style={s.centrado}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <AppText
-            style={{ marginTop: 16, fontSize: 18, color: colors.grayText }}
-          >
-            Cargando historial comercial...
-          </AppText>
-        </View>
-      </ScreenWrapper>
-    );
-  }
 
   const handleScroll = (e: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-    const distanciaAlFondo =
-      contentSize.height - contentOffset.y - layoutMeasurement.height;
-    if (distanciaAlFondo < 200) cargarMas();
+    if (contentSize.height - contentOffset.y - layoutMeasurement.height < 150)
+      cargarMas();
   };
 
   return (
@@ -1312,7 +1118,7 @@ export const HistorialScreen = () => {
         contentContainerStyle={{
           paddingHorizontal: 20,
           paddingTop: 16,
-          paddingBottom: 80,
+          paddingBottom: 100,
         }}
         showsVerticalScrollIndicator={false}
         scrollEventThrottle={200}
@@ -1322,22 +1128,21 @@ export const HistorialScreen = () => {
             refreshing={refrescando}
             onRefresh={() => cargarDatos(true)}
             colors={[colors.primary]}
-            tintColor={colors.primary}
           />
         }
       >
         {/* BUSCADOR */}
-        <View style={{ marginBottom: 20 }}>
+        <View style={{ marginBottom: 18 }}>
           <View style={s.contenedorBuscador}>
             <MaterialCommunityIcons
               name="magnify"
-              size={24}
+              size={26}
               color="#7B8499"
               style={{ marginLeft: 16 }}
             />
             <TextInput
               style={s.inputBuscador}
-              placeholder="Buscar cliente o factura..."
+              placeholder="Buscar cliente o número de factura..."
               placeholderTextColor="#7B8499"
               value={busqueda}
               onChangeText={setBusqueda}
@@ -1345,11 +1150,11 @@ export const HistorialScreen = () => {
             {busqueda.length > 0 && (
               <TouchableOpacity
                 onPress={() => setBusqueda("")}
-                style={{ padding: 10, marginRight: 8 }}
+                style={{ padding: 12 }}
               >
                 <MaterialCommunityIcons
                   name="close-circle"
-                  size={20}
+                  size={22}
                   color="#9CA3AF"
                 />
               </TouchableOpacity>
@@ -1357,902 +1162,456 @@ export const HistorialScreen = () => {
           </View>
         </View>
 
-        {/* FILTRO ESTADO — ahora con 4 opciones */}
-        <View style={s.filterSection}>
-          <AppText style={s.filterTitle}>Estado de facturas</AppText>
-          <View style={[s.filterRow, { flexWrap: "wrap" }]}>
-            {(
-              [
-                {
-                  key: "todas",
-                  label: "Todas",
-                  color: colors.primary,
-                  bgSuave: "#EFF6FF",
-                },
-                {
-                  key: "pazysalvo",
-                  label: "Activas",
-                  color: "#16A34A",
-                  bgSuave: "#F0FDF4",
-                },
-                {
-                  key: "debe",
-                  label: "En mora",
-                  color: "#D97706",
-                  bgSuave: "#FFFBEB",
-                },
-                {
-                  key: "anulada",
-                  label: "Anuladas",
-                  color: "#DC2626",
-                  bgSuave: "#FEF2F2",
-                },
-              ] as {
-                key: TipoEstado;
-                label: string;
-                color: string;
-                bgSuave: string;
-              }[]
-            ).map(({ key, label, color, bgSuave }) => {
-              const activo = filtroEstado === key;
-              const conteo =
-                key === "todas"
-                  ? ventasDelPeriodo.length
-                  : key === "anulada"
-                    ? ventasDelPeriodo.filter((v) => v.estado === "anulada")
-                        .length
-                    : key === "pazysalvo"
-                      ? ventasDelPeriodo.filter(
-                          (v) =>
-                            v.estado !== "anulada" && evaluarFacturaPagada(v),
-                        ).length
-                      : ventasDelPeriodo.filter(
-                          (v) =>
-                            v.estado !== "anulada" && !evaluarFacturaPagada(v),
-                        ).length;
-              return (
-                <TouchableOpacity
-                  key={key}
-                  style={[
-                    s.filterBtn,
-                    { backgroundColor: activo ? color : bgSuave, flex: 1 },
-                  ]}
-                  onPress={() => {
-                    setFiltroEstado(key);
-                    setPagina(1);
-                    setBusqueda("");
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <AppText
-                    style={[
-                      s.filterBtnText,
-                      { color: activo ? "#FFF" : "#4B5563", fontSize: 13 },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {label}
-                  </AppText>
-                  <View
-                    style={{
-                      marginTop: 3,
-                      backgroundColor: activo
-                        ? "rgba(255,255,255,0.25)"
-                        : color,
-                      borderRadius: 10,
-                      minWidth: 22,
-                      height: 20,
-                      alignItems: "center",
-                      justifyContent: "center",
-                      paddingHorizontal: 5,
-                    }}
-                  >
-                    <AppText
-                      style={{
-                        fontSize: 11,
-                        fontWeight: "800",
-                        color: "#FFF",
+        {/* PANEL DE FILTROS */}
+        <View style={s.filtrosPanel}>
+          <TouchableOpacity
+            style={s.filtrosHeader}
+            onPress={() => setFiltrosVisibles(!filtrosVisibles)}
+            activeOpacity={0.8}
+          >
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
+              <MaterialCommunityIcons
+                name="filter-variant"
+                size={24}
+                color={colors.primary}
+              />
+              <AppText style={s.filterTitle}>Filtros de Búsqueda</AppText>
+            </View>
+            <MaterialCommunityIcons
+              name={filtrosVisibles ? "chevron-up" : "chevron-down"}
+              size={26}
+              color="#4B5563"
+            />
+          </TouchableOpacity>
+
+          {filtrosVisibles && (
+            <View style={s.filtrosContenido}>
+              <AppText style={s.seccionFiltroTitulo}>Periodo de tiempo</AppText>
+              <View style={s.chipsGrid}>
+                {(
+                  ["hoy", "semana", "mes", "personalizado"] as TipoPeriodo[]
+                ).map((p) => {
+                  const activo = filtroPeriodo === p;
+                  const etiquetas: Record<TipoPeriodo, string> = {
+                    hoy: "Hoy",
+                    semana: "7 Días",
+                    mes: "Este Mes",
+                    personalizado: "Rango 📅",
+                  };
+                  return (
+                    <TouchableOpacity
+                      key={p}
+                      style={[
+                        s.chip,
+                        activo && {
+                          backgroundColor: colors.primary,
+                          borderColor: colors.primary,
+                        },
+                      ]}
+                      onPress={() => {
+                        setFiltroPeriodo(p);
+                        if (p === "personalizado") setModalFechaVisible(true);
                       }}
                     >
-                      {conteo}
-                    </AppText>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* FILTRO PERIODO */}
-        <View style={s.filterSection}>
-          <AppText style={s.filterTitle}>Periodo</AppText>
-          <View style={s.filterRow}>
-            {(["hoy", "semana", "mes"] as TipoPeriodo[]).map((periodo) => {
-              const activo = filtroPeriodo === periodo;
-              return (
-                <TouchableOpacity
-                  key={periodo}
-                  style={[
-                    s.filterBtn,
-                    activo
-                      ? { backgroundColor: colors.primary }
-                      : { backgroundColor: "#F3F4F6" },
-                    { flex: 1 },
-                  ]}
-                  onPress={() => setFiltroPeriodo(periodo)}
-                  activeOpacity={0.8}
-                >
-                  <AppText
-                    style={[
-                      s.filterBtnText,
-                      { color: activo ? "#FFF" : "#4B5563" },
-                    ]}
-                  >
-                    {periodo === "hoy"
-                      ? "Hoy"
-                      : periodo === "semana"
-                        ? "Semana"
-                        : "Mes"}
-                  </AppText>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </View>
-
-        {/* FECHA PERSONALIZADA */}
-        <TouchableOpacity
-          style={[
-            s.fechaBtn,
-            filtroPeriodo === "personalizado" && {
-              borderColor: colors.primary,
-              backgroundColor: "#EFF6FF",
-            },
-          ]}
-          activeOpacity={0.7}
-          onPress={() => setModalFechaVisible(true)}
-        >
-          <MaterialCommunityIcons
-            name="calendar"
-            size={24}
-            color={colors.primary}
-          />
-          <AppText style={[s.fechaBtnText, { color: colors.primary }]}>
-            {filtroPeriodo === "personalizado" && rangoPersonalizado.inicio
-              ? `${rangoPersonalizado.inicio} al ${rangoPersonalizado.fin}`
-              : "Elegir fecha personalizada"}
-          </AppText>
-        </TouchableOpacity>
-
-        {/* EXPORTAR EXCEL */}
-        <TouchableOpacity
-          style={[s.btnExcelAncho, exportando && { opacity: 0.6 }]}
-          activeOpacity={0.8}
-          onPress={exportarExcel}
-          disabled={exportando}
-        >
-          {exportando ? (
-            <ActivityIndicator size="small" color="#15803D" />
-          ) : (
-            <MaterialCommunityIcons
-              name="file-excel"
-              size={24}
-              color="#15803D"
-            />
-          )}
-          <AppText style={s.btnExcelAnchoTxt}>
-            {exportando ? "Generando archivo..." : "Exportar historial a Excel"}
-          </AppText>
-        </TouchableOpacity>
-
-        {/* TARJETA RESUMEN GRANDE */}
-        <View style={[s.card, { marginBottom: 16 }]}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: 2,
-            }}
-          >
-            <AppText style={s.labelGris}>
-              {filtroEstado === "debe"
-                ? "Dinero en mora"
-                : filtroEstado === "anulada"
-                  ? "Dinero anulado"
-                  : "Dinero recibido"}
-            </AppText>
-            {!!etiquetaRango && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 4,
-                  backgroundColor: "#EFF6FF",
-                  borderRadius: 8,
-                  paddingHorizontal: 8,
-                  paddingVertical: 4,
-                }}
-              >
-                <MaterialCommunityIcons
-                  name="calendar-range"
-                  size={13}
-                  color="#2563EB"
-                />
-                <AppText
-                  style={{ fontSize: 12, color: "#2563EB", fontWeight: "700" }}
-                >
-                  {etiquetaRango}
-                </AppText>
+                      <AppText
+                        style={[
+                          s.chipTxt,
+                          activo && { color: "#FFF", fontWeight: "700" },
+                        ]}
+                      >
+                        {etiquetas[p]}
+                      </AppText>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
-            )}
-          </View>
 
-          <AppText
+              <AppText style={s.seccionFiltroTitulo}>Estado del pago</AppText>
+              <View style={s.chipsGrid}>
+                {(
+                  ["todas", "pazysalvo", "debe", "anulada"] as TipoEstado[]
+                ).map((e) => {
+                  const activo = filtroEstado === e;
+                  const etiquetas: Record<TipoEstado[] & string, string> = {
+                    todas: "Todas",
+                    pazysalvo: "Al Día",
+                    debe: "En Mora",
+                    anulada: "Anuladas",
+                  };
+                  return (
+                    <TouchableOpacity
+                      key={e}
+                      style={[
+                        s.chip,
+                        activo && {
+                          backgroundColor: colors.primary,
+                          borderColor: colors.primary,
+                        },
+                      ]}
+                      onPress={() => setFiltroEstado(e)}
+                    >
+                      <AppText
+                        style={[
+                          s.chipTxt,
+                          activo && { color: "#FFF", fontWeight: "700" },
+                        ]}
+                      >
+                        {etiquetas[e]}
+                      </AppText>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <TouchableOpacity
+                style={s.exportarBtn}
+                onPress={exportarExcel}
+                disabled={exportando}
+              >
+                {exportando ? (
+                  <ActivityIndicator size="small" color="#4B5563" />
+                ) : (
+                  <>
+                    <MaterialCommunityIcons
+                      name="file-excel"
+                      size={22}
+                      color="#15803D"
+                    />
+                    <AppText style={s.exportarBtnTxt}>
+                      Exportar listado a Excel
+                    </AppText>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+
+        {/* METRICAS TOTALES */}
+        <View style={s.recuadroMétricasContenedor}>
+          <View
             style={[
-              s.totalGrande,
-              {
-                color:
-                  filtroEstado === "debe"
-                    ? "#D97706"
-                    : filtroEstado === "anulada"
-                      ? "#DC2626"
-                      : colors.primary,
-              },
+              s.tarjetaMétricaVertical,
+              { backgroundColor: "#F7FBF9", borderColor: "#DEF7EC" },
             ]}
           >
-            {filtroEstado === "debe"
-              ? fmt(stats.totalDebe)
-              : filtroEstado === "anulada"
-                ? fmt(stats.totalAnulado)
-                : fmt(stats.totalRecibido)}
-          </AppText>
-
-          {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
-            <View
-              style={{
-                backgroundColor: "#F8FAFF",
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: "#E8EEFB",
-                padding: 14,
-                gap: 10,
-                marginBottom: 14,
-              }}
-            >
-              {/* Ventas pagadas */}
+            <View style={s.tarjetaHeaderRow}>
               <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
+                style={[s.iconoCirculoSolid, { backgroundColor: "#00875A" }]}
               >
-                <View>
-                  <AppText
-                    style={{
-                      fontSize: 18,
-                      color: "#374151",
-                      fontWeight: "700",
-                    }}
-                  >
-                    Ventas pagadas
-                  </AppText>
-                  <AppText
-                    style={{
-                      fontSize: 14,
-                      color: "#9CA3AF",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Pago al contado
-                  </AppText>
-                </View>
-                <AppText
-                  style={{ fontSize: 20, color: "#16A34A", fontWeight: "800" }}
-                >
-                  {fmt(stats.totalContado)}
-                </AppText>
+                <MaterialCommunityIcons name="cash" size={18} color="#FFF" />
               </View>
-
-              {/* Desglose efectivo / transferencia */}
-              <View style={{ gap: 8 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="cash"
-                      size={17}
-                      color="#6B7280"
-                    />
-                    <AppText
-                      style={{
-                        fontSize: 16,
-                        color: "#6B7280",
-                        fontWeight: "500",
-                      }}
-                    >
-                      efectivo
-                    </AppText>
-                  </View>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#16A34A",
-                      fontWeight: "700",
-                    }}
-                  >
-                    {fmt(stats.totalEfectivo)}
-                  </AppText>
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="bank-transfer"
-                      size={17}
-                      color="#6B7280"
-                    />
-                    <AppText
-                      style={{
-                        fontSize: 16,
-                        color: "#6B7280",
-                        fontWeight: "500",
-                      }}
-                    >
-                      tranferencia
-                    </AppText>
-                  </View>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#16A34A",
-                      fontWeight: "700",
-                    }}
-                  >
-                    {fmt(stats.totalTransferencia)}
-                  </AppText>
-                </View>
-              </View>
-
-              {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
-                <>
-                  <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
-
-                  {/* Abonos recibidos */}
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <View>
-                      <AppText
-                        style={{
-                          fontSize: 18,
-                          color: "#374151",
-                          fontWeight: "700",
-                        }}
-                      >
-                        Abonos recibidos
-                      </AppText>
-                      <AppText
-                        style={{
-                          fontSize: 14,
-                          color: "#9CA3AF",
-                          fontWeight: "500",
-                        }}
-                      >
-                        Pagos parciales de créditos
-                      </AppText>
-                    </View>
-                    <AppText
-                      style={{
-                        fontSize: 20,
-                        color: "#2563EB",
-                        fontWeight: "800",
-                      }}
-                    >
-                      {fmt(stats.totalAbonosParciales)}
-                    </AppText>
-                  </View>
-                </>
-              )}
-            </View>
-          )}
-
-          {/* Pendiente de cobro — solo en todas/activas */}
-          {stats.totalDebe > 0 &&
-            (filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  backgroundColor: "#FFFBEB",
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: "#FDE68A",
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
-                  marginBottom: 14,
-                }}
-              >
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-                >
-                  <MaterialCommunityIcons
-                    name="clock-alert-outline"
-                    size={22}
-                    color="#D97706"
-                  />
-                  <View>
-                    <AppText
-                      style={{
-                        fontSize: 16,
-                        color: "#92400E",
-                        fontWeight: "700",
-                      }}
-                    >
-                      Pendiente de cobro
-                    </AppText>
-                    <AppText
-                      style={{
-                        fontSize: 12,
-                        color: "#B45309",
-                        fontWeight: "500",
-                      }}
-                    >
-                      Créditos sin saldar
-                    </AppText>
-                  </View>
-                </View>
-                <AppText
-                  style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
-                >
-                  {fmt(stats.totalDebe)}
-                </AppText>
-              </View>
-            )}
-
-          {/* Anuladas del periodo */}
-          {stats.cantAnuladas > 0 && (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                backgroundColor: "#FEF2F2",
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: "#FECACA",
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                marginBottom: 14,
-              }}
-            >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-              >
-                <MaterialCommunityIcons
-                  name="cancel"
-                  size={22}
-                  color="#DC2626"
-                />
-                <View>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#7F1D1D",
-                      fontWeight: "700",
-                    }}
-                  >
-                    Facturas anuladas
-                  </AppText>
-                  <AppText
-                    style={{
-                      fontSize: 12,
-                      color: "#991B1B",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Excluidas del total
-                  </AppText>
-                </View>
-              </View>
-              <AppText
-                style={{ fontSize: 18, color: "#DC2626", fontWeight: "800" }}
-              >
-                {stats.cantAnuladas}
+              <AppText style={[s.tarjetaTitulo, { color: "#0A5C36" }]}>
+                Dinero recibido efectivo
               </AppText>
             </View>
-          )}
-
-          <View style={s.divisorH} />
-          <View style={s.filaCounts}>
-            <View style={s.countItem}>
-              <View style={[s.iconBubble, { backgroundColor: "#FFF3E0" }]}>
-                <MaterialCommunityIcons
-                  name="cart-outline"
-                  size={24}
-                  color="#F59E0B"
-                />
+            <View style={s.tarjetaContenido}>
+              <View style={s.tarjetaFilaInterna}>
+                <AppText style={s.tarjetaFilaLabel}>Venta</AppText>
+                <AppText style={[s.tarjetaFilaValor, { color: "#0A5C36" }]}>
+                  {fmt(stats.efectivoVenta)}
+                </AppText>
               </View>
-              <View>
-                <AppText style={s.countNum}>{stats.cantVentas}</AppText>
-                <AppText style={s.countLabel}>Ventas</AppText>
+              <View style={s.tarjetaFilaInterna}>
+                <AppText style={s.tarjetaFilaLabel}>Abonos</AppText>
+                <AppText style={[s.tarjetaFilaValor, { color: "#0A5C36" }]}>
+                  {fmt(stats.efectivoAbono)}
+                </AppText>
               </View>
             </View>
-            <View style={s.divisorV} />
-            <View style={s.countItem}>
-              <View style={[s.iconBubble, { backgroundColor: "#FCE4EC" }]}>
-                <MaterialCommunityIcons
-                  name="account-outline"
-                  size={24}
-                  color="#E91E63"
-                />
-              </View>
-              <View>
-                <AppText style={s.countNum}>{stats.clientesUnicos}</AppText>
-                <AppText style={s.countLabel}>Clientes</AppText>
-              </View>
+            <View style={[s.tarjetaDivider, { backgroundColor: "#E6F4EA" }]} />
+            <View style={s.tarjetaFilaInterna}>
+              <AppText style={[s.tarjetaTotalLabel, { color: "#0A5C36" }]}>
+                Total
+              </AppText>
+              <AppText style={[s.tarjetaTotalValor, { color: "#0A5C36" }]}>
+                {fmt(stats.efectivoVenta + stats.efectivoAbono)}
+              </AppText>
             </View>
           </View>
 
-          {/* TOP PRODUCTOS */}
-          {stats.top3.length > 0 &&
-            (() => {
-              const medallas = ["🥇", "🥈", "🥉"];
-              const barColors = ["#F59E0B", "#9CA3AF", "#CD7C2F"];
-              const maxTotal = stats.top3[0]?.total ?? 1;
-              return (
-                <>
-                  <View
-                    style={[s.divisorH, { marginTop: 4, marginBottom: 16 }]}
-                  />
-                  <View style={{ gap: 12 }}>
-                    <AppText
-                      style={{
-                        fontSize: 15,
-                        fontWeight: "700",
-                        color: "#111827",
-                      }}
-                    >
-                      🏆 Top productos
-                    </AppText>
-                    {stats.top3.map((p, i) => (
-                      <View key={p.nombre} style={{ gap: 4 }}>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                          }}
-                        >
+          <View
+            style={[
+              s.tarjetaMétricaVertical,
+              { backgroundColor: "#F5F8FF", borderColor: "#E1EFFE" },
+            ]}
+          >
+            <View style={s.tarjetaHeaderRow}>
+              <View
+                style={[s.iconoCirculoSolid, { backgroundColor: "#0052CC" }]}
+              >
+                <MaterialCommunityIcons name="bank" size={16} color="#FFF" />
+              </View>
+              <AppText style={[s.tarjetaTitulo, { color: "#0B41A8" }]}>
+                Dinero recibido transferencia
+              </AppText>
+            </View>
+            <View style={s.tarjetaContenido}>
+              <View style={s.tarjetaFilaInterna}>
+                <AppText style={s.tarjetaFilaLabel}>Venta</AppText>
+                <AppText style={[s.tarjetaFilaValor, { color: "#0B41A8" }]}>
+                  {fmt(stats.transferenciaVenta)}
+                </AppText>
+              </View>
+              <View style={s.tarjetaFilaInterna}>
+                <AppText style={s.tarjetaFilaLabel}>Abonos</AppText>
+                <AppText style={[s.tarjetaFilaValor, { color: "#0B41A8" }]}>
+                  {fmt(stats.transferenciaAbono)}
+                </AppText>
+              </View>
+            </View>
+            <View style={[s.tarjetaDivider, { backgroundColor: "#E1EFFE" }]} />
+            <View style={s.tarjetaFilaInterna}>
+              <AppText style={[s.tarjetaTotalLabel, { color: "#0B41A8" }]}>
+                Total
+              </AppText>
+              <AppText style={[s.tarjetaTotalValor, { color: "#0B41A8" }]}>
+                {fmt(stats.transferenciaVenta + stats.transferenciaAbono)}
+              </AppText>
+            </View>
+          </View>
+
+          <View
+            style={[
+              s.tarjetaMétricaHorizontal,
+              { backgroundColor: "#FFFDF5", borderColor: "#FDE68A" },
+            ]}
+          >
+            <View style={s.tarjetaHeaderRowHorizontal}>
+              <View style={s.iconoCirculoOutline}>
+                <MaterialCommunityIcons
+                  name="history"
+                  size={26}
+                  color="#9A4200"
+                />
+              </View>
+              <AppText
+                style={[s.tarjetaTituloHorizontal, { color: "#7C2D12" }]}
+              >
+                Saldos Pendientes
+              </AppText>
+            </View>
+            <View style={s.tarjetaDerechaHorizontal}>
+              <AppText
+                style={[s.tarjetaTotalValorHorizontal, { color: "#9A4200" }]}
+              >
+                {fmt(stats.totalDebe)}
+              </AppText>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color="#9A4200"
+                style={{ marginLeft: 4 }}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={s.statsMiniRow}>
+          <AppText style={s.statsMiniTxt}>
+            <MaterialCommunityIcons name="receipt" size={16} color="#6B7280" />{" "}
+            {stats.cantVentas} facturas activas
+          </AppText>
+          {stats.cantAnuladas > 0 && (
+            <AppText style={[s.statsMiniTxt, { color: "#DC2626" }]}>
+              <MaterialCommunityIcons name="cancel" size={16} color="#DC2626" />{" "}
+              {stats.cantAnuladas} anuladas
+            </AppText>
+          )}
+        </View>
+
+        {/* LISTADO AGRUPADO DE VENTAS - SIN AVATAR (MÁXIMO ESPACIO HORIZONTAL) */}
+        {Object.keys(salesAgrupadas).length === 0 ? (
+          <View style={{ alignItems: "center", marginTop: 40 }}>
+            <MaterialCommunityIcons
+              name="folder-open-outline"
+              size={56}
+              color="#9CA3AF"
+            />
+            <AppText style={{ color: "#6B7280", marginTop: 14, fontSize: 18 }}>
+              No se encontraron transacciones
+            </AppText>
+          </View>
+        ) : (
+          Object.entries(salesAgrupadas).map(([fechaGrupo, ventasInGrupo]) => (
+            <View key={fechaGrupo} style={{ marginBottom: 20 }}>
+              <AppText style={s.grupoTitulo}>{fechaGrupo}</AppText>
+              {ventasInGrupo.map((venta) => {
+                const esAnulada = venta.estado === "anulada";
+                const esPaz = evaluarFacturaPagada(venta);
+
+                const totalAbonado = abonos
+                  .filter(
+                    (a) => a.ventaId === venta.id && a.estado !== "anulado",
+                  )
+                  .reduce((sum, a) => sum + a.monto, 0);
+
+                const badgeBg = esAnulada
+                  ? "#FEE2E2"
+                  : esPaz
+                    ? "#DCFCE7"
+                    : "#FEF3C7";
+                const badgeColor = esAnulada
+                  ? "#DC2626"
+                  : esPaz
+                    ? "#16A34A"
+                    : "#D97706";
+                const badgeLabel = esAnulada
+                  ? "Anulada"
+                  : esPaz
+                    ? "Al día"
+                    : "En mora";
+
+                const metodoRaw = String(
+                  venta.metodoPago ||
+                    (venta as any).metodoCuotaInicial ||
+                    "Efectivo",
+                ).toLowerCase();
+                const esTransferencia =
+                  metodoRaw.includes("transferencia") ||
+                  metodoRaw.includes("banco");
+                const metodoTexto = esTransferencia
+                  ? "Transferencia"
+                  : "Efectivo";
+                const metodoIcono = esTransferencia ? "bank" : "cash";
+                const metodoBg = esTransferencia ? "#EBF1FF" : "#EBF7EE";
+                const metodoColor = esTransferencia ? "#1A56DB" : "#149246";
+
+                return (
+                  <TouchableOpacity
+                    key={venta.id}
+                    style={s.ventaCard}
+                    onPress={() => {
+                      setVentaSeleccionada(venta);
+                      setModalFacturaVisible(true);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <View style={s.ventaCardTop}>
+                      {/* LADO IZQUIERDO: DETALLES SIN CÍRCULO INICIAL */}
+                      <View style={s.ventaCardLeft}>
+                        <View style={{ flex: 1 }}>
+                          <AppText
+                            style={[
+                              s.clienteName,
+                              esAnulada && {
+                                textDecorationLine: "line-through",
+                                color: "#9CA3AF",
+                              },
+                            ]}
+                          >
+                            {venta.nombreCliente}
+                          </AppText>
+
                           <View
                             style={{
                               flexDirection: "row",
                               alignItems: "center",
-                              gap: 8,
-                              flex: 1,
+                              gap: 5,
+                              marginTop: 4,
                             }}
                           >
-                            <AppText style={{ fontSize: 18, lineHeight: 22 }}>
-                              {medallas[i]}
+                            <AppText style={s.ventaHora}>
+                              {horaDeVenta(venta.fecha)}
                             </AppText>
-                            <AppText
-                              style={{
-                                fontSize: 14,
-                                color: "#1F2937",
-                                fontWeight: "600",
-                                flex: 1,
-                              }}
-                              numberOfLines={1}
-                            >
-                              {p.nombre}
+                            <AppText style={s.ventaDot}>•</AppText>
+                            <AppText style={s.ventaFactura}>
+                              #{venta.numeroFactura || venta.id.substring(0, 6)}
                             </AppText>
                           </View>
-                          <AppText
-                            style={{
-                              fontSize: 14,
-                              color: "#6B7280",
-                              fontWeight: "700",
-                              marginLeft: 8,
-                            }}
-                          >
-                            $ {Number(p.total).toLocaleString("es-CO")}
-                          </AppText>
-                        </View>
-                        <View
-                          style={{
-                            height: 5,
-                            backgroundColor: "#F3F4F6",
-                            borderRadius: 4,
-                            overflow: "hidden",
-                          }}
-                        >
-                          <View
-                            style={{
-                              height: 5,
-                              borderRadius: 4,
-                              backgroundColor: barColors[i],
-                              width: `${Math.round((p.total / maxTotal) * 100)}%`,
-                            }}
-                          />
-                        </View>
-                      </View>
-                    ))}
-                  </View>
-                </>
-              );
-            })()}
-        </View>
 
-        {/* LISTADO DINÁMICO DE FACTURAS */}
-        {ventasFiltradas.length > 0 && (
-          <AppText style={[s.filterTitle, { marginBottom: 4 }]}>
-            Listado de facturas
-          </AppText>
-        )}
-
-        {Object.keys(ventasAgrupadas).length > 0 ? (
-          Object.keys(ventasAgrupadas).map((fechaGrupo) => (
-            <View key={fechaGrupo} style={{ marginBottom: 20 }}>
-              <AppText style={s.tituloGrupoFecha}>{fechaGrupo}</AppText>
-              <View style={{ gap: 12, marginTop: 8 }}>
-                {ventasAgrupadas[fechaGrupo].map((venta, index) => {
-                  const avatarColor =
-                    AVATAR_COLORS[index % AVATAR_COLORS.length];
-                  const inicial = venta.nombreCliente.charAt(0).toUpperCase();
-                  const esAnulada = venta.estado === "anulada";
-                  const esFacturaSaldada =
-                    !esAnulada && evaluarFacturaPagada(venta);
-
-                  // Colores según estado
-                  const badgeBg = esAnulada
-                    ? "#FEE2E2"
-                    : esFacturaSaldada
-                      ? "#DCFCE7"
-                      : "#FEF3C7";
-                  const badgeColor = esAnulada
-                    ? "#DC2626"
-                    : esFacturaSaldada
-                      ? "#16A34A"
-                      : "#D97706";
-                  const badgeLabel = esAnulada
-                    ? "Anulada"
-                    : esFacturaSaldada
-                      ? "Al día"
-                      : "En mora";
-
-                  return (
-                    <View
-                      key={venta.id}
-                      style={[
-                        s.ventaCard,
-                        esAnulada && {
-                          opacity: 0.72,
-                          borderWidth: 1.5,
-                          borderColor: "#FECACA",
-                        },
-                      ]}
-                    >
-                      {/* Avatar */}
-                      <View
-                        style={[
-                          s.avatar,
-                          {
-                            backgroundColor: esAnulada
-                              ? "#F3F4F6"
-                              : avatarColor.bg,
-                          },
-                        ]}
-                      >
-                        <AppText
-                          style={[
-                            s.avatarLetra,
-                            { color: esAnulada ? "#9CA3AF" : avatarColor.fg },
-                          ]}
-                        >
-                          {inicial}
-                        </AppText>
-                      </View>
-
-                      {/* Info */}
-                      <View style={{ flex: 1, marginLeft: 14 }}>
-                        <AppText
-                          style={[
-                            s.ventaNombre,
-                            esAnulada && { color: "#9CA3AF" },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {venta.nombreCliente}
-                        </AppText>
-                        <AppText style={s.ventaHora}>
-                          {horaDeVenta(venta.fecha)}
-                        </AppText>
-                        {!esAnulada &&
-                          venta.tipo === "contado" &&
-                          venta.metodoPago && (
+                          {!esAnulada && (
                             <View
-                              style={{
-                                flexDirection: "row",
-                                alignItems: "center",
-                                gap: 3,
-                                marginTop: 3,
-                              }}
+                              style={[
+                                s.metodoPill,
+                                { backgroundColor: metodoBg },
+                              ]}
                             >
                               <MaterialCommunityIcons
-                                name={
-                                  venta.metodoPago === "efectivo"
-                                    ? "cash"
-                                    : "bank-transfer"
-                                }
+                                name={metodoIcono as any}
                                 size={13}
-                                color={
-                                  venta.metodoPago === "efectivo"
-                                    ? "#16A34A"
-                                    : "#7C3AED"
-                                }
+                                color={metodoColor}
+                                style={{ marginRight: 4 }}
                               />
                               <AppText
-                                style={{
-                                  fontSize: 12,
-                                  color:
-                                    venta.metodoPago === "efectivo"
-                                      ? "#16A34A"
-                                      : "#7C3AED",
-                                  fontWeight: "600",
-                                }}
+                                style={[
+                                  s.metodoPillTxt,
+                                  { color: metodoColor },
+                                ]}
                               >
-                                {venta.metodoPago === "efectivo"
-                                  ? "Efectivo"
-                                  : "Transferencia"}
+                                {metodoTexto}
                               </AppText>
                             </View>
                           )}
+                        </View>
                       </View>
 
-                      {/* Monto + badge */}
-                      <View style={{ alignItems: "flex-end", marginRight: 8 }}>
-                        {!esAnulada && !esFacturaSaldada ? (
-                          <>
-                            <AppText
-                              style={[s.ventaMonto, { color: "#D97706" }]}
-                            >
-                              {fmt(saldoPorVenta.get(venta.id) ?? venta.total)}
-                            </AppText>
-                            <AppText
-                              style={{
-                                fontSize: 11,
-                                color: "#9CA3AF",
-                                marginBottom: 2,
-                              }}
-                            >
-                              de {fmt(venta.total)}
-                            </AppText>
-                          </>
-                        ) : (
-                          <AppText
-                            style={[
-                              s.ventaMonto,
-                              esAnulada && {
-                                color: "#9CA3AF",
-                                textDecorationLine: "line-through",
-                                fontSize: 15,
-                              },
-                            ]}
-                          >
-                            {fmt(venta.total)}
-                          </AppText>
-                        )}
-                        <View
+                      {/* LADO DERECHO: TOTAL + ESTADO + ABONO */}
+                      <View
+                        style={{
+                          alignItems: "flex-end",
+                          justifyContent: "center",
+                        }}
+                      >
+                        <AppText
                           style={[
-                            s.badge,
-                            { backgroundColor: badgeBg, paddingVertical: 3 },
+                            s.ventaTotal,
+                            esAnulada && {
+                              textDecorationLine: "line-through",
+                              color: "#9CA3AF",
+                            },
                           ]}
                         >
+                          {fmt(venta.total)}
+                        </AppText>
+
+                        <View
+                          style={[s.miniBadge, { backgroundColor: badgeBg }]}
+                        >
                           <AppText
-                            style={[
-                              s.badgeTxt,
-                              { color: badgeColor, fontSize: 12 },
-                            ]}
+                            style={[s.miniBadgeTxt, { color: badgeColor }]}
                           >
                             {badgeLabel}
                           </AppText>
                         </View>
-                      </View>
 
-                      {/* Botón ver */}
-                      <TouchableOpacity
-                        style={[s.btnVerGrande, { backgroundColor: "#F3F4F6" }]}
-                        activeOpacity={0.7}
-                        onPress={() => {
-                          setVentaSeleccionada(venta);
-                          setModalFacturaVisible(true);
-                        }}
-                      >
-                        <MaterialCommunityIcons
-                          name="file-eye-outline"
-                          size={22}
-                          color={colors.primary}
-                        />
-                        <AppText
-                          style={[s.btnVerGrandeTxt, { color: colors.primary }]}
-                        >
-                          Ver
-                        </AppText>
-                      </TouchableOpacity>
+                        {!esAnulada && venta.tipo === "credito" && (
+                          <AppText style={s.ventaAbonoTxt}>
+                            Abono: {fmt(totalAbonado)}
+                          </AppText>
+                        )}
+                      </View>
                     </View>
-                  );
-                })}
-              </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ))
-        ) : (
-          <View
-            style={[
-              s.card,
-              { alignItems: "center", paddingVertical: 48, marginTop: 12 },
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="database-search-outline"
-              size={64}
-              color="#C4CBD8"
-              style={{ marginBottom: 16 }}
-            />
-            <AppText style={s.vacioCabeza}>No se encontraron ventas</AppText>
-            <AppText style={s.vacioSub}>
-              Prueba cambiando los filtros o modificando el término de búsqueda
-            </AppText>
-          </View>
         )}
 
         {cargandoMas && (
-          <View style={{ paddingVertical: 20, alignItems: "center" }}>
-            <ActivityIndicator size="small" color={colors.primary} />
-          </View>
+          <ActivityIndicator
+            size="small"
+            color={colors.primary}
+            style={{ marginTop: 12 }}
+          />
         )}
       </ScrollView>
 
-      {/* MODAL DETALLE */}
+      {/* MODALES */}
       <ModalFactura
         venta={ventaSeleccionada}
         visible={modalFacturaVisible}
-        evaluarFacturaPagada={evaluarFacturaPagada}
         onClose={() => {
           setModalFacturaVisible(false);
-          setTimeout(() => setVentaSeleccionada(null), 300);
+          setVentaSeleccionada(null);
         }}
+        evaluarFacturaPagada={evaluarFacturaPagada}
         onAnular={handleSolicitarAnular}
       />
 
-      {/* MODAL ANULACIÓN */}
       <ModalAnular
         venta={ventaAAnular}
         visible={modalAnularVisible}
@@ -2264,397 +1623,179 @@ export const HistorialScreen = () => {
         anulando={anulando}
       />
 
-      {/* MODAL FECHA */}
       <ModalElegirFecha
         visible={modalFechaVisible}
         onClose={() => setModalFechaVisible(false)}
-        onAplicar={(inicio, fin) => {
-          setRangoPersonalizado({ inicio, fin });
-          setFiltroPeriodo("personalizado");
-        }}
+        onAplicar={(inicio, fin) => setRangoPersonalizado({ inicio, fin })}
       />
     </ScreenWrapper>
   );
 };
 
-const s = StyleSheet.create({
-  centrado: { flex: 1, justifyContent: "center", alignItems: "center" },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 3,
-  },
-  labelGris: { fontSize: 17, fontWeight: "500", color: "#7B8499" },
-  totalGrande: {
-    fontSize: 44,
-    fontWeight: "900",
-    letterSpacing: -1,
-    marginTop: 4,
-    marginBottom: 16,
-  },
-  divisorH: { height: 1.5, backgroundColor: "#EAECF4", marginBottom: 16 },
-  filaCounts: { flexDirection: "row", alignItems: "center" },
-  countItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 12 },
-  divisorV: {
-    width: 1.5,
-    height: 40,
-    backgroundColor: "#EAECF4",
-    marginHorizontal: 8,
-  },
-  iconBubble: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  countNum: { fontSize: 22, fontWeight: "800", color: "#111827" },
-  countLabel: { fontSize: 15, color: "#7B8499", fontWeight: "500" },
-  contenedorBuscador: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1.5,
-    borderColor: "#E2E6EF",
-    borderRadius: 18,
-    height: 58,
-    marginTop: 8,
-  },
-  inputBuscador: {
-    flex: 1,
-    fontSize: 17,
-    color: "#111827",
-    paddingHorizontal: 12,
-    fontWeight: "500",
-  },
-  filterSection: { marginBottom: 24 },
-  filterTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 12,
-  },
-  filterRow: { flexDirection: "row", gap: 8 },
-  filterBtn: {
-    minHeight: 58,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  filterBtnText: { fontSize: 14, fontWeight: "700" },
-  fechaBtn: {
-    height: 58,
-    borderRadius: 18,
-    backgroundColor: "#F3F4F6",
-    borderWidth: 1.5,
-    borderColor: "#E5E7EB",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    marginBottom: 24,
-  },
-  fechaBtnText: { fontSize: 17, fontWeight: "700" },
-  btnExcelAncho: {
-    height: 58,
-    borderRadius: 18,
-    backgroundColor: "#E8F5E9",
-    borderWidth: 1.5,
-    borderColor: "#A7F3D0",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    marginBottom: 24,
-  },
-  btnExcelAnchoTxt: { fontSize: 17, fontWeight: "700", color: "#16A34A" },
-  tituloGrupoFecha: {
-    fontSize: 19,
-    fontWeight: "800",
-    color: "#4B5563",
-    paddingLeft: 4,
-  },
-  ventaCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 18,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-  },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarLetra: { fontSize: 18, fontWeight: "800" },
-  ventaNombre: { fontSize: 17, fontWeight: "700", color: "#111827" },
-  ventaHora: { fontSize: 14, color: "#7B8499" },
-  ventaMonto: { fontSize: 17, fontWeight: "700", color: "#111827" },
-  badge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-    marginTop: 4,
-  },
-  badgeTxt: { fontSize: 13, fontWeight: "700" },
-  btnVerGrande: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    borderRadius: 14,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginLeft: 6,
-  },
-  btnVerGrandeTxt: { fontSize: 15, fontWeight: "700" },
-  btnPrincipalAncho: {
-    height: 58,
-    backgroundColor: "#2563EB",
-    borderRadius: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  btnPrincipalAnchoTxt: { fontSize: 18, fontWeight: "700", color: "#FFF" },
-  vacioCabeza: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111827",
-    marginBottom: 8,
-  },
-  vacioSub: {
-    fontSize: 16,
-    color: "#7B8499",
-    textAlign: "center",
-    lineHeight: 24,
-  },
-});
-
+// ── HOJAS DE ESTILOS ADAPTADAS ──────────────────────────────────────────────
 const ms = StyleSheet.create({
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
   sheet: {
-    marginTop: "auto",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: "85%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 20,
+    maxHeight: "90%",
   },
   handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: "#E2E6EF",
-    borderRadius: 2,
+    width: 42,
+    height: 6,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 3,
     alignSelf: "center",
     marginTop: 12,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F2F7",
+    borderBottomColor: "#F3F4F6",
   },
-  headerTitulo: { fontSize: 20, fontWeight: "800", color: "#111827" },
-  headerFecha: { fontSize: 14, color: "#7B8499", marginTop: 2 },
+  headerTitulo: { fontSize: 22, fontWeight: "800", color: "#111827" },
+  headerFecha: { fontSize: 15, color: "#6B7280", marginTop: 3 },
   btnClose: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#9CA3AF",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#374151",
     alignItems: "center",
     justifyContent: "center",
   },
   clienteRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    marginVertical: 16,
   },
   avatarGrande: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarLetra: { fontSize: 22, fontWeight: "800" },
-  clienteNombre: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  clienteHora: { fontSize: 14, color: "#7B8499", marginTop: 2 },
+  avatarLetra: { fontSize: 22, fontWeight: "700" },
+  clienteNombre: { fontSize: 20, fontWeight: "700", color: "#111827" },
+  clienteHora: { fontSize: 15, color: "#6B7280", marginTop: 2 },
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 12,
+    gap: 5,
   },
-  badgeTxt: { fontSize: 13, fontWeight: "700" },
-  divisor: { height: 1, backgroundColor: "#F0F2F7", marginBottom: 8 },
+  badgeTxt: { fontSize: 14, fontWeight: "700" },
+  bloqueAnulacion: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    marginBottom: 16,
+  },
+  anulacionFila: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 3,
+  },
+  anulacionLabel: { fontSize: 14, fontWeight: "600", color: "#7F1D1D" },
+  anulacionValor: { fontSize: 14, color: "#991B1B" },
+  divisor: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 14 },
   divisorDashed: {
-    height: 1,
-    borderTopWidth: 1,
+    borderWidth: 0.5,
+    borderColor: "#E5E7EB",
     borderStyle: "dashed",
-    borderColor: "#E2E6EF",
-    marginVertical: 8,
+    marginVertical: 14,
   },
-  tablaHeader: { flexDirection: "row", paddingVertical: 4 },
-  colHead: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#7B8499",
-    letterSpacing: 0.3,
-  },
-  colCant: { width: 44, textAlign: "center" },
-  colPrecio: { width: 80, textAlign: "right" },
-  colTotal: { width: 80, textAlign: "right" },
+  tablaHeader: { flexDirection: "row", paddingVertical: 6 },
+  colHead: { fontSize: 14, fontWeight: "700", color: "#6B7280" },
+  colCant: { width: 50, textAlign: "center" },
+  colPrecio: { width: 85, textAlign: "right" },
+  colTotal: { width: 95, textAlign: "right" },
   filaProducto: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
-    borderBottomColor: "#E2E6EF",
+    borderBottomColor: "#F3F4F6",
   },
   productoNombre: { fontSize: 16, fontWeight: "600", color: "#111827" },
-  productoPrecioUnit: { fontSize: 13, color: "#7B8499", marginTop: 2 },
-  colValor: { fontSize: 15, fontWeight: "600", color: "#111827" },
+  productoPrecioUnit: { fontSize: 13, color: "#6B7280" },
+  colValor: { fontSize: 15, fontWeight: "600", color: "#374151" },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    marginVertical: 16,
   },
-  totalLabel: { fontSize: 14, color: "#7B8499", fontWeight: "500" },
-  totalMonto: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
+  totalLabel: { fontSize: 15, fontWeight: "600", color: "#4B5563" },
+  totalMonto: { fontSize: 26, fontWeight: "800" },
   fiadoInfo: {
     flexDirection: "row",
-    alignItems: "flex-start",
     backgroundColor: "#FFFBEB",
     borderRadius: 12,
-    padding: 14,
+    padding: 12,
     gap: 8,
-    marginTop: 8,
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: "#FEF3C7",
   },
-  fiadoTxt: { flex: 1, fontSize: 14, color: "#92400E", lineHeight: 20 },
+  fiadoTxt: { flex: 1, fontSize: 14, color: "#B45309", lineHeight: 18 },
   facturaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     marginTop: 12,
-    justifyContent: "center",
   },
-  facturaTxt: { fontSize: 13, color: "#7B8499" },
-
-  // ── Bloque de anulación en el detalle ────────────────────────────────────
-  bloqueAnulacion: {
-    backgroundColor: "#FEF2F2",
+  facturaTxt: { fontSize: 14, color: "#6B7280" },
+  btnAnular: {
+    height: 50,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: "#FECACA",
-    padding: 14,
-    marginBottom: 4,
-    marginTop: 8,
-  },
-  anulacionFila: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  anulacionLabel: {
-    fontSize: 13,
-    color: "#9CA3AF",
-    fontWeight: "600",
-    width: 90,
-  },
-  anulacionValor: {
-    fontSize: 13,
-    color: "#7F1D1D",
-    fontWeight: "600",
-    flexShrink: 1,
-  },
-
-  // ── Botón anular en el detalle ────────────────────────────────────────────
-  btnAnular: {
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FFF5F5",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1.5,
-    borderColor: "#FECACA",
+    gap: 6,
+    marginTop: 24,
   },
-  btnAnularTxt: { fontSize: 16, fontWeight: "800", color: "#DC2626" },
-
-  // ── Modal anular ─────────────────────────────────────────────────────────
+  btnAnularTxt: { fontSize: 16, fontWeight: "700", color: "#DC2626" },
   resumenAnulacion: {
     backgroundColor: "#F9FAFB",
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 14,
-    gap: 8,
+    padding: 16,
+    gap: 10,
   },
-  resumenFila: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  resumenLabel: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
-  resumenValor: { fontSize: 14, color: "#111827", fontWeight: "700" },
+  resumenFila: { flexDirection: "row", justifyContent: "space-between" },
+  resumenLabel: { fontSize: 15, color: "#4B5563" },
+  resumenValor: { fontSize: 15, color: "#111827", fontWeight: "600" },
   avisoAnulacion: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: "#FFFBEB",
+    backgroundColor: "#FEF3C7",
     borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
+    padding: 12,
+    gap: 8,
   },
-  avisoTxt: { flex: 1, fontSize: 13, color: "#92400E", lineHeight: 19 },
+  avisoTxt: { flex: 1, fontSize: 14, color: "#92400E", lineHeight: 18 },
   inputAreaWrap: {
     backgroundColor: "#F9FAFB",
     borderWidth: 1.5,
     borderColor: "#E5E7EB",
-    borderRadius: 16,
-    padding: 14,
-    minHeight: 90,
+    borderRadius: 14,
+    padding: 12,
+    height: 95,
   },
-  inputArea: { fontSize: 16, color: "#111827", fontWeight: "500" },
+  inputArea: { flex: 1, fontSize: 16, color: "#111827" },
   btnCancelarAnulacion: {
     height: 52,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
@@ -2666,26 +1807,26 @@ const ms = StyleSheet.create({
   },
   btnConfirmarAnulacion: {
     height: 52,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "#DC2626",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
   },
   btnConfirmarAnulacionTxt: { fontSize: 16, fontWeight: "800", color: "#FFF" },
 });
 
 const mf = StyleSheet.create({
-  label: { fontSize: 15, fontWeight: "700", color: "#374151" },
+  label: { fontSize: 16, fontWeight: "700", color: "#374151" },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F9FAFB",
     borderWidth: 1.5,
     borderColor: "#E5E7EB",
-    borderRadius: 16,
-    height: 58,
+    borderRadius: 14,
+    height: 56,
   },
   inputError: { borderColor: "#EF4444", backgroundColor: "#FFF5F5" },
   input: {
@@ -2694,12 +1835,225 @@ const mf = StyleSheet.create({
     fontWeight: "700",
     color: "#111827",
     paddingHorizontal: 16,
-    letterSpacing: 1,
+    letterSpacing: 0.5,
   },
-  errorTxt: {
-    fontSize: 13,
-    color: "#EF4444",
+  errorTxt: { fontSize: 14, color: "#EF4444", marginTop: 3 },
+});
+
+const s = StyleSheet.create({
+  centrado: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 20,
+  },
+  contenedorBuscador: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderRadius: 14,
+    height: 54,
+  },
+  inputBuscador: {
+    flex: 1,
+    fontSize: 17,
+    color: "#111827",
+    paddingHorizontal: 12,
+  },
+  filtrosPanel: {
+    backgroundColor: "#FFF",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 16,
+    marginBottom: 18,
+  },
+  filtrosHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  filterTitle: { fontSize: 18, fontWeight: "700", color: "#111827" },
+  filtrosContenido: {
+    marginTop: 16,
+    gap: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+    paddingTop: 14,
+  },
+  seccionFiltroTitulo: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#4B5563",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  chipsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 10,
+    marginBottom: 6,
+  },
+  chip: {
+    width: "48.5%",
+    paddingVertical: 11,
+    borderRadius: 12,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipTxt: { fontSize: 15, color: "#4B5563", fontWeight: "600" },
+  exportarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    marginTop: 8,
+  },
+  exportarBtnTxt: { fontSize: 15, fontWeight: "700", color: "#166534" },
+
+  recuadroMétricasContenedor: { gap: 14, marginBottom: 20 },
+  tarjetaMétricaVertical: {
+    borderRadius: 16,
+    borderWidth: 1.2,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 14,
+  },
+  tarjetaHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  iconoCirculoSolid: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+  },
+  tarjetaTitulo: { fontSize: 18, fontWeight: "700" },
+  tarjetaContenido: { paddingLeft: 4, gap: 10 },
+  tarjetaFilaInterna: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 4,
+  },
+  tarjetaFilaLabel: { fontSize: 16, color: "#4B5563", fontWeight: "500" },
+  tarjetaFilaValor: { fontSize: 20, fontWeight: "700" },
+  tarjetaDivider: { height: 1, marginVertical: 12, width: "100%" },
+  tarjetaTotalLabel: { fontSize: 17, fontWeight: "700" },
+  tarjetaTotalValor: { fontSize: 23, fontWeight: "800" },
+
+  tarjetaMétricaHorizontal: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderRadius: 16,
+    borderWidth: 1.2,
+    paddingHorizontal: 16,
+    height: 64,
+  },
+  tarjetaHeaderRowHorizontal: { flexDirection: "row", alignItems: "center" },
+  iconoCirculoOutline: {
+    marginRight: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tarjetaTituloHorizontal: { fontSize: 17, fontWeight: "700" },
+  tarjetaDerechaHorizontal: { flexDirection: "row", alignItems: "center" },
+  tarjetaTotalValorHorizontal: { fontSize: 22, fontWeight: "800" },
+
+  statsMiniRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 18,
+    paddingHorizontal: 2,
+  },
+  statsMiniTxt: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
+  grupoTitulo: {
+    fontSize: 18,
+    fontWeight: "800",
+    color: "#4B5563",
+    marginBottom: 10,
+    textTransform: "capitalize",
+  },
+
+  // TARJETA OPTIMIZADA CON ALINEACIÓN TOTAL AL BORDE IZQUIERDO
+  ventaCard: {
+    flexDirection: "row",
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+  },
+  ventaCardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flex: 1,
+  },
+  ventaCardLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
+  clienteName: { fontSize: 17, fontWeight: "700", color: "#0F172A" },
+  ventaHora: { fontSize: 13, color: "#94A3B8" },
+  ventaDot: { fontSize: 13, color: "#CBD5E1" },
+  ventaFactura: { fontSize: 13, color: "#94A3B8" },
+
+  metodoPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    marginTop: 6,
+  },
+  metodoPillTxt: {
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  ventaTotal: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
+  miniBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  miniBadgeTxt: { fontSize: 12, fontWeight: "700" },
+  ventaAbonoTxt: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 5,
     fontWeight: "500",
-    paddingLeft: 4,
   },
+
+  btnPrincipalAncho: {
+    height: 52,
+    borderRadius: 14,
+    backgroundColor: "#111827",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  },
+  btnPrincipalAnchoTxt: { fontSize: 17, fontWeight: "700", color: "#FFF" },
 });

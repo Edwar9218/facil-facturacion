@@ -20,6 +20,9 @@ export const useCreditos = () => {
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [montoAbono, setMontoAbono] = useState("");
+  const [metodoPagoAbono, setMetodoPagoAbono] = useState<
+    "Efectivo" | "Transferencia"
+  >("Efectivo");
 
   const [facturaSeleccionadaId, setFacturaSeleccionadaId] = useState<
     string | null
@@ -59,6 +62,7 @@ export const useCreditos = () => {
   const abrirDetalle = async (clienteId: string) => {
     setVistaModal("detalle");
     setMontoAbono("");
+    setMetodoPagoAbono("Efectivo");
     setFacturaSeleccionadaId(null);
     setCargandoDetalle(true);
     modalGestor.abrir();
@@ -90,6 +94,7 @@ export const useCreditos = () => {
         fecha: new Date()
           .toLocaleString("sv-SE", { timeZone: "America/Bogota" })
           .replace(" ", "T"),
+        metodoPago: metodoPagoAbono,
       });
 
       const nuevoDetalle = await repo.getDetalle(detalle.clienteId);
@@ -97,6 +102,7 @@ export const useCreditos = () => {
       await cargarResumenes();
 
       setMontoAbono("");
+      setMetodoPagoAbono("Efectivo");
       setFacturaSeleccionadaId(null);
       setVistaModal("detalle");
     } catch (error: any) {
@@ -198,6 +204,8 @@ export const useCreditos = () => {
     detalle,
     montoAbono,
     setMontoAbono,
+    metodoPagoAbono,
+    setMetodoPagoAbono,
 
     facturaSeleccionadaId,
     setFacturaSeleccionadaId,
