@@ -25,11 +25,15 @@ export const SlideModal = ({
 }: Props) => {
   const { colors, spacing, radius } = useTheme();
 
-  const handleClose = () => modal.cerrar(onClose);
+  // Si el objeto modal no existe, no intentamos renderizar nada.
+  // Esto evita el error "cannot read property of undefined".
+  if (!modal) return null;
+
+  const handleClose = () => modal?.cerrar(onClose);
 
   return (
     <Modal
-      visible={modal.visible}
+      visible={modal?.visible ?? false}
       transparent
       animationType="none"
       onRequestClose={handleClose}
@@ -57,7 +61,7 @@ export const SlideModal = ({
                   paddingBottom: spacing.xxxl,
                   maxHeight: "100%",
                 },
-                modal.animatedStyle,
+                modal?.animatedStyle, // Encadenamiento opcional para seguridad
               ]}
             >
               {/* Handle */}

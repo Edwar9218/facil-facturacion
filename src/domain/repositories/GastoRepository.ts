@@ -1,0 +1,24 @@
+// src/domain/repositories/GastoRepository.ts
+
+import { Gasto, MetodoPagoGasto } from "../entities/Gasto";
+
+export interface GastoRepository {
+  // ── Consultas ────────────────────────────────────────────────────────────
+  getGastosPorFecha(fecha: string): Promise<Gasto[]>;
+  getGastosPorRango(params: {
+    fechaInicio: string;
+    fechaFin: string;
+  }): Promise<Gasto[]>;
+
+  // ── Acciones ─────────────────────────────────────────────────────────────
+  registrarGasto(params: {
+    descripcion: string;
+    monto: number;
+    categoria: string;
+    metodoPago: MetodoPagoGasto;
+    foto?: string;
+    cajaId?: string;
+  }): Promise<Gasto>;
+
+  eliminarGasto(gastoId: string): Promise<boolean>;
+}

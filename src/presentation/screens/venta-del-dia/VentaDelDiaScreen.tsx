@@ -18,12 +18,15 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as XLSX from "xlsx";
 import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
+import { GastoRepositoryImpl } from "../../../data/repositories/GastoRepositoryImpl";
 import { VentaRepositoryImpl } from "../../../data/repositories/VentaRepositoryImpl";
 import { ResumenCredito } from "../../../domain/entities/Credito";
+import { Gasto } from "../../../domain/entities/Gasto";
 import { ItemVenta, Venta } from "../../../domain/entities/Venta";
 import { useTheme } from "../../../theme";
 import { ScreenWrapper } from "../../components/layout/ScreenWrapper";
 import { AppText } from "../../components/ui/AppText";
+import { CajaWidget } from "./components/CajaWidget";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
@@ -58,6 +61,7 @@ const fechaLarga = (fecha: string) => {
 // ── Repos ─────────────────────────────────────────────────────────────────────
 const ventaRepo = new VentaRepositoryImpl();
 const creditoRepo = new CreditoRepositoryImpl();
+const gastoRepo = new GastoRepositoryImpl();
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 type TipoEstado = "todas" | "pazysalvo" | "debe" | "anulada";
@@ -68,7 +72,7 @@ interface Abono {
   ventaId: string;
   monto: number;
   fecha: string;
-  estado?: string; // "activo" | "anulado"
+  estado?: string;
 }
 
 const AVATAR_COLORS = [
@@ -406,13 +410,9 @@ const ModalAnular = ({
           activeOpacity={1}
           onPress={onClose}
         />
-
         <KeyboardAwareScrollView
           style={{ flex: 1, width: "100%" }}
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: "flex-end",
-          }}
+          contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}
           bounces={false}
           keyboardShouldPersistTaps="handled"
           enableOnAndroid={true}
@@ -421,7 +421,6 @@ const ModalAnular = ({
         >
           <View style={[ms.sheet, { paddingBottom: insets.bottom + 24 }]}>
             <View style={ms.handle} />
-
             <View style={[ms.header, { borderBottomColor: "#FEE2E2" }]}>
               <View style={{ flex: 1 }}>
                 <AppText style={[ms.headerTitulo, { color: RED }]}>
@@ -561,12 +560,13 @@ export const VentaDelDiaScreen = () => {
   const { colors } = useTheme();
   const router = useRouter();
 
-  // Estados Base
+  // ── Estados base ──────────────────────────────────────────────────────────
   const [todasVentasDeHoy, setTodasVentasDeHoy] = React.useState<Venta[]>([]);
   const [abonos, setAbonos] = React.useState<Abono[]>([]);
   const [deudores, setDeudores] = React.useState<ResumenCredito[]>([]);
+  const [gastos, setGastos] = React.useState<Gasto[]>([]); // ← NUEVO
 
-  // Controles UI
+  // ── Controles UI ──────────────────────────────────────────────────────────
   const [filtroEstado, setFiltroEstado] = React.useState<TipoEstado>("todas");
   const [busqueda, setBusqueda] = React.useState("");
   const [cargando, setCargando] = React.useState(true);
@@ -574,15 +574,16 @@ export const VentaDelDiaScreen = () => {
   const [mostrarTodas, setMostrarTodas] = React.useState(false);
   const [exportando, setExportando] = React.useState(false);
 
-  // Modales
+  // ── Modales ───────────────────────────────────────────────────────────────
   const [ventaSeleccionada, setVentaSeleccionada] =
     React.useState<Venta | null>(null);
   const [modalVisible, setModalVisible] = React.useState(false);
-
-  // Anulación
   const [ventaAAnular, setVentaAAnular] = React.useState<Venta | null>(null);
   const [modalAnularVisible, setModalAnularVisible] = React.useState(false);
   const [anulando, setAnulando] = React.useState(false);
+
+  // ── Trigger para refrescar la Caja cuando cambian las ventas ────────────────
+  const [refreshCajaTrigger, setRefreshCajaTrigger] = React.useState(0);
 
   // ── Saldo real por factura ────────────────────────────────────────────────
   const saldoPorVenta = React.useMemo(() => {
@@ -609,7 +610,7 @@ export const VentaDelDiaScreen = () => {
     [abonos],
   );
 
-  // ── Filtro Dinámico ───────────────────────────────────────────────────────
+  // ── Filtro dinámico ───────────────────────────────────────────────────────
   const ventasFiltradas = React.useMemo(() => {
     let resultado = [...todasVentasDeHoy];
     if (filtroEstado === "pazysalvo") {
@@ -636,9 +637,8 @@ export const VentaDelDiaScreen = () => {
     );
   }, [todasVentasDeHoy, filtroEstado, busqueda, evaluarFacturaPagada]);
 
-  // ── Estadísticas y Restas Automáticas de las tarjetas ───────────────────
+  // ── Estadísticas ──────────────────────────────────────────────────────────
   const stats = React.useMemo(() => {
-    // Stats sobre ventasFiltradas para que cambien al filtrar (igual que Historial)
     const ventasActivas = ventasFiltradas.filter((v) => v.estado !== "anulada");
     const ventasAnuladas = ventasFiltradas.filter(
       (v) => v.estado === "anulada",
@@ -649,7 +649,6 @@ export const VentaDelDiaScreen = () => {
     const clientesHoy = [...new Set(ventasActivas.map((v) => v.clienteId))]
       .length;
 
-    // Abonos cobrados HOY activos
     const abonosDeHoy = abonos.filter(
       (a: Abono) => esHoy(a.fecha) && a.estado !== "anulado",
     );
@@ -658,7 +657,6 @@ export const VentaDelDiaScreen = () => {
       0,
     );
 
-    // Ventas pagadas al contado (del filtro activo)
     const totalContadoHoy = ventasActivas
       .filter((v) => v.tipo === "contado")
       .reduce((a, v) => a + v.total, 0);
@@ -673,7 +671,6 @@ export const VentaDelDiaScreen = () => {
 
     const recibiidoHoy = totalContadoHoy + totalAbonosHoy;
 
-    // Total de facturas en mora (saldo pendiente real)
     const totalEnMora = ventasActivas
       .filter((v) => !evaluarFacturaPagada(v))
       .reduce((acc, v) => {
@@ -683,10 +680,8 @@ export const VentaDelDiaScreen = () => {
         return acc + Math.max(0, v.total - abonado);
       }, 0);
 
-    // Total de facturas anuladas
     const totalAnulado = ventasAnuladas.reduce((a, v) => a + v.total, 0);
 
-    // Saldo real pendiente de las ventas a crédito del filtro activo
     const creditoSaldoHoy = ventasActivas
       .filter((v) => v.tipo === "credito")
       .reduce((acc, v) => {
@@ -697,6 +692,17 @@ export const VentaDelDiaScreen = () => {
       }, 0);
 
     const creditoPendiente = deudores.reduce((a, r) => a + r.saldoActual, 0);
+
+    // ── Totales gastos ────────────────────────────────────────────────────
+    const totalGastosEfectivo = gastos
+      .filter((g) => g.metodoPago === "efectivo")
+      .reduce((a, g) => a + g.monto, 0);
+
+    const totalGastosTransferencia = gastos
+      .filter((g) => g.metodoPago === "transferencia")
+      .reduce((a, g) => a + g.monto, 0);
+
+    const totalGastos = totalGastosEfectivo + totalGastosTransferencia;
 
     return {
       ventasHoy,
@@ -711,10 +717,13 @@ export const VentaDelDiaScreen = () => {
       creditoPendiente,
       totalEnMora,
       totalAnulado,
+      totalGastos,
+      totalGastosEfectivo,
+      totalGastosTransferencia,
     };
-  }, [ventasFiltradas, abonos, deudores, evaluarFacturaPagada]);
+  }, [ventasFiltradas, abonos, deudores, gastos, evaluarFacturaPagada]);
 
-  // ── Top 3 productos (excluyendo anuladas) ───────────────────────────────
+  // ── Top 3 productos ───────────────────────────────────────────────────────
   const top3 = React.useMemo(() => {
     const conteo: { [nombre: string]: number } = {};
     todasVentasDeHoy
@@ -733,21 +742,25 @@ export const VentaDelDiaScreen = () => {
       .map(([nombre, total]) => ({ nombre, total }));
   }, [todasVentasDeHoy]);
 
+  // ── Cargar datos ──────────────────────────────────────────────────────────
   const cargar = async (esRefresh = false) => {
     if (esRefresh) setRefrescando(true);
     else setCargando(true);
 
     try {
-      const [todasVentas, resumenes, listaAbonos] = await Promise.all([
-        ventaRepo.getAll(),
-        creditoRepo.getResumenes(),
-        creditoRepo.getAbonos ? creditoRepo.getAbonos() : Promise.resolve([]),
-      ]);
+      const [todasVentas, resumenes, listaAbonos, gastosHoy] =
+        await Promise.all([
+          ventaRepo.getAll(),
+          creditoRepo.getResumenes(),
+          creditoRepo.getAbonos ? creditoRepo.getAbonos() : Promise.resolve([]),
+          gastoRepo.getGastosPorFecha(fechaHoy()), // ← NUEVO
+        ]);
 
       const ventasDeHoy = todasVentas.filter((v) => esHoy(v.fecha));
       setTodasVentasDeHoy(ventasDeHoy);
       setAbonos(listaAbonos);
       setDeudores(resumenes);
+      setGastos(gastosHoy); // ← NUEVO
     } catch (e) {
       console.error(e);
     } finally {
@@ -760,7 +773,7 @@ export const VentaDelDiaScreen = () => {
     cargar();
   }, []);
 
-  // ── Funciones Modales ───────────────────────────────────────────────────
+  // ── Modales ventas ────────────────────────────────────────────────────────
   const abrirModal = (venta: Venta) => {
     setVentaSeleccionada(venta);
     setModalVisible(true);
@@ -783,12 +796,8 @@ export const VentaDelDiaScreen = () => {
     if (!ventaAAnular) return;
     setAnulando(true);
     try {
-      await ventaRepo.anular(ventaAAnular.id, {
-        usuario: "Usuario",
-        motivo,
-      });
+      await ventaRepo.anular(ventaAAnular.id, { usuario: "Usuario", motivo });
 
-      // Actualizar el estado local en la matriz del día (Se recalcularán solos todos los memos de las tarjetas)
       setTodasVentasDeHoy((prev) =>
         prev.map((v) =>
           v.id === ventaAAnular.id
@@ -807,6 +816,9 @@ export const VentaDelDiaScreen = () => {
 
       setModalAnularVisible(false);
       setVentaAAnular(null);
+
+      // Despierta al CajaWidget para que recalcule los totales (efectivo, etc.)
+      setRefreshCajaTrigger((prev) => prev + 1);
 
       Alert.alert(
         "Factura anulada",
@@ -983,6 +995,14 @@ export const VentaDelDiaScreen = () => {
 
   return (
     <ScreenWrapper title="Venta del día" showBtnB={false}>
+      {/* ══ CAJA — fuera del ScrollView para que sus modales cubran toda la pantalla ══ */}
+      <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
+        <CajaWidget
+          onCajaActualizada={() => cargar(true)}
+          refreshTrigger={refreshCajaTrigger}
+        />
+      </View>
+
       <ScrollView
         contentContainerStyle={{
           paddingHorizontal: 20,
@@ -993,16 +1013,20 @@ export const VentaDelDiaScreen = () => {
         refreshControl={
           <RefreshControl
             refreshing={refrescando}
-            onRefresh={() => cargar(true)}
+            onRefresh={() => {
+              cargar(true);
+              setRefreshCajaTrigger((prev) => prev + 1);
+            }}
             colors={[colors.primary]}
             tintColor={colors.primary}
           />
         }
       >
+        <View style={{ height: 4 }} />
+
         {/* ══ FILTRO ESTADO ═════════════════════════════════════════════ */}
         {hayVentasHistoricasHoy && (
           <View style={s.filterSection}>
-            {/* Buscador */}
             <View style={s.contenedorBuscador}>
               <MaterialCommunityIcons
                 name="magnify"
@@ -1139,6 +1163,7 @@ export const VentaDelDiaScreen = () => {
           </View>
         )}
 
+        {/* ══ EXPORTAR EXCEL ════════════════════════════════════════════ */}
         <TouchableOpacity
           style={[s.btnExcel, exportando && { opacity: 0.6 }]}
           activeOpacity={0.8}
@@ -1161,7 +1186,7 @@ export const VentaDelDiaScreen = () => {
           </AppText>
         </TouchableOpacity>
 
-        {/* ══ TARJETA PRINCIPAL ══════════════════════════════════════════ */}
+        {/* ══ TARJETA PRINCIPAL ══════════════════════════════════════════ 
         <View style={[s.card, { marginBottom: 16 }]}>
           <View
             style={{
@@ -1237,7 +1262,6 @@ export const VentaDelDiaScreen = () => {
                 marginBottom: 14,
               }}
             >
-              {/* Ventas pagadas */}
               <View
                 style={{
                   flexDirection: "row",
@@ -1272,7 +1296,6 @@ export const VentaDelDiaScreen = () => {
                 </AppText>
               </View>
 
-              {/* Desglose efectivo / transferencia */}
               <View style={{ gap: 8 }}>
                 <View
                   style={{
@@ -1339,7 +1362,7 @@ export const VentaDelDiaScreen = () => {
                         fontWeight: "500",
                       }}
                     >
-                      tranferencia
+                      transferencia
                     </AppText>
                   </View>
                   <AppText
@@ -1357,7 +1380,6 @@ export const VentaDelDiaScreen = () => {
               {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
                 <>
                   <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
-
                   <View
                     style={{
                       flexDirection: "row",
@@ -1537,7 +1559,6 @@ export const VentaDelDiaScreen = () => {
             </View>
           </View>
 
-          {/* ══ TOP 3 PRODUCTOS ══════════════════════════════════════════ */}
           {top3.length > 0 && (
             <>
               <View style={[s.divisorH, { marginTop: 4, marginBottom: 16 }]} />
@@ -1617,7 +1638,7 @@ export const VentaDelDiaScreen = () => {
               </View>
             </>
           )}
-        </View>
+        </View>*/}
 
         {/* ══ LISTA VENTAS DEL DÍA ══════════════════════════════════════ */}
         {hayVentasHistoricasHoy ? (
@@ -1852,6 +1873,144 @@ export const VentaDelDiaScreen = () => {
           </View>
         )}
 
+        {/* ══ GASTOS DEL DÍA ════════════════════════════════════════════ */}
+        {gastos.length > 0 && (
+          <View style={{ marginBottom: 16 }}>
+            <View style={s.seccionHeader}>
+              <AppText style={s.seccionTitulo}>Gastos de hoy</AppText>
+              <AppText
+                style={{ fontSize: 15, fontWeight: "700", color: "#E03E3E" }}
+              >
+                -{fmt(stats.totalGastos)}
+              </AppText>
+            </View>
+
+            <View style={[s.card, { padding: 14, gap: 10 }]}>
+              {/* Fila efectivo */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <MaterialCommunityIcons
+                    name="cash"
+                    size={16}
+                    color="#2EAA6E"
+                  />
+                  <AppText
+                    style={{
+                      fontSize: 15,
+                      color: "#6B7280",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Efectivo
+                  </AppText>
+                </View>
+                <AppText
+                  style={{ fontSize: 15, fontWeight: "700", color: "#E03E3E" }}
+                >
+                  -{fmt(stats.totalGastosEfectivo)}
+                </AppText>
+              </View>
+
+              {/* Fila transferencia */}
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <MaterialCommunityIcons
+                    name="bank-transfer"
+                    size={16}
+                    color="#7C3AED"
+                  />
+                  <AppText
+                    style={{
+                      fontSize: 15,
+                      color: "#6B7280",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Transferencia
+                  </AppText>
+                </View>
+                <AppText
+                  style={{ fontSize: 15, fontWeight: "700", color: "#E03E3E" }}
+                >
+                  -{fmt(stats.totalGastosTransferencia)}
+                </AppText>
+              </View>
+
+              <View style={{ height: 1, backgroundColor: "#EAECF4" }} />
+
+              {/* Lista resumida — máx 3 */}
+              {gastos.slice(0, 3).map((g) => (
+                <View
+                  key={g.id}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <AppText
+                      style={{
+                        fontSize: 14,
+                        fontWeight: "600",
+                        color: "#111827",
+                      }}
+                      numberOfLines={1}
+                    >
+                      {g.descripcion}
+                    </AppText>
+                    <AppText style={{ fontSize: 12, color: "#9CA3AF" }}>
+                      {g.categoria} ·{" "}
+                      {g.metodoPago === "efectivo"
+                        ? "Efectivo"
+                        : "Transferencia"}
+                    </AppText>
+                  </View>
+                  <AppText
+                    style={{
+                      fontSize: 14,
+                      fontWeight: "700",
+                      color: "#E03E3E",
+                    }}
+                  >
+                    -{fmt(g.monto)}
+                  </AppText>
+                </View>
+              ))}
+
+              {gastos.length > 3 && (
+                <AppText
+                  style={{
+                    fontSize: 13,
+                    color: colors.primary,
+                    fontWeight: "600",
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
+                  +{gastos.length - 3} gastos más — ver en Gastos
+                </AppText>
+              )}
+            </View>
+          </View>
+        )}
+
         {/* ══ CRÉDITO PENDIENTE HISTÓRICO ═══════════════════════════════ */}
         {deudores.length > 0 && (
           <View style={s.creditoCard}>
@@ -1962,7 +2121,6 @@ const s = StyleSheet.create({
     marginBottom: 16,
   },
   btnExcelTxt: { fontSize: 16, fontWeight: "700", color: "#15803D" },
-
   filterSection: { marginBottom: 16 },
   contenedorBuscador: {
     flexDirection: "row",
@@ -1996,7 +2154,6 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   filterBtnText: { fontSize: 14, fontWeight: "700" },
-
   seccionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2212,7 +2369,6 @@ const ms = StyleSheet.create({
     justifyContent: "center",
   },
   facturaTxt: { fontSize: 13, color: "#7B8499" },
-
   bloqueAnulacion: {
     backgroundColor: "#FEF2F2",
     borderRadius: 14,
@@ -2235,7 +2391,6 @@ const ms = StyleSheet.create({
     fontWeight: "600",
     flexShrink: 1,
   },
-
   btnAnular: {
     flexDirection: "row",
     alignItems: "center",
@@ -2249,7 +2404,6 @@ const ms = StyleSheet.create({
     borderColor: "#FECACA",
   },
   btnAnularTxt: { fontSize: 16, fontWeight: "800", color: "#DC2626" },
-
   resumenAnulacion: {
     backgroundColor: "#F9FAFB",
     borderRadius: 14,

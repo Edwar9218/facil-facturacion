@@ -93,6 +93,22 @@ const MENU_ITEMS = [
     color: "#FF4D8D",
     light: "#FFF0F6",
   },
+  {
+    title: "Gastos",
+    description: "Registra y controla tus gastos diarios",
+    icon: "cash-minus",
+    route: "/gastos",
+    color: "#EF4444",
+    light: "#FEF2F2",
+  },
+  {
+    title: "Historial Caja",
+    description: "Revisa aperturas, cierres y cuadres de caja",
+    icon: "cash-register",
+    route: "/historial-caja",
+    color: "#6366F1",
+    light: "#EEF2FF",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────

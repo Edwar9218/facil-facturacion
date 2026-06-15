@@ -4,8 +4,46 @@ import * as SQLite from "expo-sqlite";
 
 const db = SQLite.openDatabaseSync("facil.db");
 
+// ── Migración: la tabla "caja" tenía fecha UNIQUE (1 caja por día). ──────────
+// Ahora se permiten varias cajas por día (mientras solo una esté "abierta"),
+// así que se recrea la tabla sin esa restricción si todavía la tiene.
+const migrarTablaCaja = (): void => {
+  const tabla = db.getFirstSync<{ sql: string }>(
+    `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'caja';`,
+  );
+
+  // Si la tabla no existe aún, el CREATE TABLE de abajo la crea ya sin UNIQUE.
+  if (!tabla) return;
+
+  // Si ya fue migrada (ya no tiene UNIQUE), no hacer nada.
+  if (!tabla.sql.includes("UNIQUE")) return;
+
+  db.execSync(`
+    ALTER TABLE caja RENAME TO caja_old_migracion;
+
+    CREATE TABLE caja (
+      id            TEXT PRIMARY KEY NOT NULL,
+      fecha         TEXT NOT NULL,
+      montoApertura REAL NOT NULL DEFAULT 0,
+      montoCierre   REAL NOT NULL DEFAULT 0,
+      estado        TEXT NOT NULL DEFAULT 'abierta',
+      notas         TEXT,
+      creadoEn      TEXT NOT NULL,
+      cerradoEn     TEXT
+    );
+
+    INSERT INTO caja (id, fecha, montoApertura, montoCierre, estado, notas, creadoEn, cerradoEn)
+      SELECT id, fecha, montoApertura, montoCierre, estado, notas, creadoEn, cerradoEn
+      FROM caja_old_migracion;
+
+    DROP TABLE caja_old_migracion;
+  `);
+};
+
 export const initDatabase = (): void => {
   db.execSync(`PRAGMA foreign_keys = ON;`);
+
+  migrarTablaCaja();
 
   db.execSync(`
     CREATE TABLE IF NOT EXISTS configuracion (
@@ -115,6 +153,35 @@ export const initDatabase = (): void => {
         ON DELETE RESTRICT
         ON UPDATE CASCADE
     );
+
+    -- ── NUEVO: Caja ──────────────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS caja (
+      id            TEXT PRIMARY KEY NOT NULL,
+      fecha         TEXT NOT NULL,
+      montoApertura REAL NOT NULL DEFAULT 0,
+      montoCierre   REAL NOT NULL DEFAULT 0,
+      estado        TEXT NOT NULL DEFAULT 'abierta',
+      notas         TEXT,
+      creadoEn      TEXT NOT NULL,
+      cerradoEn     TEXT
+    );
+
+    -- ── NUEVO: Gastos ────────────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS gastos (
+      id          TEXT PRIMARY KEY NOT NULL,
+      fecha       TEXT NOT NULL,
+      descripcion TEXT NOT NULL,
+      monto       REAL NOT NULL,
+      categoria   TEXT NOT NULL,
+      metodoPago  TEXT NOT NULL DEFAULT 'efectivo',
+      foto        TEXT,
+      cajaId      TEXT,
+      creadoEn    TEXT NOT NULL,
+      FOREIGN KEY (cajaId)
+        REFERENCES caja(id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE
+    );
   `);
 
   db.execSync(`
@@ -146,6 +213,23 @@ export const initDatabase = (): void => {
 
     CREATE INDEX IF NOT EXISTS idx_anulaciones_abonos_abonoId
       ON anulaciones_abonos(abonoId);
+
+    -- ── NUEVO: índices caja y gastos ─────────────────────────────────────────
+    CREATE INDEX IF NOT EXISTS idx_caja_fecha
+      ON caja(fecha);
+
+    -- Garantiza a nivel de BD que solo pueda existir una caja abierta a la vez
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_caja_unica_abierta
+      ON caja(estado) WHERE estado = 'abierta';
+
+    CREATE INDEX IF NOT EXISTS idx_gastos_fecha
+      ON gastos(fecha);
+
+    CREATE INDEX IF NOT EXISTS idx_gastos_cajaId
+      ON gastos(cajaId);
+
+    CREATE INDEX IF NOT EXISTS idx_gastos_metodoPago
+      ON gastos(metodoPago);
   `);
 };
 
