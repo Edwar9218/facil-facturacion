@@ -1,6 +1,7 @@
 // src/domain/entities/Gasto.ts
 
 export type MetodoPagoGasto = "efectivo" | "transferencia";
+export type EstadoGasto = "activo" | "anulado";
 
 export const CATEGORIAS_SUGERIDAS = [
   "Transporte",
@@ -19,4 +20,7 @@ export interface Gasto {
   foto?: string;
   cajaId?: string;
   creadoEn: string;
+  estado: EstadoGasto;
+  motivoAnulacion?: string;
+  fechaAnulacion?: string;
 }

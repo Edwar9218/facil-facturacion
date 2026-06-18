@@ -12,6 +12,9 @@ const cajaRepo = new CajaRepositoryImpl();
 const fechaHoy = (): string =>
   new Date().toLocaleDateString("sv-SE", { timeZone: "America/Bogota" });
 
+export type TipoPeriodo = "hoy" | "semana" | "mes" | "personalizado";
+export type TipoEstadoFiltro = "todos" | "activo" | "anulado";
+
 export interface FormGasto {
   descripcion: string;
   monto: string;
@@ -40,23 +43,70 @@ export function useGastos() {
     null,
   );
 
-  // ── Cargar gastos del día ─────────────────────────────────────────────────
-  // Se filtra por fecha (no por caja abierta): "Gastos del día" debe mostrar
-  // todo lo registrado hoy, sin importar si la caja sigue abierta, se cerró,
-  // o incluso si hubo varias cajas abiertas/cerradas durante el mismo día.
+  // ── Filtros ───────────────────────────────────────────────────────────────
+  const [filtrosVisibles, setFiltrosVisibles] = React.useState(false);
+  const [filtroPeriodo, setFiltroPeriodo] = React.useState<TipoPeriodo>("hoy");
+  const [filtroEstado, setFiltroEstado] =
+    React.useState<TipoEstadoFiltro>("activo");
+  const [rangoPersonalizado, setRangoPersonalizado] = React.useState({
+    inicio: "",
+    fin: "",
+  });
+  const [modalFechaVisible, setModalFechaVisible] = React.useState(false);
+
+  // ── Anulación ─────────────────────────────────────────────────────────────
+  const [gastoAAnular, setGastoAAnular] = React.useState<Gasto | null>(null);
+  const [modalAnularVisible, setModalAnularVisible] = React.useState(false);
+  const [anulando, setAnulando] = React.useState(false);
+
+  // ── Rango activo calculado ────────────────────────────────────────────────
+  const rangoActivo = React.useMemo(() => {
+    const hoyStr = fechaHoy();
+    if (filtroPeriodo === "hoy") return { inicio: hoyStr, fin: hoyStr };
+    if (filtroPeriodo === "semana") {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return {
+        inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
+        fin: hoyStr,
+      };
+    }
+    if (filtroPeriodo === "mes") {
+      const d = new Date();
+      d.setDate(1);
+      return {
+        inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
+        fin: hoyStr,
+      };
+    }
+    if (filtroPeriodo === "personalizado" && rangoPersonalizado.inicio)
+      return rangoPersonalizado;
+    return { inicio: hoyStr, fin: hoyStr };
+  }, [filtroPeriodo, rangoPersonalizado]);
+
+  // ── Cargar gastos del rango activo ────────────────────────────────────────
   const cargarGastos = React.useCallback(async () => {
     setCargando(true);
     try {
-      const datos = await gastoRepo.getGastosPorFecha(fechaHoy());
+      const datos = await gastoRepo.getGastosPorRango({
+        fechaInicio: rangoActivo.inicio,
+        fechaFin: rangoActivo.fin,
+      });
       setGastos(datos);
     } finally {
       setCargando(false);
     }
-  }, []);
+  }, [rangoActivo]);
 
   React.useEffect(() => {
     cargarGastos();
-  }, []);
+  }, [cargarGastos]);
+
+  // ── Gastos filtrados por estado ───────────────────────────────────────────
+  const gastosFiltrados = React.useMemo(() => {
+    if (filtroEstado === "todos") return gastos;
+    return gastos.filter((g) => (g.estado ?? "activo") === filtroEstado);
+  }, [gastos, filtroEstado]);
 
   // ── Form helpers ─────────────────────────────────────────────────────────
   const setCampo = (campo: keyof FormGasto, valor: string) =>
@@ -102,9 +152,6 @@ export function useGastos() {
   };
 
   // ── Registrar gasto ──────────────────────────────────────────────────────
-  // Para registrar SÍ se exige caja abierta (regla de negocio: todo gasto
-  // queda asociado a una sesión de caja activa), aunque la visualización ya
-  // no dependa de ella.
   const registrarGasto = async () => {
     if (!formValido()) return;
 
@@ -172,17 +219,59 @@ export function useGastos() {
     );
   };
 
-  // ── Totales del día ──────────────────────────────────────────────────────
-  const totalEfectivo = gastos
+  // ── Anular gasto ─────────────────────────────────────────────────────────
+  const solicitarAnular = (gasto: Gasto) => {
+    setGastoAAnular(gasto);
+    setModalAnularVisible(true);
+  };
+
+  const confirmarAnulacion = async (motivo: string) => {
+    if (!gastoAAnular) return;
+    setAnulando(true);
+    try {
+      await gastoRepo.anularGasto({ gastoId: gastoAAnular.id, motivo });
+      setGastos((prev) =>
+        prev.map((g) =>
+          g.id === gastoAAnular.id
+            ? {
+                ...g,
+                estado: "anulado" as const,
+                motivoAnulacion: motivo,
+                fechaAnulacion: new Date().toISOString(),
+              }
+            : g,
+        ),
+      );
+      setModalAnularVisible(false);
+      setGastoAAnular(null);
+      Alert.alert("Éxito", "El gasto fue anulado correctamente.");
+    } catch (e: any) {
+      Alert.alert("Error", e?.message ?? "No se pudo anular el gasto.");
+    } finally {
+      setAnulando(false);
+    }
+  };
+
+  const cancelarAnulacion = () => {
+    setModalAnularVisible(false);
+    setGastoAAnular(null);
+  };
+
+  // ── Totales del rango (solo activos) ─────────────────────────────────────
+  const gastosActivos = gastos.filter(
+    (g) => (g.estado ?? "activo") === "activo",
+  );
+
+  const totalEfectivo = gastosActivos
     .filter((g) => g.metodoPago === "efectivo")
     .reduce((acc, g) => acc + g.monto, 0);
 
-  const totalTransferencia = gastos
+  const totalTransferencia = gastosActivos
     .filter((g) => g.metodoPago === "transferencia")
     .reduce((acc, g) => acc + g.monto, 0);
 
   return {
-    gastos,
+    gastos: gastosFiltrados,
     cargando,
     modalAbierto,
     form,
@@ -190,6 +279,26 @@ export function useGastos() {
     gastoAEliminar,
     totalEfectivo,
     totalTransferencia,
+    // filtros
+    filtrosVisibles,
+    setFiltrosVisibles,
+    filtroPeriodo,
+    setFiltroPeriodo,
+    filtroEstado,
+    setFiltroEstado,
+    rangoPersonalizado,
+    setRangoPersonalizado,
+    modalFechaVisible,
+    setModalFechaVisible,
+    rangoActivo,
+    // anulacion
+    gastoAAnular,
+    modalAnularVisible,
+    anulando,
+    solicitarAnular,
+    confirmarAnulacion,
+    cancelarAnulacion,
+    // acciones
     cargarGastos,
     setCampo,
     seleccionarCategoria,

@@ -16,7 +16,7 @@ export class GastoRepositoryImpl implements GastoRepository {
   // ── Gastos por caja ──────────────────────────────────────────────────────
   async getGastosPorCaja(cajaId: string): Promise<Gasto[]> {
     return db.getAllSync<Gasto>(
-      "SELECT * FROM gastos WHERE cajaId = ? ORDER BY creadoEn DESC;",
+      "SELECT * FROM gastos WHERE cajaId = ? AND estado = 'activo' ORDER BY creadoEn DESC;",
       [cajaId],
     );
   }
@@ -66,8 +66,8 @@ export class GastoRepositoryImpl implements GastoRepository {
     const ahora = timestampAhora();
 
     db.runSync(
-      `INSERT INTO gastos (id, fecha, descripcion, monto, categoria, metodoPago, foto, cajaId, creadoEn)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+      `INSERT INTO gastos (id, fecha, descripcion, monto, categoria, metodoPago, foto, cajaId, creadoEn, estado)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'activo');`,
       [
         id,
         hoy,
@@ -87,6 +87,37 @@ export class GastoRepositoryImpl implements GastoRepository {
   // ── Eliminar gasto ───────────────────────────────────────────────────────
   async eliminarGasto(gastoId: string): Promise<boolean> {
     db.runSync("DELETE FROM gastos WHERE id = ?;", [gastoId]);
+    return true;
+  }
+
+  // ── Anular gasto ─────────────────────────────────────────────────────────
+  async anularGasto({
+    gastoId,
+    motivo,
+    usuario = "admin",
+  }: {
+    gastoId: string;
+    motivo: string;
+    usuario?: string;
+  }): Promise<boolean> {
+    const ahora = timestampAhora();
+    const anulacionId = `${Date.now()}${Math.random()}`;
+
+    // Marcar gasto como anulado
+    db.runSync(
+      `UPDATE gastos
+       SET estado = 'anulado', motivoAnulacion = ?, fechaAnulacion = ?
+       WHERE id = ?;`,
+      [motivo, ahora, gastoId],
+    );
+
+    // Registrar en tabla de auditoría
+    db.runSync(
+      `INSERT INTO anulaciones_gastos (id, gastoId, motivo, fecha, usuario)
+       VALUES (?, ?, ?, ?, ?);`,
+      [anulacionId, gastoId, motivo, ahora, usuario],
+    );
+
     return true;
   }
 }

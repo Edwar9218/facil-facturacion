@@ -62,6 +62,21 @@ const migrarCajaIdEnVentasYAbonos = (): void => {
   }
 };
 
+// ── Migración: agregar estado y motivoAnulacion a "gastos" ───────────────────
+const migrarEstadoEnGastos = (): void => {
+  if (!columnaExiste("gastos", "estado")) {
+    db.execSync(
+      `ALTER TABLE gastos ADD COLUMN estado TEXT NOT NULL DEFAULT 'activo';`,
+    );
+  }
+  if (!columnaExiste("gastos", "motivoAnulacion")) {
+    db.execSync(`ALTER TABLE gastos ADD COLUMN motivoAnulacion TEXT;`);
+  }
+  if (!columnaExiste("gastos", "fechaAnulacion")) {
+    db.execSync(`ALTER TABLE gastos ADD COLUMN fechaAnulacion TEXT;`);
+  }
+};
+
 export const initDatabase = (): void => {
   db.execSync(`PRAGMA foreign_keys = ON;`);
 
@@ -190,24 +205,43 @@ export const initDatabase = (): void => {
 
     -- ── NUEVO: Gastos ────────────────────────────────────────────────────────
     CREATE TABLE IF NOT EXISTS gastos (
-      id          TEXT PRIMARY KEY NOT NULL,
-      fecha       TEXT NOT NULL,
-      descripcion TEXT NOT NULL,
-      monto       REAL NOT NULL,
-      categoria   TEXT NOT NULL,
-      metodoPago  TEXT NOT NULL DEFAULT 'efectivo',
-      foto        TEXT,
-      cajaId      TEXT,
-      creadoEn    TEXT NOT NULL,
+      id              TEXT PRIMARY KEY NOT NULL,
+      fecha           TEXT NOT NULL,
+      descripcion     TEXT NOT NULL,
+      monto           REAL NOT NULL,
+      categoria       TEXT NOT NULL,
+      metodoPago      TEXT NOT NULL DEFAULT 'efectivo',
+      foto            TEXT,
+      cajaId          TEXT,
+      creadoEn        TEXT NOT NULL,
+      estado          TEXT NOT NULL DEFAULT 'activo',
+      motivoAnulacion TEXT,
+      fechaAnulacion  TEXT,
       FOREIGN KEY (cajaId)
         REFERENCES caja(id)
         ON DELETE SET NULL
+        ON UPDATE CASCADE
+    );
+
+    -- ── Anulaciones de gastos ─────────────────────────────────────────────────
+    CREATE TABLE IF NOT EXISTS anulaciones_gastos (
+      id        TEXT PRIMARY KEY NOT NULL,
+      gastoId   TEXT NOT NULL UNIQUE,
+      motivo    TEXT NOT NULL,
+      fecha     TEXT NOT NULL,
+      usuario   TEXT NOT NULL DEFAULT 'admin',
+      FOREIGN KEY (gastoId)
+        REFERENCES gastos(id)
+        ON DELETE RESTRICT
         ON UPDATE CASCADE
     );
   `);
 
   // ── NUEVO: agrega cajaId a ventas/abonos si vienen de una versión anterior ──
   migrarCajaIdEnVentasYAbonos();
+
+  // ── Migración estado/motivoAnulacion en gastos ────────────────────────────
+  migrarEstadoEnGastos();
 
   db.execSync(`
     DROP TRIGGER IF EXISTS desactivar_cliente_si_tiene_ventas;
@@ -255,6 +289,12 @@ export const initDatabase = (): void => {
 
     CREATE INDEX IF NOT EXISTS idx_gastos_metodoPago
       ON gastos(metodoPago);
+
+    CREATE INDEX IF NOT EXISTS idx_gastos_estado
+      ON gastos(estado);
+
+    CREATE INDEX IF NOT EXISTS idx_anulaciones_gastos_gastoId
+      ON anulaciones_gastos(gastoId);
 
     -- ── NUEVO: índices cajaId en ventas y abonos ────────────────────────────
     CREATE INDEX IF NOT EXISTS idx_ventas_cajaId

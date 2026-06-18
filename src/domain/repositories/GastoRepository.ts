@@ -27,4 +27,10 @@ export interface GastoRepository {
   }): Promise<Gasto>;
 
   eliminarGasto(gastoId: string): Promise<boolean>;
+
+  anularGasto(params: {
+    gastoId: string;
+    motivo: string;
+    usuario?: string;
+  }): Promise<boolean>;
 }

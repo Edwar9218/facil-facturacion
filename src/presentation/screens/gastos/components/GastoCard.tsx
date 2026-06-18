@@ -1,6 +1,6 @@
 // src/presentation/screens/gastos/components/GastoCard.tsx
 
-import { MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
 import { Image, Text, TouchableOpacity, View } from "react-native";
 import { Gasto } from "../../../../domain/entities/Gasto";
@@ -15,24 +15,26 @@ const fmt = (n: number) =>
 
 interface Props {
   gasto: Gasto;
-  onEliminar: (gasto: Gasto) => void;
+  onAnular: (gasto: Gasto) => void;
 }
 
-export function GastoCard({ gasto, onEliminar }: Props) {
+export function GastoCard({ gasto, onAnular }: Props) {
   const { colors, spacing, radius, shadows, typography } = useTheme();
   const [fotoExpandida, setFotoExpandida] = React.useState(false);
 
   const esEfectivo = gasto.metodoPago === "efectivo";
+  const esAnulado = (gasto.estado ?? "activo") === "anulado";
 
   return (
     <View
       style={{
-        backgroundColor: colors.white,
+        backgroundColor: esAnulado ? "#FFF5F5" : colors.white,
         borderRadius: radius.lg,
         borderWidth: 1,
-        borderColor: colors.grayBorder,
+        borderColor: esAnulado ? "#FECACA" : colors.grayBorder,
         marginBottom: spacing.sm,
         overflow: "hidden",
+        opacity: esAnulado ? 0.85 : 1,
         ...shadows.card,
       }}
     >
@@ -44,11 +46,43 @@ export function GastoCard({ gasto, onEliminar }: Props) {
           top: 0,
           bottom: 0,
           width: 4,
-          backgroundColor: esEfectivo ? "#2EAA6E" : "#7C3AED",
+          backgroundColor: esAnulado
+            ? "#EF4444"
+            : esEfectivo
+              ? "#2EAA6E"
+              : "#7C3AED",
         }}
       />
 
       <View style={{ padding: spacing.md, paddingLeft: spacing.md + 8 }}>
+        {/* ── Badge anulado ── */}
+        {esAnulado && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
+              backgroundColor: "#FEE2E2",
+              paddingHorizontal: 10,
+              paddingVertical: 4,
+              borderRadius: radius.md,
+              marginBottom: spacing.sm,
+              alignSelf: "flex-start",
+            }}
+          >
+            <MaterialCommunityIcons name="cancel" size={14} color="#DC2626" />
+            <Text
+              style={{
+                fontSize: typography.size.xs,
+                fontWeight: typography.weight.bold,
+                color: "#DC2626",
+              }}
+            >
+              ANULADO
+            </Text>
+          </View>
+        )}
+
         {/* ── Fila principal ── */}
         <View
           style={{
@@ -63,15 +97,21 @@ export function GastoCard({ gasto, onEliminar }: Props) {
               width: 42,
               height: 42,
               borderRadius: radius.md,
-              backgroundColor: esEfectivo ? "#E6F7EF" : "#EDE9FE",
+              backgroundColor: esAnulado
+                ? "#FEE2E2"
+                : esEfectivo
+                  ? "#E6F7EF"
+                  : "#EDE9FE",
               alignItems: "center",
               justifyContent: "center",
             }}
           >
             <MaterialCommunityIcons
-              name={esEfectivo ? "cash" : "bank-transfer"}
+              name={
+                esAnulado ? "cancel" : esEfectivo ? "cash" : "bank-transfer"
+              }
               size={22}
-              color={esEfectivo ? "#2EAA6E" : "#7C3AED"}
+              color={esAnulado ? "#DC2626" : esEfectivo ? "#2EAA6E" : "#7C3AED"}
             />
           </View>
 
@@ -81,7 +121,8 @@ export function GastoCard({ gasto, onEliminar }: Props) {
               style={{
                 fontSize: typography.size.md,
                 fontWeight: typography.weight.bold,
-                color: colors.ink,
+                color: esAnulado ? "#6B7280" : colors.ink,
+                textDecorationLine: esAnulado ? "line-through" : "none",
               }}
               numberOfLines={1}
             >
@@ -113,45 +154,100 @@ export function GastoCard({ gasto, onEliminar }: Props) {
                   {gasto.categoria}
                 </Text>
               </View>
-              <Text
-                style={{
-                  fontSize: typography.size.xs,
-                  color: esEfectivo ? "#2EAA6E" : "#7C3AED",
-                  fontWeight: typography.weight.semiBold,
-                }}
-              >
-                {esEfectivo ? "Efectivo" : "Transferencia"}
-              </Text>
+              {!esAnulado && (
+                <Text
+                  style={{
+                    fontSize: typography.size.xs,
+                    color: esEfectivo ? "#2EAA6E" : "#7C3AED",
+                    fontWeight: typography.weight.semiBold,
+                  }}
+                >
+                  {esEfectivo ? "Efectivo" : "Transferencia"}
+                </Text>
+              )}
             </View>
           </View>
 
-          {/* Monto y eliminar */}
-          <View style={{ alignItems: "flex-end", gap: 6 }}>
+          {/* Monto y botón anular */}
+          <View style={{ alignItems: "flex-end", gap: 8 }}>
             <Text
               style={{
                 fontSize: typography.size.lg,
                 fontWeight: typography.weight.black,
-                color: "#E03E3E",
+                color: esAnulado ? "#9CA3AF" : "#E03E3E",
+                textDecorationLine: esAnulado ? "line-through" : "none",
               }}
             >
               -{fmt(gasto.monto)}
             </Text>
-            <TouchableOpacity
-              onPress={() => onEliminar(gasto)}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 14,
-                backgroundColor: "#FDEAEA",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              activeOpacity={0.7}
-            >
-              <MaterialIcons name="delete-outline" size={16} color="#E03E3E" />
-            </TouchableOpacity>
+
+            {/* Botón anular — solo si el gasto está activo */}
+            {!esAnulado && (
+              <TouchableOpacity
+                onPress={() => onAnular(gasto)}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                  borderRadius: radius.md,
+                  backgroundColor: "#FEF3C7",
+                  borderWidth: 1,
+                  borderColor: "#FCD34D",
+                }}
+                activeOpacity={0.7}
+              >
+                <MaterialCommunityIcons
+                  name="cancel"
+                  size={16}
+                  color="#D97706"
+                />
+                <Text
+                  style={{
+                    fontSize: typography.size.xs,
+                    fontWeight: typography.weight.bold,
+                    color: "#D97706",
+                  }}
+                >
+                  Anular
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
+
+        {/* ── Motivo anulación ── */}
+        {esAnulado && gasto.motivoAnulacion && (
+          <View
+            style={{
+              marginTop: spacing.sm,
+              backgroundColor: "#FEF2F2",
+              borderRadius: radius.md,
+              padding: spacing.sm,
+              flexDirection: "row",
+              gap: 6,
+              alignItems: "flex-start",
+            }}
+          >
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={14}
+              color="#DC2626"
+              style={{ marginTop: 1 }}
+            />
+            <Text
+              style={{
+                flex: 1,
+                fontSize: typography.size.xs,
+                color: "#7F1D1D",
+                fontStyle: "italic",
+              }}
+            >
+              Motivo: {gasto.motivoAnulacion}
+            </Text>
+          </View>
+        )}
 
         {/* ── Foto (si existe) ── */}
         {gasto.foto ? (
