@@ -5,30 +5,31 @@ import React from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
-  Text,
+  ScrollView,
+  StyleSheet,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  borrarCajasDePrueba,
+  crearCajaDePruebaAyer,
+} from "../../../../data/dev/seedCajaPrueba";
 import { CajaRepositoryImpl } from "../../../../data/repositories/CajaRepositoryImpl";
 import { Caja, ResumenCaja } from "../../../../domain/entities/Caja";
-import { useTheme } from "../../../../theme";
+import { AppText } from "../../../components/ui/AppText";
 
 const cajaRepo = new CajaRepositoryImpl();
 
-// Formateador estándar para textos normales
 const fmt = (n: number) =>
-  n.toLocaleString("es-CO", {
-    style: "currency",
-    currency: "COP",
-    minimumFractionDigits: 0,
-  });
+  "$ " + Number(n).toLocaleString("es-CO", { minimumFractionDigits: 0 });
 
-// Formateador en tiempo real para los Inputs de texto (COP)
 const formatMontoDisplay = (val: string) => {
   const clean = val.replace(/[^0-9]/g, "");
   if (!clean) return "";
@@ -39,52 +40,83 @@ const formatMontoDisplay = (val: string) => {
 
 interface Props {
   onCajaActualizada: () => void;
-  refreshTrigger?: number; // <-- NUEVA: Propiedad para recibir la señal de actualización
+  refreshTrigger?: number;
 }
 
 export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
-  const { colors, spacing, radius, shadows, typography } = useTheme();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
+
+  // Altura real del teclado, para calcular cuánto espacio le queda al
+  // contenido scrolleable del formulario de cierre (en vez de adivinar
+  // con porcentajes que no se ajustan bien dentro de un contenedor sin
+  // altura fija).
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
+
+  React.useEffect(() => {
+    const eventoMostrar =
+      Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
+    const eventoOcultar =
+      Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
+
+    const subMostrar = Keyboard.addListener(eventoMostrar, (e) =>
+      setKeyboardHeight(e.endCoordinates?.height ?? 0),
+    );
+    const subOcultar = Keyboard.addListener(eventoOcultar, () =>
+      setKeyboardHeight(0),
+    );
+
+    return () => {
+      subMostrar.remove();
+      subOcultar.remove();
+    };
+  }, []);
 
   const [caja, setCaja] = React.useState<Caja | null>(null);
   const [resumen, setResumen] = React.useState<ResumenCaja | null>(null);
   const [cargando, setCargando] = React.useState(true);
 
-  // Modales
   const [modalApertura, setModalApertura] = React.useState(false);
   const [modalCierre, setModalCierre] = React.useState(false);
   const [modalAnterior, setModalAnterior] = React.useState(false);
 
-  // Inputs
   const [montoApertura, setMontoApertura] = React.useState("");
   const [montoCierre, setMontoCierre] = React.useState("");
   const [notasCierre, setNotasCierre] = React.useState("");
   const [cajaAnteriorPendiente, setCajaAnteriorPendiente] =
     React.useState<Caja | null>(null);
 
+  // Caja y resumen sobre los que está operando el formulario de cierre.
+  // Puede ser la caja de hoy o una caja pendiente de un día anterior.
+  const [cajaParaCerrar, setCajaParaCerrar] = React.useState<Caja | null>(null);
+  const [resumenParaCerrar, setResumenParaCerrar] =
+    React.useState<ResumenCaja | null>(null);
+
   const fechaHoy = new Date().toLocaleDateString("sv-SE", {
     timeZone: "America/Bogota",
   });
 
-  // ── Cargar ────────────────────────────────────────────────────────────────
   const cargar = React.useCallback(async () => {
     setCargando(true);
     try {
-      // 1. Verificar si hay alguna caja de DÍAS ANTERIORES que se quedó abierta
       const abiertaActualmente = await cajaRepo.getCajaAbierta();
       if (abiertaActualmente && abiertaActualmente.fecha !== fechaHoy) {
         setCajaAnteriorPendiente(abiertaActualmente);
         setModalAnterior(true);
       }
 
-      // 2. Carga normal del estado del día
-      const [abierta, ultimaHoy, resumenHoy] = await Promise.all([
+      const [abierta, ultimaHoy] = await Promise.all([
         cajaRepo.getCajaAbierta(),
         cajaRepo.getUltimaCajaDelDia(fechaHoy),
-        cajaRepo.getResumen(fechaHoy),
       ]);
+
+      const cajaRelevante = abierta ?? ultimaHoy;
+      const resumenHoy = cajaRelevante
+        ? await cajaRepo.getResumen(cajaRelevante.id)
+        : null;
+
       setResumen(resumenHoy);
-      setCaja(abierta ?? ultimaHoy);
+      setCaja(cajaRelevante);
     } catch (e) {
       Alert.alert("Error", "No se pudo cargar la información de la caja.");
     } finally {
@@ -92,12 +124,10 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
     }
   }, [fechaHoy]);
 
-  // MEJORA: Escucha activamente los cambios del refreshTrigger del padre
   React.useEffect(() => {
     cargar();
   }, [cargar, refreshTrigger]);
 
-  // ── Abrir caja ────────────────────────────────────────────────────────────
   const abrirCaja = async () => {
     const monto = Number(montoApertura);
     if (monto < 0) return;
@@ -115,21 +145,69 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
     }
   };
 
-  // ── Cerrar caja ───────────────────────────────────────────────────────────
+  // ── Abrir el flujo real de cierre (hoy o un día anterior pendiente) ────────
+  // Permite "cuadrar" la caja con el monto físico real, sin importar si
+  // quedó abierta de un día anterior.
+  const abrirModalCierre = async (cajaObjetivo: Caja) => {
+    setCajaParaCerrar(cajaObjetivo);
+
+    // Si es la caja que ya tenemos cargada (la relevante hoy), reusamos su resumen.
+    if (caja && cajaObjetivo.id === caja.id && resumen) {
+      setResumenParaCerrar(resumen);
+      setModalAnterior(false);
+      setModalCierre(true);
+      return;
+    }
+
+    // Si es otra caja (p. ej. una pendiente de un día anterior), traemos su resumen.
+    setCargando(true);
+    try {
+      const resumenObjetivo = await cajaRepo.getResumen(cajaObjetivo.id);
+      setResumenParaCerrar(resumenObjetivo);
+      setModalAnterior(false);
+      setModalCierre(true);
+    } catch {
+      Alert.alert("Error", "No se pudo cargar el resumen de esa caja.");
+    } finally {
+      setCargando(false);
+    }
+  };
+
+  // ── Cancelar el cierre en curso ─────────────────────────────────────────
+  // Si lo que se estaba cerrando era la caja pendiente de un día anterior,
+  // volvemos a mostrar la alerta para que no se pierda de vista.
+  const cancelarCierre = () => {
+    const eraAnterior =
+      !!cajaAnteriorPendiente &&
+      cajaParaCerrar?.id === cajaAnteriorPendiente.id;
+    setModalCierre(false);
+    setMontoCierre("");
+    setNotasCierre("");
+    setCajaParaCerrar(null);
+    setResumenParaCerrar(null);
+    if (eraAnterior) setModalAnterior(true);
+  };
+
   const cerrarCaja = async () => {
-    if (!caja) return;
+    if (!cajaParaCerrar) return;
     const monto = Number(montoCierre);
     if (monto < 0) return;
     setCargando(true);
     try {
       await cajaRepo.cerrarCaja({
-        cajaId: caja.id,
+        cajaId: cajaParaCerrar.id,
         montoCierre: monto,
         notas: notasCierre.trim() || undefined,
       });
+      const eraAnterior =
+        !!cajaAnteriorPendiente &&
+        cajaParaCerrar.id === cajaAnteriorPendiente.id;
       setModalCierre(false);
       setMontoCierre("");
       setNotasCierre("");
+      setCajaParaCerrar(null);
+      setResumenParaCerrar(null);
+      if (eraAnterior) setCajaAnteriorPendiente(null);
       await cargar();
       onCajaActualizada();
     } catch {
@@ -139,14 +217,31 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
     }
   };
 
-  // ── Cerrar caja antigua de emergencia ─────────────────────────────────────
-  const cerrarCajaAnteriorDeEmergencia = async () => {
+  // ── Cerrar caja antigua de emergencia (sin cuadrar) ───────────────────────
+  // Se deja disponible como salida rápida para cuando de verdad no se puede
+  // cuadrar, pero ya NO es la única opción: el botón principal del aviso
+  // ahora permite cuadrar con el flujo normal.
+  const cerrarCajaAnteriorDeEmergencia = () => {
+    if (!cajaAnteriorPendiente) return;
+    Alert.alert(
+      "¿Cerrar sin cuadrar?",
+      "Esto cerrará la caja anterior usando el saldo esperado por el sistema, sin verificar el efectivo real. Úsalo solo si de verdad no puedes contar el dinero.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Cerrar sin cuadrar",
+          style: "destructive",
+          onPress: ejecutarCierreAnteriorDeEmergencia,
+        },
+      ],
+    );
+  };
+
+  const ejecutarCierreAnteriorDeEmergencia = async () => {
     if (!cajaAnteriorPendiente) return;
     setCargando(true);
     try {
-      const resumenViejo = await cajaRepo.getResumen(
-        cajaAnteriorPendiente.fecha,
-      );
+      const resumenViejo = await cajaRepo.getResumen(cajaAnteriorPendiente.id);
       await cajaRepo.cerrarCaja({
         cajaId: cajaAnteriorPendiente.id,
         montoCierre: resumenViejo.saldoEsperadoEfectivo,
@@ -167,600 +262,337 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
     }
   };
 
-  // ── Fila resumen ──────────────────────────────────────────────────────────
-  const renderFilaResumen = (
+  // ── Panel de pruebas (solo __DEV__) ───────────────────────────────────────
+  // Permite simular una caja que se quedó abierta de ayer, sin esperar un
+  // día real, para probar el flujo de "cuadrar y cerrar caja anterior".
+  const handleCrearCajaPrueba = async () => {
+    const resultado = crearCajaDePruebaAyer();
+    Alert.alert(resultado.ok ? "Listo" : "No se pudo crear", resultado.mensaje);
+    if (resultado.ok) {
+      await cargar();
+      onCajaActualizada();
+    }
+  };
+
+  const handleBorrarCajasPrueba = async () => {
+    const borradas = borrarCajasDePrueba();
+    Alert.alert("Limpieza", `Se borraron ${borradas} caja(s) de prueba.`);
+    await cargar();
+    onCajaActualizada();
+  };
+
+  const renderFilaMovimiento = (
     label: string,
     valor: number,
-    tipo: "positivo" | "negativo" | "neutral",
+    tipo: "positivo" | "negativo" | "neutral" | "positivoMorado",
+    iconName: keyof typeof MaterialCommunityIcons.glyphMap,
   ) => {
-    const color =
-      tipo === "positivo"
-        ? "#2EAA6E"
-        : tipo === "negativo"
-          ? "#E03E3E"
-          : colors.ink;
+    let iconColor = "#6B7280"; // Ícono gris sutil
+    let labelPrefix = "";
+    let montoColor = "#334155"; // Color neutro por defecto
+
+    if (tipo === "positivo") {
+      labelPrefix = "+ ";
+      montoColor = "#16A34A"; // Monto en verde
+    } else if (tipo === "positivoMorado") {
+      labelPrefix = "+ ";
+      montoColor = "#7C3AED"; // Monto en morado
+    } else if (tipo === "negativo") {
+      labelPrefix = "- ";
+      montoColor = "#DC2626"; // Monto en rojo
+    }
+
     return (
-      <View
-        style={{
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "center",
-        }}
-      >
-        <Text style={{ fontSize: typography.size.sm, color: colors.grayText }}>
-          {label}
-        </Text>
-        <Text
-          style={{
-            fontSize: typography.size.md,
-            fontWeight: typography.weight.semiBold,
-            color,
-          }}
-        >
+      <View style={s.filaMovimiento}>
+        <View style={s.filaLeft}>
+          <MaterialCommunityIcons
+            name={iconName}
+            size={20}
+            color={iconColor}
+            style={s.filaIcon}
+          />
+          <AppText style={s.filaLabel}>
+            {labelPrefix}
+            {label}
+          </AppText>
+        </View>
+        <AppText style={[s.filaMonto, { color: montoColor }]}>
           {fmt(valor)}
-        </Text>
+        </AppText>
       </View>
     );
   };
 
-  // ── Loading ───────────────────────────────────────────────────────────────
   if (cargando && !caja) {
     return (
       <View
-        style={{
-          backgroundColor: colors.white,
-          borderRadius: radius.lg,
-          padding: spacing.lg,
-          alignItems: "center",
-          ...shadows.card,
-        }}
+        style={[
+          s.mainCard,
+          { alignItems: "center", justifyContent: "center", height: 120 },
+        ]}
       >
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color="#2563EB" size="large" />
       </View>
     );
   }
 
-  // ── Sin caja ──────────────────────────────────────────────────────────────
   const renderSinCaja = () => (
     <TouchableOpacity
       onPress={() => setModalApertura(true)}
-      style={{
-        backgroundColor: colors.white,
-        borderRadius: radius.lg,
-        padding: spacing.md,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: spacing.md,
-        borderWidth: 1.5,
-        borderStyle: "dashed",
-        borderColor: colors.grayBorder,
-        ...shadows.card,
-      }}
+      style={[s.mainCard, s.cardSinCaja]}
       activeOpacity={0.75}
     >
-      <View
-        style={{
-          width: 44,
-          height: 44,
-          borderRadius: 22,
-          backgroundColor: colors.grayLight,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
+      <View style={s.iconWrapperGr}>
         <MaterialCommunityIcons
           name="cash-register"
           size={24}
-          color={colors.grayText}
+          color="#6B7280"
         />
       </View>
       <View style={{ flex: 1 }}>
-        <Text
-          style={{
-            fontSize: typography.size.md,
-            fontWeight: typography.weight.bold,
-            color: colors.ink,
-          }}
-        >
-          Caja no abierta
-        </Text>
-        <Text
-          style={{
-            fontSize: typography.size.sm,
-            color: colors.grayText,
-            marginTop: 2,
-          }}
-        >
-          Toca para abrir la caja del día
-        </Text>
+        <AppText style={s.titulo}>Caja no abierta</AppText>
+        <AppText style={s.subtitulo}>Toca para abrir la caja del día</AppText>
       </View>
-      <MaterialIcons name="chevron-right" size={20} color={colors.grayText} />
+      <MaterialIcons name="chevron-right" size={24} color="#9CA3AF" />
     </TouchableOpacity>
   );
 
-  // ── Caja abierta ──────────────────────────────────────────────────────────
   const renderCajaAbierta = () => (
-    <View
-      style={{
-        backgroundColor: colors.white,
-        borderRadius: radius.lg,
-        overflow: "hidden",
-        borderWidth: 1,
-        borderColor: "#A7F3D0",
-        ...shadows.card,
-      }}
-    >
-      <View style={{ height: 5, backgroundColor: "#2EAA6E" }} />
-      <View style={{ padding: spacing.md, gap: spacing.md }}>
-        {/* Header */}
+    <View style={s.mainCard}>
+      <View style={s.headerRow}>
         <View
           style={{
             flexDirection: "row",
             alignItems: "center",
-            justifyContent: "space-between",
+            gap: 12,
+            flex: 1,
+            minWidth: 0,
           }}
         >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: spacing.sm,
-            }}
-          >
-            <View
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                backgroundColor: "#E6F7EF",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <MaterialCommunityIcons
-                name="cash-register"
-                size={20}
-                color="#2EAA6E"
-              />
-            </View>
-            <View>
-              <Text
-                style={{
-                  fontSize: typography.size.md,
-                  fontWeight: typography.weight.bold,
-                  color: colors.ink,
-                }}
-              >
-                Caja abierta{" "}
-                {caja?.fecha !== fechaHoy ? `(${caja?.fecha})` : ""}
-              </Text>
-              <Text
-                style={{
-                  fontSize: typography.size.xs,
-                  color: "#2EAA6E",
-                  fontWeight: typography.weight.semiBold,
-                }}
-              >
-                Apertura: {fmt(caja?.montoApertura ?? 0)}
-              </Text>
-            </View>
+          <View style={s.iconWrapperAbierta}>
+            <MaterialCommunityIcons
+              name="cash-register"
+              size={22}
+              color="#16A34A"
+            />
           </View>
-          <TouchableOpacity
-            onPress={() => setModalCierre(true)}
-            style={{
-              paddingHorizontal: spacing.md,
-              paddingVertical: spacing.xs,
-              borderRadius: 20,
-              backgroundColor: "#FDEAEA",
-              borderWidth: 1,
-              borderColor: "#FECACA",
-            }}
-          >
-            <Text
-              style={{
-                fontSize: typography.size.sm,
-                fontWeight: typography.weight.bold,
-                color: "#E03E3E",
-              }}
-            >
-              Cerrar caja
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {resumen && (
-          <>
-            {/* Resumen efectivo */}
-            <View
-              style={{
-                backgroundColor: "#F6F7FB",
-                borderRadius: radius.md,
-                padding: spacing.md,
-                gap: spacing.xs,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: typography.size.sm,
-                  fontWeight: typography.weight.bold,
-                  color: colors.grayText,
-                  letterSpacing: 0.3,
-                  marginBottom: 4,
-                }}
-              >
-                EFECTIVO
-              </Text>
-              {renderFilaResumen(
-                "Apertura",
-                resumen.caja?.montoApertura ?? 0,
-                "neutral",
-              )}
-              {renderFilaResumen(
-                "+ Ventas",
-                resumen.ventasEfectivo,
-                "positivo",
-              )}
-              {renderFilaResumen(
-                "+ Abonos",
-                resumen.abonosEfectivo,
-                "positivo",
-              )}
-              {renderFilaResumen(
-                "- Gastos",
-                resumen.gastosEfectivo,
-                "negativo",
-              )}
-              <View
-                style={{
-                  height: 1,
-                  backgroundColor: "#E2E6EF",
-                  marginVertical: 4,
-                }}
-              />
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: typography.size.md,
-                    fontWeight: typography.weight.bold,
-                    color: colors.ink,
-                  }}
-                >
-                  Saldo esperado
-                </Text>
-                <Text
-                  style={{
-                    fontSize: typography.size.xl,
-                    fontWeight: typography.weight.black,
-                    color: "#2EAA6E",
-                  }}
-                >
-                  {fmt(resumen.saldoEsperadoEfectivo)}
-                </Text>
-              </View>
-            </View>
-
-            {/* Resumen transferencia */}
-            <View
-              style={{
-                backgroundColor: "#F5F3FF",
-                borderRadius: radius.md,
-                padding: spacing.md,
-                gap: spacing.xs,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: typography.size.sm,
-                  fontWeight: typography.weight.bold,
-                  color: "#7C3AED",
-                  letterSpacing: 0.3,
-                  marginBottom: 4,
-                }}
-              >
-                TRANSFERENCIA
-              </Text>
-              {renderFilaResumen(
-                "+ Ventas",
-                resumen.ventasTransferencia,
-                "positivo",
-              )}
-              {renderFilaResumen(
-                "+ Abonos",
-                resumen.abonosTransferencia,
-                "positivo",
-              )}
-              {renderFilaResumen(
-                "- Gastos",
-                resumen.gastosTransferencia,
-                "negativo",
-              )}
-              <View
-                style={{
-                  height: 1,
-                  backgroundColor: "#DDD6FE",
-                  marginVertical: 4,
-                }}
-              />
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: typography.size.md,
-                    fontWeight: typography.weight.bold,
-                    color: colors.ink,
-                  }}
-                >
-                  Neto transferencia
-                </Text>
-                <Text
-                  style={{
-                    fontSize: typography.size.xl,
-                    fontWeight: typography.weight.black,
-                    color: "#7C3AED",
-                  }}
-                >
-                  {fmt(resumen.saldoNetoTransferencia)}
-                </Text>
-              </View>
-            </View>
-          </>
-        )}
-      </View>
-    </View>
-  );
-
-  // ── Caja cerrada ──────────────────────────────────────────────────────────
-  const renderCajaCerrada = () => (
-    <View
-      style={{
-        backgroundColor: colors.white,
-        borderRadius: radius.lg,
-        overflow: "hidden",
-        borderWidth: 1,
-        borderColor: colors.grayBorder,
-        ...shadows.card,
-      }}
-    >
-      <View style={{ height: 5, backgroundColor: colors.grayText }} />
-      <View style={{ padding: spacing.md, gap: spacing.sm }}>
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: spacing.sm,
-          }}
-        >
-          <MaterialCommunityIcons
-            name="cash-register"
-            size={20}
-            color={colors.grayText}
-          />
-          <Text
-            style={{
-              fontSize: typography.size.md,
-              fontWeight: typography.weight.bold,
-              color: colors.grayText,
-            }}
-          >
-            Caja cerrada ({caja?.fecha})
-          </Text>
-        </View>
-
-        {resumen?.diferencia !== undefined && (
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              backgroundColor: resumen.diferencia >= 0 ? "#E6F7EF" : "#FDEAEA",
-              borderRadius: radius.md,
-              padding: spacing.md,
-            }}
-          >
-            <Text
-              style={{
-                fontSize: typography.size.sm,
-                fontWeight: typography.weight.bold,
-                color: resumen.diferencia >= 0 ? "#2EAA6E" : "#E03E3E",
-              }}
-            >
-              {resumen.diferencia >= 0 ? "Sobrante" : "Faltante"}
-            </Text>
-            <Text
-              style={{
-                fontSize: typography.size.xl,
-                fontWeight: typography.weight.black,
-                color: resumen.diferencia >= 0 ? "#2EAA6E" : "#E03E3E",
-              }}
-            >
-              {fmt(Math.abs(resumen.diferencia))}
-            </Text>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <AppText style={s.titulo}>
+              Caja abierta {caja?.fecha !== fechaHoy ? `(${caja?.fecha})` : ""}
+            </AppText>
+            <AppText style={s.subtituloApertura}>
+              Apertura: {fmt(caja?.montoApertura ?? 0)}
+            </AppText>
           </View>
-        )}
-
-        {caja?.notas ? (
-          <Text
-            style={{
-              fontSize: typography.size.sm,
-              color: colors.grayText,
-              fontStyle: "italic",
-            }}
-          >
-            "{caja.notas}"
-          </Text>
-        ) : null}
+        </View>
 
         <TouchableOpacity
-          onPress={() => setModalApertura(true)}
-          disabled={cargando}
-          style={{
-            marginTop: spacing.xs,
-            padding: spacing.md,
-            borderRadius: radius.md,
-            backgroundColor: "#2EAA6E",
-            alignItems: "center",
-            flexDirection: "row",
-            justifyContent: "center",
-            gap: spacing.xs,
-          }}
+          onPress={() => caja && abrirModalCierre(caja)}
+          style={[s.btnCerrarMini, { flexShrink: 0 }]}
+          activeOpacity={0.8}
         >
-          {cargando ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <>
-              <MaterialCommunityIcons
-                name="cash-register"
-                size={18}
-                color={colors.white}
-              />
-              <Text
-                style={{
-                  fontSize: typography.size.md,
-                  fontWeight: typography.weight.bold,
-                  color: colors.white,
-                }}
-              >
-                Abrir nueva caja
-              </Text>
-            </>
-          )}
+          <MaterialCommunityIcons name="lock" size={14} color="#DC2626" />
+          <AppText style={s.btnCerrarMiniTxt}>Cerrar</AppText>
         </TouchableOpacity>
       </View>
+
+      {resumen && (
+        <View style={{ marginTop: 24, gap: 24 }}>
+          {/* Bloque de Efectivo sin tarjeta interna */}
+          <View>
+            <AppText style={s.bloqueTituloVerde}>EFECTIVO</AppText>
+            {renderFilaMovimiento(
+              "Apertura",
+              resumen.caja?.montoApertura ?? 0,
+              "neutral",
+              "lock-open-outline",
+            )}
+            {renderFilaMovimiento(
+              "Ventas",
+              resumen.ventasEfectivo,
+              "positivo",
+              "cart-outline",
+            )}
+            {renderFilaMovimiento(
+              "Abonos",
+              resumen.abonosEfectivo,
+              "positivo",
+              "hand-coin-outline",
+            )}
+            {renderFilaMovimiento(
+              "Gastos",
+              resumen.gastosEfectivo,
+              "negativo",
+              "receipt-text-outline",
+            )}
+
+            <View style={s.divider} />
+
+            <View style={s.filaTotalWrapper}>
+              <AppText style={s.totalLabel}>Total efectivo</AppText>
+              <AppText style={s.totalMontoVerde}>
+                {fmt(resumen.saldoEsperadoEfectivo)}
+              </AppText>
+            </View>
+          </View>
+
+          {/* Bloque de Transferencia sin tarjeta interna */}
+          <View>
+            <AppText style={s.bloqueTituloMorado}>TRANSFERENCIA</AppText>
+            {renderFilaMovimiento(
+              "Ventas",
+              resumen.ventasTransferencia,
+              "positivoMorado",
+              "cart-outline",
+            )}
+            {renderFilaMovimiento(
+              "Abonos",
+              resumen.abonosTransferencia,
+              "positivoMorado",
+              "hand-coin-outline",
+            )}
+            {renderFilaMovimiento(
+              "Gastos",
+              resumen.gastosTransferencia,
+              "negativo",
+              "receipt-text-outline",
+            )}
+
+            <View style={s.divider} />
+
+            <View style={s.filaTotalWrapper}>
+              <AppText style={s.totalLabel}>Neto transferencia</AppText>
+              <AppText style={s.totalMontoMorado}>
+                {fmt(resumen.saldoNetoTransferencia)}
+              </AppText>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 
-  // ── Contenido del bottom sheet Apertura ───────────────────────────────────
+  const renderCajaCerrada = () => (
+    <View style={s.mainCard}>
+      <View style={s.headerRow}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <View style={s.iconWrapperCerrada}>
+            <MaterialCommunityIcons
+              name="cash-register"
+              size={22}
+              color="#4B5563"
+            />
+          </View>
+          <View>
+            <AppText style={s.titulo}>Caja cerrada</AppText>
+            <AppText style={s.subtitulo}>{caja?.fecha}</AppText>
+          </View>
+        </View>
+        <View style={s.badgeCerrada}>
+          <AppText style={s.badgeCerradaTxt}>CERRADA</AppText>
+        </View>
+      </View>
+
+      {resumen?.diferencia !== undefined && (
+        <View
+          style={[
+            s.bloqueDiferencia,
+            resumen.diferencia >= 0 ? s.bgSobrante : s.bgFaltante,
+          ]}
+        >
+          <AppText
+            style={[
+              s.totalLabel,
+              { color: resumen.diferencia >= 0 ? "#166534" : "#991B1B" },
+            ]}
+          >
+            {resumen.diferencia >= 0 ? "Sobrante en caja" : "Faltante en caja"}
+          </AppText>
+          <AppText
+            style={[
+              s.totalMonto,
+              { color: resumen.diferencia >= 0 ? "#16A34A" : "#DC2626" },
+            ]}
+          >
+            {fmt(Math.abs(resumen.diferencia))}
+          </AppText>
+        </View>
+      )}
+
+      {caja?.notas ? (
+        <AppText style={s.notasTxt}>"{caja.notas}"</AppText>
+      ) : null}
+
+      <TouchableOpacity
+        onPress={() => setModalApertura(true)}
+        disabled={cargando}
+        style={s.btnPrimario}
+        activeOpacity={0.8}
+      >
+        {cargando ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <>
+            <MaterialCommunityIcons
+              name="cash-register"
+              size={20}
+              color="#FFF"
+            />
+            <AppText style={s.btnPrimarioTxt}>Abrir nueva caja</AppText>
+          </>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+
   const BottomSheetApertura = () => (
-    <View
-      style={{
-        backgroundColor: colors.white,
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        padding: spacing.lg,
-        paddingBottom: insets.bottom + spacing.lg,
-        gap: spacing.md,
-      }}
-    >
-      <View
-        style={{
-          width: 36,
-          height: 4,
-          backgroundColor: colors.grayBorder,
-          borderRadius: 2,
-          alignSelf: "center",
-          marginBottom: spacing.xs,
-        }}
-      />
-      <Text
-        style={{
-          fontSize: typography.size.xl,
-          fontWeight: typography.weight.black,
-          color: colors.ink,
-          textAlign: "center",
-        }}
-      >
-        Abrir caja
-      </Text>
-      <Text
-        style={{
-          fontSize: typography.size.sm,
-          color: colors.grayText,
-          textAlign: "center",
-        }}
-      >
+    <View style={[s.sheet, { paddingBottom: insets.bottom + 24 }]}>
+      <View style={s.handle} />
+      <AppText style={s.sheetTitulo}>Abrir caja</AppText>
+      <AppText style={s.sheetSubtitulo}>
         ¿Con cuánto dinero abres la caja hoy?
-      </Text>
+      </AppText>
 
       <TextInput
-        style={{
-          backgroundColor: colors.grayLight,
-          borderRadius: radius.md,
-          padding: spacing.md,
-          fontSize: typography.size.xxl,
-          fontWeight: typography.weight.black,
-          color: colors.ink,
-          textAlign: "center",
-          borderWidth: 1,
-          borderColor: colors.grayBorder,
-          letterSpacing: -1,
-        }}
+        style={s.inputGigante}
         placeholder="$ 0"
-        placeholderTextColor={colors.grayText}
+        placeholderTextColor="#9CA3AF"
         keyboardType="numeric"
         value={formatMontoDisplay(montoApertura)}
         onChangeText={(v) => setMontoApertura(v.replace(/[^0-9]/g, ""))}
         autoFocus
       />
 
-      <View style={{ flexDirection: "row", gap: spacing.sm }}>
+      <View style={s.btnRow}>
         <TouchableOpacity
           onPress={() => {
             setModalApertura(false);
             setMontoApertura("");
           }}
-          style={{
-            flex: 1,
-            padding: spacing.md,
-            borderRadius: radius.md,
-            borderWidth: 1.5,
-            borderColor: colors.grayBorder,
-            alignItems: "center",
-          }}
+          style={s.btnSecundario}
+          activeOpacity={0.8}
         >
-          <Text
-            style={{
-              fontSize: typography.size.md,
-              fontWeight: typography.weight.bold,
-              color: colors.grayText,
-            }}
-          >
-            Cancelar
-          </Text>
+          <AppText style={s.btnSecundarioTxt}>Cancelar</AppText>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={abrirCaja}
           disabled={cargando || montoApertura === ""}
-          style={{
-            flex: 2,
-            padding: spacing.md,
-            borderRadius: radius.md,
-            backgroundColor:
-              montoApertura === "" ? colors.grayBorder : "#2EAA6E",
-            alignItems: "center",
-            flexDirection: "row",
-            justifyContent: "center",
-            gap: spacing.xs,
-          }}
+          style={[
+            s.btnPrimarioAccion,
+            montoApertura === "" && { opacity: 0.5 },
+          ]}
+          activeOpacity={0.8}
         >
           {cargando ? (
-            <ActivityIndicator color={colors.white} />
+            <ActivityIndicator color="#FFF" />
           ) : (
             <>
               <MaterialCommunityIcons
                 name="cash-register"
-                size={18}
-                color={colors.white}
+                size={20}
+                color="#FFF"
               />
-              <Text
-                style={{
-                  fontSize: typography.size.md,
-                  fontWeight: typography.weight.bold,
-                  color: colors.white,
-                }}
-              >
-                Abrir caja
-              </Text>
+              <AppText style={s.btnPrimarioTxt}>Abrir caja</AppText>
             </>
           )}
         </TouchableOpacity>
@@ -768,211 +600,121 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
     </View>
   );
 
-  // ── Contenido del bottom sheet Cierre ─────────────────────────────────────
   const BottomSheetCierre = () => {
-    const saldoEsperado = resumen?.saldoEsperadoEfectivo ?? 0;
+    const saldoEsperado = resumenParaCerrar?.saldoEsperadoEfectivo ?? 0;
     const montoCierreNum = Number(montoCierre);
     const diferencia = montoCierreNum - saldoEsperado;
+    const esCajaAnterior =
+      !!cajaParaCerrar && cajaParaCerrar.fecha !== fechaHoy;
+
+    // Espacio reservado para el handle, los botones de abajo y los paddings
+    // del sheet (no son parte del scroll, así que se restan aparte).
+    const espacioReservado = 150 + insets.bottom;
+    const alturaMaximaScroll = Math.max(
+      180,
+      windowHeight - keyboardHeight - insets.top - espacioReservado,
+    );
 
     return (
-      <View
-        style={{
-          backgroundColor: colors.white,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
-          padding: spacing.lg,
-          paddingBottom: insets.bottom + spacing.lg,
-          gap: spacing.md,
-        }}
-      >
-        <View
-          style={{
-            width: 36,
-            height: 4,
-            backgroundColor: colors.grayBorder,
-            borderRadius: 2,
-            alignSelf: "center",
-            marginBottom: spacing.xs,
-          }}
-        />
-        <Text
-          style={{
-            fontSize: typography.size.xl,
-            fontWeight: typography.weight.black,
-            color: colors.ink,
-            textAlign: "center",
-          }}
+      <View style={[s.sheet, { paddingBottom: insets.bottom + 16 }]}>
+        <View style={s.handle} />
+
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          style={{ maxHeight: alturaMaximaScroll }}
+          contentContainerStyle={{ gap: 16 }}
         >
-          Cerrar caja
-        </Text>
+          <AppText style={s.sheetTitulo}>
+            {esCajaAnterior
+              ? `Cerrar caja del ${cajaParaCerrar?.fecha}`
+              : "Cerrar caja"}
+          </AppText>
+          {esCajaAnterior && (
+            <AppText style={s.avisoCajaAnterior}>
+              Esta caja quedó abierta de un día anterior. Cuéntala con calma y
+              registra lo que de verdad había.
+            </AppText>
+          )}
 
-        {/* Saldo esperado */}
-        <View
-          style={{
-            backgroundColor: "#E6F7EF",
-            borderRadius: radius.md,
-            padding: spacing.md,
-            alignItems: "center",
-          }}
-        >
-          <Text
-            style={{
-              fontSize: typography.size.sm,
-              color: "#2EAA6E",
-              fontWeight: typography.weight.semiBold,
-            }}
-          >
-            Saldo esperado en caja
-          </Text>
-          <Text
-            style={{
-              fontSize: typography.size.xxl,
-              fontWeight: typography.weight.black,
-              color: "#2EAA6E",
-            }}
-          >
-            {fmt(saldoEsperado)}
-          </Text>
-        </View>
-
-        <Text
-          style={{
-            fontSize: typography.size.sm,
-            fontWeight: typography.weight.bold,
-            color: colors.grayText,
-            letterSpacing: 0.3,
-          }}
-        >
-          ¿CUÁNTO HAY EN CAJA FÍSICAMENTE?
-        </Text>
-
-        <TextInput
-          style={{
-            backgroundColor: colors.grayLight,
-            borderRadius: radius.md,
-            padding: spacing.md,
-            fontSize: typography.size.xxl,
-            fontWeight: typography.weight.black,
-            color: colors.ink,
-            textAlign: "center",
-            borderWidth: 1,
-            borderColor: colors.grayBorder,
-            letterSpacing: -1,
-          }}
-          placeholder="$ 0"
-          placeholderTextColor={colors.grayText}
-          keyboardType="numeric"
-          value={formatMontoDisplay(montoCierre)}
-          onChangeText={(v) => setMontoCierre(v.replace(/[^0-9]/g, ""))}
-          autoFocus
-        />
-
-        {/* Diferencia en tiempo real */}
-        {montoCierre !== "" && (
-          <View
-            style={{
-              backgroundColor: diferencia >= 0 ? "#E6F7EF" : "#FDEAEA",
-              borderRadius: radius.md,
-              padding: spacing.md,
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <Text
-              style={{
-                fontSize: typography.size.md,
-                fontWeight: typography.weight.bold,
-                color: diferencia >= 0 ? "#2EAA6E" : "#E03E3E",
-              }}
-            >
-              {diferencia >= 0 ? "Sobrante" : "Faltante"}
-            </Text>
-            <Text
-              style={{
-                fontSize: typography.size.xl,
-                fontWeight: typography.weight.black,
-                color: diferencia >= 0 ? "#2EAA6E" : "#E03E3E",
-              }}
-            >
-              {fmt(Math.abs(diferencia))}
-            </Text>
+          <View style={s.bloqueEsperado}>
+            <AppText style={s.esperadoLabel}>Saldo esperado en caja</AppText>
+            <AppText style={s.esperadoMonto}>{fmt(saldoEsperado)}</AppText>
           </View>
-        )}
 
-        {/* Notas opcionales */}
-        <TextInput
-          style={{
-            backgroundColor: colors.grayLight,
-            borderRadius: radius.md,
-            padding: spacing.md,
-            fontSize: typography.size.md,
-            color: colors.ink,
-            borderWidth: 1,
-            borderColor: colors.grayBorder,
-          }}
-          placeholder="Notas (opcional)..."
-          placeholderTextColor={colors.grayText}
-          value={notasCierre}
-          onChangeText={setNotasCierre}
-          multiline
-        />
+          <AppText style={s.preguntaTxt}>
+            ¿CUÁNTO HAY EN CAJA FÍSICAMENTE?
+          </AppText>
 
-        <View style={{ flexDirection: "row", gap: spacing.sm }}>
-          <TouchableOpacity
-            onPress={() => {
-              setModalCierre(false);
-              setMontoCierre("");
-              setNotasCierre("");
-            }}
-            style={{
-              flex: 1,
-              padding: spacing.md,
-              borderRadius: radius.md,
-              borderWidth: 1.5,
-              borderColor: colors.grayBorder,
-              alignItems: "center",
-            }}
-          >
-            <Text
-              style={{
-                fontSize: typography.size.md,
-                fontWeight: typography.weight.bold,
-                color: colors.grayText,
-              }}
+          <TextInput
+            style={s.inputGigante}
+            placeholder="$ 0"
+            placeholderTextColor="#9CA3AF"
+            keyboardType="numeric"
+            value={formatMontoDisplay(montoCierre)}
+            onChangeText={(v) => setMontoCierre(v.replace(/[^0-9]/g, ""))}
+            autoFocus
+          />
+
+          {montoCierre !== "" && (
+            <View
+              style={[
+                s.bloqueDiferenciaReal,
+                diferencia >= 0 ? s.bgSobrante : s.bgFaltante,
+              ]}
             >
-              Cancelar
-            </Text>
+              <AppText
+                style={[
+                  s.totalLabel,
+                  { color: diferencia >= 0 ? "#16A34A" : "#DC2626" },
+                ]}
+              >
+                {diferencia >= 0 ? "Sobrante" : "Faltante"}
+              </AppText>
+              <AppText
+                style={[
+                  s.totalMonto,
+                  { color: diferencia >= 0 ? "#16A34A" : "#DC2626" },
+                ]}
+              >
+                {fmt(Math.abs(diferencia))}
+              </AppText>
+            </View>
+          )}
+
+          <TextInput
+            style={s.inputNotas}
+            placeholder="Notas (opcional)..."
+            placeholderTextColor="#9CA3AF"
+            value={notasCierre}
+            onChangeText={setNotasCierre}
+            multiline
+          />
+        </ScrollView>
+
+        <View style={[s.btnRow, { marginTop: 12 }]}>
+          <TouchableOpacity
+            onPress={cancelarCierre}
+            style={s.btnSecundario}
+            activeOpacity={0.8}
+          >
+            <AppText style={s.btnSecundarioTxt}>Cancelar</AppText>
           </TouchableOpacity>
           <TouchableOpacity
             onPress={cerrarCaja}
             disabled={montoCierre === "" || cargando}
-            style={{
-              flex: 2,
-              padding: spacing.md,
-              borderRadius: radius.md,
-              backgroundColor:
-                montoCierre === "" ? colors.grayBorder : "#E03E3E",
-              alignItems: "center",
-              flexDirection: "row",
-              justifyContent: "center",
-              gap: spacing.xs,
-            }}
+            style={[
+              s.btnPeligro,
+              (montoCierre === "" || cargando) && { opacity: 0.5 },
+            ]}
+            activeOpacity={0.8}
           >
             {cargando ? (
-              <ActivityIndicator color={colors.white} />
+              <ActivityIndicator color="#FFF" />
             ) : (
               <>
-                <MaterialIcons name="lock" size={18} color={colors.white} />
-                <Text
-                  style={{
-                    fontSize: typography.size.md,
-                    fontWeight: typography.weight.bold,
-                    color: colors.white,
-                  }}
-                >
-                  Cerrar caja
-                </Text>
+                <MaterialIcons name="lock" size={20} color="#FFF" />
+                <AppText style={s.btnPrimarioTxt}>Cerrar caja</AppText>
               </>
             )}
           </TouchableOpacity>
@@ -981,14 +723,72 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
     );
   };
 
-  // ── Render principal ──────────────────────────────────────────────────────
   return (
     <>
       {!caja && renderSinCaja()}
       {caja?.estado === "abierta" && renderCajaAbierta()}
       {caja?.estado === "cerrada" && renderCajaCerrada()}
 
-      {/* ── Modal apertura ── */}
+      {/* ── Panel de pruebas (solo __DEV__, no se ve en producción) ── */}
+      {__DEV__ && (
+        <View
+          style={{
+            marginTop: 8,
+            padding: 10,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderStyle: "dashed",
+            borderColor: "#F59E0B",
+            gap: 8,
+          }}
+        >
+          <AppText
+            style={{
+              fontSize: 11,
+              fontWeight: "800",
+              color: "#F59E0B",
+              textAlign: "center",
+            }}
+          >
+            🧪 PANEL DE PRUEBAS
+          </AppText>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <TouchableOpacity
+              onPress={handleCrearCajaPrueba}
+              style={{
+                flex: 1,
+                padding: 10,
+                borderRadius: 10,
+                backgroundColor: "#FEF3C7",
+                alignItems: "center",
+              }}
+            >
+              <AppText
+                style={{ fontSize: 12, fontWeight: "800", color: "#92400E" }}
+              >
+                Crear caja de ayer
+              </AppText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleBorrarCajasPrueba}
+              style={{
+                flex: 1,
+                padding: 10,
+                borderRadius: 10,
+                backgroundColor: "#FEE2E2",
+                alignItems: "center",
+              }}
+            >
+              <AppText
+                style={{ fontSize: 12, fontWeight: "800", color: "#991B1B" }}
+              >
+                Borrar cajas de prueba
+              </AppText>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <Modal
         visible={modalApertura}
         transparent
@@ -1003,7 +803,7 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <TouchableOpacity
-            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)" }}
+            style={s.overlay}
             activeOpacity={1}
             onPress={() => {
               setModalApertura(false);
@@ -1014,132 +814,86 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Modal cierre ── */}
       <Modal
         visible={modalCierre}
         transparent
         animationType="slide"
-        onRequestClose={() => {
-          setModalCierre(false);
-          setMontoCierre("");
-          setNotasCierre("");
-        }}
+        onRequestClose={cancelarCierre}
       >
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
         >
           <TouchableOpacity
-            style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.5)" }}
+            style={s.overlay}
             activeOpacity={1}
-            onPress={() => {
-              setModalCierre(false);
-              setMontoCierre("");
-              setNotasCierre("");
-            }}
+            onPress={cancelarCierre}
           />
           {BottomSheetCierre()}
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Modal Alerta Caja Anterior Abierta ── */}
       <Modal visible={modalAnterior} transparent animationType="fade">
-        <View
-          style={{
-            flex: 1,
-            backgroundColor: "rgba(0,0,0,0.6)",
-            justifyContent: "center",
-            padding: spacing.xl,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: colors.white,
-              borderRadius: radius.lg,
-              padding: spacing.lg,
-              gap: spacing.md,
-              ...shadows.dialog,
-            }}
-          >
-            <View style={{ alignItems: "center", gap: spacing.xs }}>
-              <MaterialIcons name="warning" size={40} color="#F59E0B" />
-              <Text
-                style={{
-                  fontSize: typography.size.lg,
-                  fontWeight: typography.weight.black,
-                  color: colors.ink,
-                  textAlign: "center",
-                }}
-              >
-                Caja anterior detectada
-              </Text>
+        <View style={[s.overlay, { justifyContent: "center", padding: 24 }]}>
+          <View style={s.dialog}>
+            <View style={{ alignItems: "center", gap: 8 }}>
+              <MaterialIcons name="warning" size={44} color="#D97706" />
+              <AppText style={s.dialogTitulo}>Caja anterior detectada</AppText>
             </View>
 
-            <Text
-              style={{
-                fontSize: typography.size.sm,
-                color: colors.grayText,
-                textAlign: "center",
-                lineHeight: 20,
-              }}
-            >
+            <AppText style={s.dialogSubtitulo}>
               Hay una caja abierta con fecha del{" "}
-              <Text style={{ fontWeight: "bold", color: colors.ink }}>
+              <AppText style={{ fontWeight: "bold", color: "#111827" }}>
                 {cajaAnteriorPendiente?.fecha}
-              </Text>
-              . Para operar hoy de manera correcta, debes cerrarla primero.
-            </Text>
+              </AppText>
+              . Puedes cuadrarla y cerrarla ahora mismo, sin perder el registro
+              de ese día.
+            </AppText>
 
             <TouchableOpacity
-              onPress={cerrarCajaAnteriorDeEmergencia}
+              onPress={() =>
+                cajaAnteriorPendiente && abrirModalCierre(cajaAnteriorPendiente)
+              }
               disabled={cargando}
-              style={{
-                padding: spacing.md,
-                borderRadius: radius.md,
-                backgroundColor: "#E03E3E",
-                alignItems: "center",
-                flexDirection: "row",
-                justifyContent: "center",
-                gap: spacing.xs,
-              }}
+              style={[s.btnPeligro, { flex: 0 }]}
+              activeOpacity={0.8}
             >
               {cargando ? (
-                <ActivityIndicator color={colors.white} />
+                <ActivityIndicator color="#FFF" />
               ) : (
                 <>
-                  <MaterialIcons name="lock" size={18} color={colors.white} />
-                  <Text
-                    style={{
-                      fontSize: typography.size.md,
-                      fontWeight: typography.weight.bold,
-                      color: colors.white,
-                    }}
-                  >
-                    Cerrar caja anterior
-                  </Text>
+                  <MaterialIcons name="lock" size={20} color="#FFF" />
+                  <AppText style={s.btnPrimarioTxt}>
+                    Cuadrar y cerrar caja anterior
+                  </AppText>
                 </>
               )}
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => setModalAnterior(false)}
-              style={{
-                padding: spacing.md,
-                borderRadius: radius.md,
-                borderWidth: 1.5,
-                borderColor: colors.grayBorder,
-                alignItems: "center",
-              }}
+              onPress={cerrarCajaAnteriorDeEmergencia}
+              disabled={cargando}
+              style={{ alignItems: "center", paddingVertical: 6 }}
+              activeOpacity={0.7}
             >
-              <Text
+              <AppText
                 style={{
-                  fontSize: typography.size.md,
-                  fontWeight: typography.weight.bold,
-                  color: colors.grayText,
+                  fontSize: 13,
+                  fontWeight: "600",
+                  color: "#6B7280",
+                  textDecorationLine: "underline",
                 }}
               >
-                Ignorar por ahora
-              </Text>
+                No puedo contar el efectivo, cerrar sin cuadrar
+              </AppText>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => setModalAnterior(false)}
+              style={[s.btnSecundario, { flex: 0 }]}
+              activeOpacity={0.8}
+            >
+              <AppText style={s.btnSecundarioTxt}>Ignorar por ahora</AppText>
             </TouchableOpacity>
           </View>
         </View>
@@ -1147,3 +901,317 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
     </>
   );
 }
+
+const s = StyleSheet.create({
+  mainCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    padding: 20, // Aumenté un poquito el padding para que respire mejor
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  cardSinCaja: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderStyle: "dashed",
+    borderColor: "#D1D5DB",
+    borderWidth: 1.5,
+    gap: 16,
+  },
+
+  titulo: { fontSize: 18, fontWeight: "800", color: "#111827" },
+  subtitulo: { fontSize: 14, color: "#6B7280", marginTop: 2 },
+  subtituloApertura: {
+    fontSize: 13,
+    color: "#16A34A",
+    fontWeight: "600",
+    marginTop: 2,
+  },
+
+  iconWrapperGr: {
+    width: 46,
+    height: 46,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconWrapperAbierta: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconWrapperCerrada: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8, // Separación con los bloques de abajo
+  },
+
+  btnCerrarMini: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  btnCerrarMiniTxt: { fontSize: 13, fontWeight: "700", color: "#DC2626" },
+  badgeCerrada: {
+    backgroundColor: "#F3F4F6",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+  },
+  badgeCerradaTxt: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: "#4B5563",
+    letterSpacing: 0.5,
+  },
+
+  bloqueTituloVerde: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#16A34A",
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  bloqueTituloMorado: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#7C3AED",
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+
+  filaMovimiento: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  filaLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  filaIcon: {
+    marginRight: 10,
+  },
+  filaLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+    color: "#4B5563",
+  },
+  filaMonto: {
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#F3F4F6",
+    marginVertical: 6,
+  },
+
+  filaTotalWrapper: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 6,
+  },
+  totalLabel: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  totalMontoVerde: { fontSize: 20, fontWeight: "900", color: "#16A34A" },
+  totalMontoMorado: { fontSize: 20, fontWeight: "900", color: "#7C3AED" },
+  totalMonto: { fontSize: 20, fontWeight: "900" },
+
+  bloqueDiferencia: {
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 16,
+  },
+  bloqueDiferenciaReal: {
+    borderRadius: 14,
+    padding: 16,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  bgSobrante: {
+    backgroundColor: "#F0FDF4",
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+  },
+  bgFaltante: {
+    backgroundColor: "#FEF2F2",
+    borderWidth: 1,
+    borderColor: "#FECACA",
+  },
+  notasTxt: {
+    fontSize: 14,
+    color: "#6B7280",
+    fontStyle: "italic",
+    marginTop: 12,
+    paddingHorizontal: 4,
+  },
+
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.5)" },
+  sheet: {
+    backgroundColor: "#FFF",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
+    gap: 16,
+    marginTop: "auto",
+  },
+  handle: {
+    width: 40,
+    height: 5,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 3,
+    alignSelf: "center",
+    marginBottom: 8,
+  },
+  sheetTitulo: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#111827",
+    textAlign: "center",
+  },
+  sheetSubtitulo: { fontSize: 15, color: "#6B7280", textAlign: "center" },
+  avisoCajaAnterior: {
+    fontSize: 14,
+    color: "#D97706",
+    textAlign: "center",
+    fontWeight: "600",
+  },
+
+  inputGigante: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 16,
+    padding: 20,
+    fontSize: 32,
+    fontWeight: "900",
+    color: "#111827",
+    textAlign: "center",
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+  },
+  inputNotas: {
+    backgroundColor: "#F9FAFB",
+    borderRadius: 14,
+    padding: 16,
+    fontSize: 16,
+    color: "#111827",
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+
+  bloqueEsperado: {
+    backgroundColor: "#F0FDF4",
+    borderRadius: 14,
+    padding: 16,
+    alignItems: "center",
+  },
+  esperadoLabel: { fontSize: 14, color: "#16A34A", fontWeight: "600" },
+  esperadoMonto: {
+    fontSize: 28,
+    fontWeight: "900",
+    color: "#16A34A",
+    marginTop: 4,
+  },
+  preguntaTxt: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#6B7280",
+    textAlign: "center",
+    letterSpacing: 0.5,
+    marginTop: 8,
+  },
+
+  btnRow: { flexDirection: "row", gap: 12, marginTop: 8 },
+  btnPrimario: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#16A34A",
+    paddingVertical: 16,
+    borderRadius: 14,
+    marginTop: 16,
+  },
+  btnPrimarioAccion: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#16A34A",
+    paddingVertical: 16,
+    borderRadius: 14,
+  },
+  btnPeligro: {
+    flex: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    backgroundColor: "#DC2626",
+    paddingVertical: 16,
+    borderRadius: 14,
+  },
+  btnSecundario: {
+    flex: 1,
+    paddingVertical: 16,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  btnPrimarioTxt: { fontSize: 16, fontWeight: "800", color: "#FFF" },
+  btnSecundarioTxt: { fontSize: 16, fontWeight: "700", color: "#4B5563" },
+
+  dialog: { backgroundColor: "#FFF", borderRadius: 24, padding: 24, gap: 16 },
+  dialogTitulo: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: "#111827",
+    textAlign: "center",
+  },
+  dialogSubtitulo: {
+    fontSize: 15,
+    color: "#4B5563",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+});

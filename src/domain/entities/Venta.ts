@@ -31,6 +31,13 @@ export interface Venta {
    */
   metodoPago: "efectivo" | "transferencia" | null;
 
+  /**
+   * Id de la caja que estaba abierta cuando se registró la venta.
+   * null → no había ninguna caja abierta en ese momento (caso excepcional)
+   *        o la venta es anterior a este cambio.
+   */
+  cajaId: string | null;
+
   // ── Campos de anulación (solo presentes cuando estado === 'anulada') ──
   anulacion?: {
     fecha: string; // ISO timestamp del momento de anulación

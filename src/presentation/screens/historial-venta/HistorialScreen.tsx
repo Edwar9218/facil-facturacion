@@ -17,7 +17,9 @@ import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as XLSX from "xlsx";
 import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
+import { GastoRepositoryImpl } from "../../../data/repositories/GastoRepositoryImpl";
 import { VentaRepositoryImpl } from "../../../data/repositories/VentaRepositoryImpl";
+import { Gasto } from "../../../domain/entities/Gasto";
 import { ItemVenta, Venta } from "../../../domain/entities/Venta";
 import { useTheme } from "../../../theme";
 import { ScreenWrapper } from "../../components/layout/ScreenWrapper";
@@ -35,6 +37,7 @@ interface Abono {
   monto: number;
   fecha: string;
   estado?: string;
+  metodoPago?: string;
 }
 
 const fmt = (n: number) =>
@@ -76,7 +79,6 @@ const fechaLarga = (fecha: string) => {
 const obtenerEtiquetaAgrupacion = (fechaStr: string) => {
   if (esHoy(fechaStr)) return "Hoy";
   if (esAyer(fechaStr)) return "Ayer";
-
   const d = new Date(fechaStr);
   const opciones: Intl.DateTimeFormatOptions = {
     timeZone: "America/Bogota",
@@ -90,6 +92,7 @@ const obtenerEtiquetaAgrupacion = (fechaStr: string) => {
 
 const ventaRepo = new VentaRepositoryImpl();
 const creditoRepo = new CreditoRepositoryImpl();
+const gastoRepo = new GastoRepositoryImpl();
 
 type TipoEstado = "todas" | "pazysalvo" | "debe" | "anulada";
 type TipoPeriodo = "hoy" | "semana" | "mes" | "personalizado";
@@ -781,6 +784,7 @@ export const HistorialScreen = () => {
 
   const [todasVentas, setTodasVentas] = React.useState<Venta[]>([]);
   const [abonos, setAbonos] = React.useState<Abono[]>([]);
+  const [todosGastos, setTodosGastos] = React.useState<Gasto[]>([]);
   const [ventasFiltradas, setVentasFiltradas] = React.useState<Venta[]>([]);
   const [cargando, setCargando] = React.useState(true);
   const [refrescando, setRefrescando] = React.useState(false);
@@ -834,7 +838,6 @@ export const HistorialScreen = () => {
     setAnulando(true);
     try {
       await ventaRepo.anular(ventaAAnular.id, { usuario: "Admin", motivo });
-
       setTodasVentas((prev) =>
         prev.map((v) =>
           v.id === ventaAAnular.id
@@ -850,7 +853,6 @@ export const HistorialScreen = () => {
             : v,
         ),
       );
-
       setModalAnularVisible(false);
       setVentaAAnular(null);
       Alert.alert("Éxito", "Factura anulada y stock devuelto correctamente.");
@@ -861,14 +863,66 @@ export const HistorialScreen = () => {
     }
   };
 
+  // ── Rango activo calculado ────────────────────────────────────────────────
+  const rangoActivo = React.useMemo(() => {
+    const hoyStr = fechaHoy();
+    if (filtroPeriodo === "hoy") return { inicio: hoyStr, fin: hoyStr };
+    if (filtroPeriodo === "semana") {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      return {
+        inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
+        fin: hoyStr,
+      };
+    }
+    if (filtroPeriodo === "mes") {
+      const d = new Date();
+      d.setDate(1);
+      return {
+        inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
+        fin: hoyStr,
+      };
+    }
+    if (filtroPeriodo === "personalizado" && rangoPersonalizado.inicio)
+      return rangoPersonalizado;
+    return null;
+  }, [filtroPeriodo, rangoPersonalizado]);
+
+  // ── Gastos: se consultan directamente a la BD por rango (no existe un
+  // método "getAll" en GastoRepositoryImpl, solo getGastosPorRango/Fecha/Caja) ─
+  const cargarGastos = React.useCallback(async () => {
+    if (!rangoActivo) {
+      setTodosGastos([]);
+      return;
+    }
+    try {
+      const gastos = await gastoRepo.getGastosPorRango({
+        fechaInicio: rangoActivo.inicio,
+        fechaFin: rangoActivo.fin,
+      });
+      setTodosGastos(gastos);
+    } catch (e) {
+      console.error(e);
+    }
+  }, [rangoActivo]);
+
+  React.useEffect(() => {
+    cargarGastos();
+  }, [cargarGastos]);
+
+  // Ya viene filtrado desde la BD según rangoActivo; se deja el alias para
+  // no tener que tocar el resto de referencias (stats, export, JSX).
+  const gastosFiltrados = todosGastos;
+
   const exportarExcel = async () => {
-    if (ventasFiltradas.length === 0) {
+    if (ventasFiltradas.length === 0 && gastosFiltrados.length === 0) {
       Alert.alert("Sin datos", "No hay registros bajo los filtros actuales.");
       return;
     }
     setExportando(true);
     try {
-      const filas: any[] = [];
+      // Hoja ventas
+      const filasVentas: any[] = [];
       ventasFiltradas.forEach((v) => {
         const esAnulada = v.estado === "anulada";
         const estReal = esAnulada
@@ -876,9 +930,8 @@ export const HistorialScreen = () => {
           : evaluarFacturaPagada(v)
             ? "Al día"
             : "En mora";
-
         v.items.forEach((item: ItemVenta) => {
-          filas.push({
+          filasVentas.push({
             Factura: v.numeroFactura ?? v.id.substring(0, 8),
             Fecha: v.fecha.substring(0, 10),
             Cliente: v.nombreCliente,
@@ -887,18 +940,36 @@ export const HistorialScreen = () => {
             Precio: item.precioUnitario,
             Subtotal: item.subtotal,
             Tipo: v.tipo,
+            "Método pago": v.metodoPago ?? "",
             Estado: estReal,
             MotivoAnulacion: esAnulada ? (v.anulacion?.motivo ?? "") : "",
           });
         });
       });
 
-      const hoja = XLSX.utils.json_to_sheet(filas);
+      // Hoja gastos
+      const filasGastos: any[] = gastosFiltrados.map((g) => ({
+        Fecha: g.fecha.substring(0, 10),
+        Descripción: g.descripcion,
+        Categoría: g.categoria,
+        Monto: g.monto,
+        "Método pago":
+          g.metodoPago === "efectivo" ? "Efectivo" : "Transferencia",
+      }));
+
       const libro = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(libro, hoja, "Ventas");
+
+      if (filasVentas.length > 0) {
+        const hojaVentas = XLSX.utils.json_to_sheet(filasVentas);
+        XLSX.utils.book_append_sheet(libro, hojaVentas, "Ventas");
+      }
+      if (filasGastos.length > 0) {
+        const hojaGastos = XLSX.utils.json_to_sheet(filasGastos);
+        XLSX.utils.book_append_sheet(libro, hojaGastos, "Gastos");
+      }
+
       const base64 = XLSX.write(libro, { type: "base64", bookType: "xlsx" });
       const ruta = `${FileSystem.cacheDirectory}Reporte_Ventas.xlsx`;
-
       await FileSystem.writeAsStringAsync(ruta, base64, {
         encoding: FileSystem.EncodingType.Base64,
       });
@@ -952,21 +1023,10 @@ export const HistorialScreen = () => {
     else if (filtroEstado === "anulada")
       resultado = resultado.filter((v) => v.estado === "anulada");
 
-    const hoyStr = fechaHoy();
-    if (filtroPeriodo === "hoy")
-      resultado = resultado.filter((v) => v.fecha.startsWith(hoyStr));
-    else if (filtroPeriodo === "semana") {
-      const limite = new Date();
-      limite.setDate(limite.getDate() - 7);
-      resultado = resultado.filter((v) => new Date(v.fecha) >= limite);
-    } else if (filtroPeriodo === "mes") {
-      const limite = new Date();
-      limite.setDate(1);
-      resultado = resultado.filter((v) => new Date(v.fecha) >= limite);
-    } else if (filtroPeriodo === "personalizado" && rangoPersonalizado.inicio) {
+    if (rangoActivo) {
       resultado = resultado.filter((v) => {
         const f = v.fecha.substring(0, 10);
-        return f >= rangoPersonalizado.inicio && f <= rangoPersonalizado.fin;
+        return f >= rangoActivo.inicio && f <= rangoActivo.fin;
       });
     }
 
@@ -981,38 +1041,9 @@ export const HistorialScreen = () => {
 
     setVentasFiltradas(resultado);
     setPagina(1);
-  }, [
-    todasVentas,
-    filtroEstado,
-    filtroPeriodo,
-    rangoPersonalizado,
-    busqueda,
-    evaluarFacturaPagada,
-  ]);
+  }, [todasVentas, filtroEstado, rangoActivo, busqueda, evaluarFacturaPagada]);
 
-  const rangoActivo = React.useMemo(() => {
-    const hoyStr = fechaHoy();
-    if (filtroPeriodo === "hoy") return { inicio: hoyStr, fin: hoyStr };
-    if (filtroPeriodo === "semana") {
-      const d = new Date();
-      d.setDate(d.getDate() - 7);
-      return {
-        inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
-        fin: hoyStr,
-      };
-    }
-    if (filtroPeriodo === "mes") {
-      const d = new Date();
-      d.setDate(1);
-      return {
-        inicio: d.toLocaleDateString("sv-SE", { timeZone: "America/Bogota" }),
-        fin: hoyStr,
-      };
-    }
-    if (filtroPeriodo === "personalizado") return rangoPersonalizado;
-    return null;
-  }, [filtroPeriodo, rangoPersonalizado]);
-
+  // ── Stats incluyendo gastos filtrados ─────────────────────────────────────
   const stats = React.useMemo(() => {
     const activas = ventasFiltradas.filter((v) => v.estado !== "anulada");
     const anuladas = ventasFiltradas.filter((v) => v.estado === "anulada");
@@ -1064,6 +1095,15 @@ export const HistorialScreen = () => {
         }
       });
 
+    // Gastos del rango
+    const gastosEfectivo = gastosFiltrados
+      .filter((g) => g.metodoPago === "efectivo")
+      .reduce((a, g) => a + g.monto, 0);
+    const gastosTransferencia = gastosFiltrados
+      .filter((g) => g.metodoPago === "transferencia")
+      .reduce((a, g) => a + g.monto, 0);
+    const totalGastos = gastosEfectivo + gastosTransferencia;
+
     const totalDebe = activas
       .filter((v) => !evaluarFacturaPagada(v))
       .reduce((a, v) => {
@@ -1080,9 +1120,18 @@ export const HistorialScreen = () => {
       efectivoAbono,
       transferenciaVenta,
       transferenciaAbono,
+      gastosEfectivo,
+      gastosTransferencia,
+      totalGastos,
       totalDebe,
     };
-  }, [ventasFiltradas, abonos, rangoActivo, evaluarFacturaPagada]);
+  }, [
+    ventasFiltradas,
+    abonos,
+    rangoActivo,
+    gastosFiltrados,
+    evaluarFacturaPagada,
+  ]);
 
   const salesAgrupadas = React.useMemo(() => {
     const grupos: { [key: string]: Venta[] } = {};
@@ -1126,7 +1175,10 @@ export const HistorialScreen = () => {
         refreshControl={
           <RefreshControl
             refreshing={refrescando}
-            onRefresh={() => cargarDatos(true)}
+            onRefresh={() => {
+              cargarDatos(true);
+              cargarGastos();
+            }}
             colors={[colors.primary]}
           />
         }
@@ -1234,7 +1286,7 @@ export const HistorialScreen = () => {
                   ["todas", "pazysalvo", "debe", "anulada"] as TipoEstado[]
                 ).map((e) => {
                   const activo = filtroEstado === e;
-                  const etiquetas: Record<TipoEstado[] & string, string> = {
+                  const etiquetas: Record<string, string> = {
                     todas: "Todas",
                     pazysalvo: "Al Día",
                     debe: "En Mora",
@@ -1289,124 +1341,187 @@ export const HistorialScreen = () => {
           )}
         </View>
 
-        {/* METRICAS TOTALES */}
+        {/* ══ MÉTRICAS ══════════════════════════════════════════════════ */}
         <View style={s.recuadroMétricasContenedor}>
-          <View
-            style={[
-              s.tarjetaMétricaVertical,
-              { backgroundColor: "#F7FBF9", borderColor: "#DEF7EC" },
-            ]}
-          >
-            <View style={s.tarjetaHeaderRow}>
+          {/* Tarjeta EFECTIVO */}
+          <View style={s.metricaCard}>
+            <AppText style={s.metricaEncabezado}>EFECTIVO</AppText>
+            <View style={s.metricaFila}>
               <View
-                style={[s.iconoCirculoSolid, { backgroundColor: "#00875A" }]}
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
               >
-                <MaterialCommunityIcons name="cash" size={18} color="#FFF" />
-              </View>
-              <AppText style={[s.tarjetaTitulo, { color: "#0A5C36" }]}>
-                Dinero recibido efectivo
-              </AppText>
-            </View>
-            <View style={s.tarjetaContenido}>
-              <View style={s.tarjetaFilaInterna}>
-                <AppText style={s.tarjetaFilaLabel}>Venta</AppText>
-                <AppText style={[s.tarjetaFilaValor, { color: "#0A5C36" }]}>
-                  {fmt(stats.efectivoVenta)}
-                </AppText>
-              </View>
-              <View style={s.tarjetaFilaInterna}>
-                <AppText style={s.tarjetaFilaLabel}>Abonos</AppText>
-                <AppText style={[s.tarjetaFilaValor, { color: "#0A5C36" }]}>
-                  {fmt(stats.efectivoAbono)}
-                </AppText>
-              </View>
-            </View>
-            <View style={[s.tarjetaDivider, { backgroundColor: "#E6F4EA" }]} />
-            <View style={s.tarjetaFilaInterna}>
-              <AppText style={[s.tarjetaTotalLabel, { color: "#0A5C36" }]}>
-                Total
-              </AppText>
-              <AppText style={[s.tarjetaTotalValor, { color: "#0A5C36" }]}>
-                {fmt(stats.efectivoVenta + stats.efectivoAbono)}
-              </AppText>
-            </View>
-          </View>
-
-          <View
-            style={[
-              s.tarjetaMétricaVertical,
-              { backgroundColor: "#F5F8FF", borderColor: "#E1EFFE" },
-            ]}
-          >
-            <View style={s.tarjetaHeaderRow}>
-              <View
-                style={[s.iconoCirculoSolid, { backgroundColor: "#0052CC" }]}
-              >
-                <MaterialCommunityIcons name="bank" size={16} color="#FFF" />
-              </View>
-              <AppText style={[s.tarjetaTitulo, { color: "#0B41A8" }]}>
-                Dinero recibido transferencia
-              </AppText>
-            </View>
-            <View style={s.tarjetaContenido}>
-              <View style={s.tarjetaFilaInterna}>
-                <AppText style={s.tarjetaFilaLabel}>Venta</AppText>
-                <AppText style={[s.tarjetaFilaValor, { color: "#0B41A8" }]}>
-                  {fmt(stats.transferenciaVenta)}
-                </AppText>
-              </View>
-              <View style={s.tarjetaFilaInterna}>
-                <AppText style={s.tarjetaFilaLabel}>Abonos</AppText>
-                <AppText style={[s.tarjetaFilaValor, { color: "#0B41A8" }]}>
-                  {fmt(stats.transferenciaAbono)}
-                </AppText>
-              </View>
-            </View>
-            <View style={[s.tarjetaDivider, { backgroundColor: "#E1EFFE" }]} />
-            <View style={s.tarjetaFilaInterna}>
-              <AppText style={[s.tarjetaTotalLabel, { color: "#0B41A8" }]}>
-                Total
-              </AppText>
-              <AppText style={[s.tarjetaTotalValor, { color: "#0B41A8" }]}>
-                {fmt(stats.transferenciaVenta + stats.transferenciaAbono)}
-              </AppText>
-            </View>
-          </View>
-
-          <View
-            style={[
-              s.tarjetaMétricaHorizontal,
-              { backgroundColor: "#FFFDF5", borderColor: "#FDE68A" },
-            ]}
-          >
-            <View style={s.tarjetaHeaderRowHorizontal}>
-              <View style={s.iconoCirculoOutline}>
                 <MaterialCommunityIcons
-                  name="history"
-                  size={26}
-                  color="#9A4200"
+                  name="cart-outline"
+                  size={16}
+                  color="#6B7280"
                 />
+                <AppText style={s.metricaLabel}>+ Ventas</AppText>
               </View>
-              <AppText
-                style={[s.tarjetaTituloHorizontal, { color: "#7C2D12" }]}
-              >
-                Saldos Pendientes
+              <AppText style={s.metricaValorVerde}>
+                {fmt(stats.efectivoVenta)}
               </AppText>
             </View>
-            <View style={s.tarjetaDerechaHorizontal}>
+            <View style={s.metricaFila}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <MaterialCommunityIcons
+                  name="cash-multiple"
+                  size={16}
+                  color="#6B7280"
+                />
+                <AppText style={s.metricaLabel}>+ Abonos</AppText>
+              </View>
+              <AppText style={s.metricaValorVerde}>
+                {fmt(stats.efectivoAbono)}
+              </AppText>
+            </View>
+            {stats.gastosEfectivo > 0 && (
+              <View style={s.metricaFila}>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <MaterialCommunityIcons
+                    name="receipt-text-outline"
+                    size={16}
+                    color="#6B7280"
+                  />
+                  <AppText style={s.metricaLabel}>- Gastos</AppText>
+                </View>
+                <AppText style={s.metricaValorRojo}>
+                  -{fmt(stats.gastosEfectivo)}
+                </AppText>
+              </View>
+            )}
+            <View style={s.metricaDivisor} />
+            <View style={s.metricaFilaTotal}>
+              <AppText style={s.metricaTotalLabel}>Total efectivo</AppText>
+              <AppText style={s.metricaTotalValorVerde}>
+                {fmt(
+                  stats.efectivoVenta +
+                    stats.efectivoAbono -
+                    stats.gastosEfectivo,
+                )}
+              </AppText>
+            </View>
+          </View>
+
+          {/* Tarjeta TRANSFERENCIA */}
+          <View style={s.metricaCard}>
+            <AppText style={[s.metricaEncabezado, { color: "#7C3AED" }]}>
+              TRANSFERENCIA
+            </AppText>
+            <View style={s.metricaFila}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <MaterialCommunityIcons
+                  name="cart-outline"
+                  size={16}
+                  color="#6B7280"
+                />
+                <AppText style={s.metricaLabel}>+ Ventas</AppText>
+              </View>
+              <AppText style={[s.metricaValorVerde, { color: "#7C3AED" }]}>
+                {fmt(stats.transferenciaVenta)}
+              </AppText>
+            </View>
+            <View style={s.metricaFila}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              >
+                <MaterialCommunityIcons
+                  name="cash-multiple"
+                  size={16}
+                  color="#6B7280"
+                />
+                <AppText style={s.metricaLabel}>+ Abonos</AppText>
+              </View>
+              <AppText style={[s.metricaValorVerde, { color: "#7C3AED" }]}>
+                {fmt(stats.transferenciaAbono)}
+              </AppText>
+            </View>
+            {stats.gastosTransferencia > 0 && (
+              <View style={s.metricaFila}>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                >
+                  <MaterialCommunityIcons
+                    name="receipt-text-outline"
+                    size={16}
+                    color="#6B7280"
+                  />
+                  <AppText style={s.metricaLabel}>- Gastos</AppText>
+                </View>
+                <AppText style={s.metricaValorRojo}>
+                  -{fmt(stats.gastosTransferencia)}
+                </AppText>
+              </View>
+            )}
+            <View style={s.metricaDivisor} />
+            <View style={s.metricaFilaTotal}>
+              <AppText style={s.metricaTotalLabel}>Neto transferencia</AppText>
+              <AppText style={[s.metricaTotalValorVerde, { color: "#7C3AED" }]}>
+                {fmt(
+                  stats.transferenciaVenta +
+                    stats.transferenciaAbono -
+                    stats.gastosTransferencia,
+                )}
+              </AppText>
+            </View>
+          </View>
+
+          {/* Saldos pendientes */}
+          {stats.totalDebe > 0 && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                backgroundColor: "#FFFBEB",
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: "#FDE68A",
+                paddingHorizontal: 16,
+                paddingVertical: 14,
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name="clock-alert-outline"
+                  size={22}
+                  color="#D97706"
+                />
+                <View>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      color: "#92400E",
+                      fontWeight: "700",
+                    }}
+                  >
+                    Saldos pendientes
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 12,
+                      color: "#B45309",
+                      fontWeight: "500",
+                    }}
+                  >
+                    Créditos sin saldar en el periodo
+                  </AppText>
+                </View>
+              </View>
               <AppText
-                style={[s.tarjetaTotalValorHorizontal, { color: "#9A4200" }]}
+                style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
               >
                 {fmt(stats.totalDebe)}
               </AppText>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={20}
-                color="#9A4200"
-                style={{ marginLeft: 4 }}
-              />
             </View>
-          </View>
+          )}
         </View>
 
         <View style={s.statsMiniRow}>
@@ -1422,7 +1537,111 @@ export const HistorialScreen = () => {
           )}
         </View>
 
-        {/* LISTADO AGRUPADO DE VENTAS - SIN AVATAR (MÁXIMO ESPACIO HORIZONTAL) */}
+        {/* ══ GASTOS DEL PERIODO ════════════════════════════════════════ */}
+        {gastosFiltrados.length > 0 && (
+          <View style={{ marginBottom: 20 }}>
+            <View style={s.seccionGastosHeader}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <MaterialCommunityIcons
+                  name="receipt-text-outline"
+                  size={20}
+                  color="#E03E3E"
+                />
+                <AppText style={s.seccionGastosTitulo}>
+                  Gastos del periodo
+                </AppText>
+              </View>
+              <AppText style={s.seccionGastosMonto}>
+                -{fmt(stats.totalGastos)}
+              </AppText>
+            </View>
+
+            <View style={s.gastoCard}>
+              {/* Desglose por método */}
+              {stats.gastosEfectivo > 0 && (
+                <View style={s.gastoFila}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="cash"
+                      size={16}
+                      color="#2EAA6E"
+                    />
+                    <AppText style={s.gastoMetodoLabel}>Efectivo</AppText>
+                  </View>
+                  <AppText style={s.gastoMonto}>
+                    -{fmt(stats.gastosEfectivo)}
+                  </AppText>
+                </View>
+              )}
+              {stats.gastosTransferencia > 0 && (
+                <View style={s.gastoFila}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="bank-transfer"
+                      size={16}
+                      color="#7C3AED"
+                    />
+                    <AppText style={s.gastoMetodoLabel}>Transferencia</AppText>
+                  </View>
+                  <AppText style={s.gastoMonto}>
+                    -{fmt(stats.gastosTransferencia)}
+                  </AppText>
+                </View>
+              )}
+
+              <View style={s.gastoDivisor} />
+
+              {/* Lista de gastos individuales (máx 5) */}
+              {gastosFiltrados.slice(0, 5).map((g) => (
+                <View key={g.id} style={s.gastoFila}>
+                  <View style={{ flex: 1 }}>
+                    <AppText style={s.gastoNombre} numberOfLines={1}>
+                      {g.descripcion}
+                    </AppText>
+                    <AppText style={s.gastoSub}>
+                      {g.categoria} ·{" "}
+                      {g.metodoPago === "efectivo"
+                        ? "Efectivo"
+                        : "Transferencia"}{" "}
+                      · {g.fecha.substring(0, 10)}
+                    </AppText>
+                  </View>
+                  <AppText style={s.gastoMonto}>-{fmt(g.monto)}</AppText>
+                </View>
+              ))}
+
+              {gastosFiltrados.length > 5 && (
+                <AppText
+                  style={{
+                    fontSize: 13,
+                    color: colors.primary,
+                    fontWeight: "600",
+                    textAlign: "center",
+                    marginTop: 4,
+                  }}
+                >
+                  +{gastosFiltrados.length - 5} gastos más — ver en Gastos
+                </AppText>
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* ══ LISTADO AGRUPADO DE VENTAS ════════════════════════════════ */}
         {Object.keys(salesAgrupadas).length === 0 ? (
           <View style={{ alignItems: "center", marginTop: 40 }}>
             <MaterialCommunityIcons
@@ -1441,7 +1660,6 @@ export const HistorialScreen = () => {
               {ventasInGrupo.map((venta) => {
                 const esAnulada = venta.estado === "anulada";
                 const esPaz = evaluarFacturaPagada(venta);
-
                 const totalAbonado = abonos
                   .filter(
                     (a) => a.ventaId === venta.id && a.estado !== "anulado",
@@ -1490,7 +1708,6 @@ export const HistorialScreen = () => {
                     activeOpacity={0.7}
                   >
                     <View style={s.ventaCardTop}>
-                      {/* LADO IZQUIERDO: DETALLES SIN CÍRCULO INICIAL */}
                       <View style={s.ventaCardLeft}>
                         <View style={{ flex: 1 }}>
                           <AppText
@@ -1504,7 +1721,6 @@ export const HistorialScreen = () => {
                           >
                             {venta.nombreCliente}
                           </AppText>
-
                           <View
                             style={{
                               flexDirection: "row",
@@ -1521,7 +1737,6 @@ export const HistorialScreen = () => {
                               #{venta.numeroFactura || venta.id.substring(0, 6)}
                             </AppText>
                           </View>
-
                           {!esAnulada && (
                             <View
                               style={[
@@ -1548,7 +1763,6 @@ export const HistorialScreen = () => {
                         </View>
                       </View>
 
-                      {/* LADO DERECHO: TOTAL + ESTADO + ABONO */}
                       <View
                         style={{
                           alignItems: "flex-end",
@@ -1566,7 +1780,6 @@ export const HistorialScreen = () => {
                         >
                           {fmt(venta.total)}
                         </AppText>
-
                         <View
                           style={[s.miniBadge, { backgroundColor: badgeBg }]}
                         >
@@ -1576,7 +1789,6 @@ export const HistorialScreen = () => {
                             {badgeLabel}
                           </AppText>
                         </View>
-
                         {!esAnulada && venta.tipo === "credito" && (
                           <AppText style={s.ventaAbonoTxt}>
                             Abono: {fmt(totalAbonado)}
@@ -1632,7 +1844,7 @@ export const HistorialScreen = () => {
   );
 };
 
-// ── HOJAS DE ESTILOS ADAPTADAS ──────────────────────────────────────────────
+// ── ESTILOS ───────────────────────────────────────────────────────────────────
 const ms = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
   sheet: {
@@ -1850,15 +2062,18 @@ const s = StyleSheet.create({
   contenedorBuscador: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 14,
-    height: 54,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1.5,
+    borderColor: "#E2E6EF",
+    borderRadius: 18,
+    height: 52,
   },
   inputBuscador: {
     flex: 1,
-    fontSize: 17,
+    fontSize: 16,
     color: "#111827",
     paddingHorizontal: 12,
+    fontWeight: "500",
   },
   filtrosPanel: {
     backgroundColor: "#FFF",
@@ -1921,59 +2136,41 @@ const s = StyleSheet.create({
   },
   exportarBtnTxt: { fontSize: 15, fontWeight: "700", color: "#166534" },
 
-  recuadroMétricasContenedor: { gap: 14, marginBottom: 20 },
-  tarjetaMétricaVertical: {
+  recuadroMétricasContenedor: { gap: 12, marginBottom: 20 },
+  metricaCard: {
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
-    borderWidth: 1.2,
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 14,
+    padding: 16,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  tarjetaHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 14,
+  metricaEncabezado: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: "#16A34A",
+    letterSpacing: 0.6,
+    marginBottom: 2,
   },
-  iconoCirculoSolid: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  tarjetaTitulo: { fontSize: 18, fontWeight: "700" },
-  tarjetaContenido: { paddingLeft: 4, gap: 10 },
-  tarjetaFilaInterna: {
+  metricaFila: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 4,
   },
-  tarjetaFilaLabel: { fontSize: 16, color: "#4B5563", fontWeight: "500" },
-  tarjetaFilaValor: { fontSize: 20, fontWeight: "700" },
-  tarjetaDivider: { height: 1, marginVertical: 12, width: "100%" },
-  tarjetaTotalLabel: { fontSize: 17, fontWeight: "700" },
-  tarjetaTotalValor: { fontSize: 23, fontWeight: "800" },
-
-  tarjetaMétricaHorizontal: {
+  metricaLabel: { fontSize: 15, color: "#6B7280", fontWeight: "500" },
+  metricaValorVerde: { fontSize: 15, fontWeight: "700", color: "#16A34A" },
+  metricaValorRojo: { fontSize: 15, fontWeight: "700", color: "#DC2626" },
+  metricaDivisor: { height: 1, backgroundColor: "#F0F2F7" },
+  metricaFilaTotal: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
-    borderRadius: 16,
-    borderWidth: 1.2,
-    paddingHorizontal: 16,
-    height: 64,
-  },
-  tarjetaHeaderRowHorizontal: { flexDirection: "row", alignItems: "center" },
-  iconoCirculoOutline: {
-    marginRight: 12,
     alignItems: "center",
-    justifyContent: "center",
   },
-  tarjetaTituloHorizontal: { fontSize: 17, fontWeight: "700" },
-  tarjetaDerechaHorizontal: { flexDirection: "row", alignItems: "center" },
-  tarjetaTotalValorHorizontal: { fontSize: 22, fontWeight: "800" },
+  metricaTotalLabel: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  metricaTotalValorVerde: { fontSize: 20, fontWeight: "900", color: "#16A34A" },
 
   statsMiniRow: {
     flexDirection: "row",
@@ -1982,6 +2179,38 @@ const s = StyleSheet.create({
     paddingHorizontal: 2,
   },
   statsMiniTxt: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
+
+  // ── Sección gastos ────────────────────────────────────────────────────────
+  seccionGastosHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  seccionGastosTitulo: { fontSize: 18, fontWeight: "800", color: "#111827" },
+  seccionGastosMonto: { fontSize: 15, fontWeight: "700", color: "#E03E3E" },
+  gastoCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  gastoFila: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  gastoMetodoLabel: { fontSize: 15, color: "#6B7280", fontWeight: "500" },
+  gastoDivisor: { height: 1, backgroundColor: "#F0F2F7" },
+  gastoNombre: { fontSize: 14, fontWeight: "600", color: "#111827" },
+  gastoSub: { fontSize: 12, color: "#9CA3AF" },
+  gastoMonto: { fontSize: 14, fontWeight: "700", color: "#E03E3E" },
+
   grupoTitulo: {
     fontSize: 18,
     fontWeight: "800",
@@ -1989,8 +2218,6 @@ const s = StyleSheet.create({
     marginBottom: 10,
     textTransform: "capitalize",
   },
-
-  // TARJETA OPTIMIZADA CON ALINEACIÓN TOTAL AL BORDE IZQUIERDO
   ventaCard: {
     flexDirection: "row",
     backgroundColor: "#FFF",
@@ -2017,7 +2244,6 @@ const s = StyleSheet.create({
   ventaHora: { fontSize: 13, color: "#94A3B8" },
   ventaDot: { fontSize: 13, color: "#CBD5E1" },
   ventaFactura: { fontSize: 13, color: "#94A3B8" },
-
   metodoPill: {
     flexDirection: "row",
     alignItems: "center",
@@ -2027,10 +2253,7 @@ const s = StyleSheet.create({
     alignSelf: "flex-start",
     marginTop: 6,
   },
-  metodoPillTxt: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  metodoPillTxt: { fontSize: 12, fontWeight: "700" },
   ventaTotal: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
   miniBadge: {
     paddingHorizontal: 10,
@@ -2045,7 +2268,6 @@ const s = StyleSheet.create({
     marginTop: 5,
     fontWeight: "500",
   },
-
   btnPrincipalAncho: {
     height: 52,
     borderRadius: 14,

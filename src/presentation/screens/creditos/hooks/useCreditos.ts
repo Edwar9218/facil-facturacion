@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, Animated } from "react-native";
+import { CajaRepositoryImpl } from "../../../../data/repositories/CajaRepositoryImpl";
 import { CreditoRepositoryImpl } from "../../../../data/repositories/CreditoRepositoryImpl";
 import { Abono } from "../../../../domain/entities/Abono";
 import {
@@ -12,6 +13,7 @@ import { useSlideModal } from "../../../hooks/useSlideModal";
 import { VistaGestor } from "../components/GestorDeudaModal";
 
 const repo = new CreditoRepositoryImpl();
+const cajaRepo = new CajaRepositoryImpl();
 
 export const useCreditos = () => {
   const [resumenes, setResumenes] = useState<ResumenCredito[]>([]);
@@ -27,7 +29,6 @@ export const useCreditos = () => {
   const [facturaSeleccionadaId, setFacturaSeleccionadaId] = useState<
     string | null
   >(null);
-
   const [vistaModal, setVistaModal] = useState<VistaGestor>("detalle");
 
   // ── Estado modal de anulación ─────────────────────────────────────────────
@@ -87,6 +88,17 @@ export const useCreditos = () => {
     }
 
     try {
+      // Sin caja abierta no se puede registrar un abono
+      const caja = await cajaRepo.getCajaAbierta();
+      if (!caja) {
+        Alert.alert(
+          "No hay caja abierta",
+          "Debes abrir una caja antes de registrar un abono.",
+          [{ text: "Entendido", style: "cancel" }],
+        );
+        return;
+      }
+
       await repo.registrarAbono({
         clienteId: detalle.clienteId,
         ventaId: facturaSeleccionadaId ?? "",
@@ -95,6 +107,7 @@ export const useCreditos = () => {
           .toLocaleString("sv-SE", { timeZone: "America/Bogota" })
           .replace(" ", "T"),
         metodoPago: metodoPagoAbono,
+        cajaId: caja.id,
       });
 
       const nuevoDetalle = await repo.getDetalle(detalle.clienteId);

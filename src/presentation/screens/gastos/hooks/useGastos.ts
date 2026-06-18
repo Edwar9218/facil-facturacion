@@ -40,7 +40,10 @@ export function useGastos() {
     null,
   );
 
-  // ── Cargar gastos del día ────────────────────────────────────────────────
+  // ── Cargar gastos del día ─────────────────────────────────────────────────
+  // Se filtra por fecha (no por caja abierta): "Gastos del día" debe mostrar
+  // todo lo registrado hoy, sin importar si la caja sigue abierta, se cerró,
+  // o incluso si hubo varias cajas abiertas/cerradas durante el mismo día.
   const cargarGastos = React.useCallback(async () => {
     setCargando(true);
     try {
@@ -99,18 +102,27 @@ export function useGastos() {
   };
 
   // ── Registrar gasto ──────────────────────────────────────────────────────
+  // Para registrar SÍ se exige caja abierta (regla de negocio: todo gasto
+  // queda asociado a una sesión de caja activa), aunque la visualización ya
+  // no dependa de ella.
   const registrarGasto = async () => {
     if (!formValido()) return;
 
     setCargando(true);
     try {
+      const caja = await cajaRepo.getCajaAbierta();
+      if (!caja) {
+        Alert.alert(
+          "No hay caja abierta",
+          "Debes abrir una caja antes de registrar un gasto.",
+          [{ text: "Entendido", style: "cancel" }],
+        );
+        return;
+      }
+
       const categoriaFinal = categoriaLibre
         ? form.categoriaPersonalizada.trim()
         : form.categoria;
-
-      // Vincular a caja abierta si existe
-      const caja = await cajaRepo.getCajaAbierta();
-      const cajaId = caja?.estado === "abierta" ? caja.id : undefined;
 
       await gastoRepo.registrarGasto({
         descripcion: form.descripcion.trim(),
@@ -118,7 +130,7 @@ export function useGastos() {
         categoria: categoriaFinal,
         metodoPago: form.metodoPago,
         foto: form.foto || undefined,
-        cajaId,
+        cajaId: caja.id,
       });
 
       cerrarModal();

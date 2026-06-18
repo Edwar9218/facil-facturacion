@@ -79,6 +79,15 @@ export class VentaRepositoryImpl implements VentaRepository {
     return rows.map(mapearVenta);
   }
 
+  // ── Ventas de una caja específica (usado por "venta del día") ─────────────
+  async getByCaja(cajaId: string): Promise<Venta[]> {
+    const rows = db.getAllSync<any>(
+      "SELECT * FROM ventas WHERE cajaId = ? ORDER BY rowid DESC;",
+      [cajaId],
+    );
+    return rows.map(mapearVenta);
+  }
+
   async create(data: Omit<Venta, "id">): Promise<Venta> {
     const id = String(Date.now());
     const año = new Date().getFullYear();
@@ -98,8 +107,8 @@ export class VentaRepositoryImpl implements VentaRepository {
     db.withTransactionSync(() => {
       db.runSync(
         `INSERT INTO ventas
-           (id, clienteId, nombreCliente, items, total, tipo, fecha, numeroFactura, estado, metodoPago)
-         VALUES (?, ?, ?, '[]', ?, ?, ?, ?, ?, ?);`,
+           (id, clienteId, nombreCliente, items, total, tipo, fecha, numeroFactura, estado, metodoPago, cajaId)
+         VALUES (?, ?, ?, '[]', ?, ?, ?, ?, ?, ?, ?);`,
         [
           id,
           data.clienteId,
@@ -110,6 +119,7 @@ export class VentaRepositoryImpl implements VentaRepository {
           numeroFactura,
           estadoInicial,
           data.metodoPago ?? null,
+          data.cajaId ?? null,
         ],
       );
 
@@ -240,6 +250,7 @@ export class VentaRepositoryImpl implements VentaRepository {
       estado: "anulada",
       metodoPago:
         (ventaRow.metodoPago as "efectivo" | "transferencia" | null) ?? null,
+      cajaId: ventaRow.cajaId ?? null,
       anulacion,
     };
   }

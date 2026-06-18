@@ -12,7 +12,8 @@ export interface CajaRepository {
   getCajaAbiertaAnterior(): Promise<Caja | null>;
   /** Historial completo de cajas, ordenado de la más reciente a la más antigua. */
   getHistorial(): Promise<Caja[]>;
-  getResumen(fecha: string): Promise<ResumenCaja>;
+  /** Totales (ventas, abonos, gastos) de una caja específica, sin mezclar con otras. */
+  getResumen(cajaId: string): Promise<ResumenCaja>;
 
   // ── Acciones ─────────────────────────────────────────────────────────────
   /** Abre una nueva caja. Falla si ya existe una caja abierta. */

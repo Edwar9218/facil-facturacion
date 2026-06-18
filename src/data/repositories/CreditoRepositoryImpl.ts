@@ -2,8 +2,8 @@
 
 import { Abono } from "../../domain/entities/Abono";
 import { DetalleCredito, ResumenCredito } from "../../domain/entities/Credito";
-import { CreditoRepository } from "../../domain/repositories/CreditoRepository";
 import db from "../database/database";
+import { CreditoRepository } from "./CreditoRepository";
 
 // ── Formatear fecha ───────────────────────────────────────────────────────────
 const formatearFecha = (fecha: string): string => {
@@ -23,6 +23,14 @@ export class CreditoRepositoryImpl implements CreditoRepository {
   // ── Todos los abonos (sin filtrar) ────────────────────────────────────────
   async getAbonos(): Promise<Abono[]> {
     return db.getAllSync<Abono>("SELECT * FROM abonos;");
+  }
+
+  // ── Abonos de una caja específica (usado por "venta del día") ────────────
+  async getAbonosPorCaja(cajaId: string): Promise<Abono[]> {
+    return db.getAllSync<Abono>(
+      "SELECT * FROM abonos WHERE cajaId = ? ORDER BY rowid DESC;",
+      [cajaId],
+    );
   }
 
   // ── Resúmenes de Cartera (solo abonos activos cuentan) ────────────────────
@@ -149,12 +157,14 @@ export class CreditoRepositoryImpl implements CreditoRepository {
     monto,
     fecha,
     metodoPago,
+    cajaId,
   }: {
     clienteId: string;
     ventaId: string;
     monto: number;
     fecha: string;
     metodoPago?: string;
+    cajaId?: string;
   }) {
     try {
       let montoRestante = monto;
@@ -167,6 +177,7 @@ export class CreditoRepositoryImpl implements CreditoRepository {
           monto,
           fecha,
           metodoPago,
+          cajaId,
         );
         this.recalcularEstadoVenta(ventaId);
       } else {
@@ -193,6 +204,7 @@ export class CreditoRepositoryImpl implements CreditoRepository {
               aPagar,
               fecha,
               metodoPago,
+              cajaId,
             );
             montoRestante -= aPagar;
             this.recalcularEstadoVenta(venta.id);
@@ -271,10 +283,11 @@ export class CreditoRepositoryImpl implements CreditoRepository {
     monto: number,
     fecha: string,
     metodoPago?: string,
+    cajaId?: string,
   ) {
     db.runSync(
-      `INSERT INTO abonos (id, clienteId, ventaId, monto, fecha, metodoPago, estado)
-       VALUES (?, ?, ?, ?, ?, ?, 'activo');`,
+      `INSERT INTO abonos (id, clienteId, ventaId, monto, fecha, metodoPago, estado, cajaId)
+       VALUES (?, ?, ?, ?, ?, ?, 'activo', ?);`,
       [
         Date.now().toString() + Math.random(),
         clienteId,
@@ -282,6 +295,7 @@ export class CreditoRepositoryImpl implements CreditoRepository {
         monto,
         fecha,
         metodoPago ?? null,
+        cajaId ?? null,
       ],
     );
   }

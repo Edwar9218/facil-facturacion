@@ -17,6 +17,7 @@ import {
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as XLSX from "xlsx";
+import { CajaRepositoryImpl } from "../../../data/repositories/CajaRepositoryImpl";
 import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
 import { GastoRepositoryImpl } from "../../../data/repositories/GastoRepositoryImpl";
 import { VentaRepositoryImpl } from "../../../data/repositories/VentaRepositoryImpl";
@@ -62,6 +63,7 @@ const fechaLarga = (fecha: string) => {
 const ventaRepo = new VentaRepositoryImpl();
 const creditoRepo = new CreditoRepositoryImpl();
 const gastoRepo = new GastoRepositoryImpl();
+const cajaRepo = new CajaRepositoryImpl();
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 type TipoEstado = "todas" | "pazysalvo" | "debe" | "anulada";
@@ -76,12 +78,11 @@ interface Abono {
 }
 
 const AVATAR_COLORS = [
-  { bg: "#FCE4EC", fg: "#E91E63" },
-  { bg: "#E8F5E9", fg: "#2E7D32" },
-  { bg: "#EDE9FE", fg: "#7C3AED" },
-  { bg: "#FFF3E0", fg: "#F59E0B" },
-  { bg: "#E3F2FD", fg: "#1565C0" },
+  { bg: "#EBF3FF", fg: "#2563EB" },
+  { bg: "#FEF3C7", fg: "#D97706" },
+  { bg: "#EBF7EE", fg: "#16A34A" },
   { bg: "#F3E8FF", fg: "#9333EA" },
+  { bg: "#FCE4EC", fg: "#E91E63" },
 ];
 
 // ── Modal Factura ─────────────────────────────────────────────────────────────
@@ -120,6 +121,12 @@ const ModalFactura = ({
       : "clock-outline";
   const badgeLabel = esAnulada ? "Anulada" : esPazYSalvo ? "Al día" : "En mora";
 
+  const metodoRaw = String(
+    venta.metodoPago || (venta as any).metodoCuotaInicial || "",
+  ).toLowerCase();
+  const esTransferencia = metodoRaw.includes("transferencia");
+  const tieneMetodo = !esAnulada && metodoRaw.length > 0;
+
   return (
     <Modal
       visible={visible}
@@ -140,7 +147,7 @@ const ModalFactura = ({
             <AppText style={ms.headerFecha}>{fechaLarga(venta.fecha)}</AppText>
           </View>
           <TouchableOpacity style={ms.btnClose} onPress={onClose}>
-            <MaterialCommunityIcons name="close" size={18} color="#fff" />
+            <MaterialCommunityIcons name="close" size={22} color="#fff" />
           </TouchableOpacity>
         </View>
 
@@ -168,7 +175,7 @@ const ModalFactura = ({
             <View style={[ms.badge, { backgroundColor: badgeBg }]}>
               <MaterialCommunityIcons
                 name={badgeIcon as any}
-                size={14}
+                size={16}
                 color={badgeColor}
               />
               <AppText style={[ms.badgeTxt, { color: badgeColor }]}>
@@ -187,14 +194,14 @@ const ModalFactura = ({
                   marginBottom: 8,
                 }}
               >
-                <MaterialCommunityIcons name="cancel" size={18} color={RED} />
+                <MaterialCommunityIcons name="cancel" size={22} color={RED} />
                 <AppText
-                  style={{ fontSize: 15, fontWeight: "800", color: RED }}
+                  style={{ fontSize: 18, fontWeight: "800", color: RED }}
                 >
                   Factura anulada
                 </AppText>
               </View>
-              <View style={{ gap: 4 }}>
+              <View style={{ gap: 6 }}>
                 <View style={ms.anulacionFila}>
                   <AppText style={ms.anulacionLabel}>Fecha:</AppText>
                   <AppText style={ms.anulacionValor}>
@@ -273,7 +280,7 @@ const ModalFactura = ({
             >
               <MaterialCommunityIcons
                 name="shopping-outline"
-                size={15}
+                size={18}
                 color={GRAY}
               />
               <AppText style={ms.totalLabel}>
@@ -299,7 +306,7 @@ const ModalFactura = ({
             <View style={ms.fiadoInfo}>
               <MaterialCommunityIcons
                 name="information-outline"
-                size={16}
+                size={20}
                 color={AMBER}
               />
               <AppText style={ms.fiadoTxt}>
@@ -311,34 +318,30 @@ const ModalFactura = ({
 
           {venta.numeroFactura && (
             <View style={ms.facturaRow}>
-              <MaterialCommunityIcons name="receipt" size={14} color={GRAY} />
+              <MaterialCommunityIcons name="receipt" size={16} color={GRAY} />
               <AppText style={ms.facturaTxt}>
                 Factura #{venta.numeroFactura}
               </AppText>
             </View>
           )}
 
-          {!esAnulada && venta.tipo === "contado" && venta.metodoPago && (
+          {tieneMetodo && (
             <View style={[ms.facturaRow, { marginTop: 6 }]}>
               <MaterialCommunityIcons
-                name={
-                  venta.metodoPago === "efectivo" ? "cash" : "bank-transfer"
-                }
-                size={14}
-                color={venta.metodoPago === "efectivo" ? "#16A34A" : "#7C3AED"}
+                name={esTransferencia ? "bank-transfer" : "cash"}
+                size={18}
+                color={esTransferencia ? "#7C3AED" : "#16A34A"}
               />
               <AppText
                 style={[
                   ms.facturaTxt,
                   {
-                    color:
-                      venta.metodoPago === "efectivo" ? "#16A34A" : "#7C3AED",
-                    fontWeight: "600",
+                    color: esTransferencia ? "#7C3AED" : "#16A34A",
+                    fontWeight: "700",
                   },
                 ]}
               >
-                Pagado en{" "}
-                {venta.metodoPago === "efectivo" ? "efectivo" : "transferencia"}
+                Pagado en {esTransferencia ? "transferencia" : "efectivo"}
               </AppText>
             </View>
           )}
@@ -349,7 +352,7 @@ const ModalFactura = ({
               activeOpacity={0.8}
               onPress={() => onAnular(venta)}
             >
-              <MaterialCommunityIcons name="cancel" size={20} color={RED} />
+              <MaterialCommunityIcons name="cancel" size={22} color={RED} />
               <AppText style={ms.btnAnularTxt}>Anular factura</AppText>
             </TouchableOpacity>
           )}
@@ -373,7 +376,6 @@ const ModalAnular = ({
   onConfirmar: (motivo: string) => void;
   anulando: boolean;
 }) => {
-  const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const [motivo, setMotivo] = React.useState("");
   const [errorMotivo, setErrorMotivo] = React.useState("");
@@ -415,7 +417,7 @@ const ModalAnular = ({
           contentContainerStyle={{ flexGrow: 1, justifyContent: "flex-end" }}
           bounces={false}
           keyboardShouldPersistTaps="handled"
-          enableOnAndroid={true}
+          enableOnAndroid
           bottomOffset={20}
           extraScrollHeight={60}
         >
@@ -436,7 +438,7 @@ const ModalAnular = ({
                 style={[ms.btnClose, { backgroundColor: "#FCA5A5" }]}
                 onPress={onClose}
               >
-                <MaterialCommunityIcons name="close" size={18} color="#fff" />
+                <MaterialCommunityIcons name="close" size={22} color="#fff" />
               </TouchableOpacity>
             </View>
 
@@ -467,7 +469,7 @@ const ModalAnular = ({
               <View style={ms.avisoAnulacion}>
                 <MaterialCommunityIcons
                   name="alert-circle-outline"
-                  size={18}
+                  size={22}
                   color="#92400E"
                 />
                 <AppText style={ms.avisoTxt}>
@@ -506,7 +508,7 @@ const ModalAnular = ({
                   <AppText style={mf.errorTxt}>{errorMotivo}</AppText>
                 )}
                 <AppText
-                  style={{ fontSize: 12, color: "#9CA3AF", textAlign: "right" }}
+                  style={{ fontSize: 14, color: "#9CA3AF", textAlign: "right" }}
                 >
                   {motivo.length}/200
                 </AppText>
@@ -537,7 +539,7 @@ const ModalAnular = ({
                     <>
                       <MaterialCommunityIcons
                         name="cancel"
-                        size={18}
+                        size={20}
                         color="#fff"
                       />
                       <AppText style={ms.btnConfirmarAnulacionTxt}>
@@ -564,7 +566,7 @@ export const VentaDelDiaScreen = () => {
   const [todasVentasDeHoy, setTodasVentasDeHoy] = React.useState<Venta[]>([]);
   const [abonos, setAbonos] = React.useState<Abono[]>([]);
   const [deudores, setDeudores] = React.useState<ResumenCredito[]>([]);
-  const [gastos, setGastos] = React.useState<Gasto[]>([]); // ← NUEVO
+  const [gastos, setGastos] = React.useState<Gasto[]>([]);
 
   // ── Controles UI ──────────────────────────────────────────────────────────
   const [filtroEstado, setFiltroEstado] = React.useState<TipoEstado>("todas");
@@ -573,6 +575,7 @@ export const VentaDelDiaScreen = () => {
   const [refrescando, setRefrescando] = React.useState(false);
   const [mostrarTodas, setMostrarTodas] = React.useState(false);
   const [exportando, setExportando] = React.useState(false);
+  const [filtrosVisibles, setFiltrosVisibles] = React.useState(false);
 
   // ── Modales ───────────────────────────────────────────────────────────────
   const [ventaSeleccionada, setVentaSeleccionada] =
@@ -582,7 +585,7 @@ export const VentaDelDiaScreen = () => {
   const [modalAnularVisible, setModalAnularVisible] = React.useState(false);
   const [anulando, setAnulando] = React.useState(false);
 
-  // ── Trigger para refrescar la Caja cuando cambian las ventas ────────────────
+  // ── Trigger para refrescar la Caja ────────────────────────────────────────
   const [refreshCajaTrigger, setRefreshCajaTrigger] = React.useState(0);
 
   // ── Saldo real por factura ────────────────────────────────────────────────
@@ -593,6 +596,17 @@ export const VentaDelDiaScreen = () => {
         .filter((a) => a.ventaId === v.id && a.estado !== "anulado")
         .reduce((sum, a) => sum + a.monto, 0);
       mapa.set(v.id, Math.max(0, v.total - totalAbonado));
+    });
+    return mapa;
+  }, [todasVentasDeHoy, abonos]);
+
+  const totalAbonadoPorVenta = React.useMemo(() => {
+    const mapa = new Map<string, number>();
+    todasVentasDeHoy.forEach((v) => {
+      const totalAbonado = abonos
+        .filter((a) => a.ventaId === v.id && a.estado !== "anulado")
+        .reduce((sum, a) => sum + a.monto, 0);
+      mapa.set(v.id, totalAbonado);
     });
     return mapa;
   }, [todasVentasDeHoy, abonos]);
@@ -693,7 +707,6 @@ export const VentaDelDiaScreen = () => {
 
     const creditoPendiente = deudores.reduce((a, r) => a + r.saldoActual, 0);
 
-    // ── Totales gastos ────────────────────────────────────────────────────
     const totalGastosEfectivo = gastos
       .filter((g) => g.metodoPago === "efectivo")
       .reduce((a, g) => a + g.monto, 0);
@@ -723,44 +736,37 @@ export const VentaDelDiaScreen = () => {
     };
   }, [ventasFiltradas, abonos, deudores, gastos, evaluarFacturaPagada]);
 
-  // ── Top 3 productos ───────────────────────────────────────────────────────
-  const top3 = React.useMemo(() => {
-    const conteo: { [nombre: string]: number } = {};
-    todasVentasDeHoy
-      .filter((v) => v.estado !== "anulada")
-      .forEach((v) => {
-        (v.items ?? []).forEach((item: ItemVenta) => {
-          const nombre = item.nombreProducto ?? "Producto";
-          const subtotal =
-            item.subtotal ?? (item.precioUnitario ?? 0) * (item.cantidad ?? 1);
-          conteo[nombre] = (conteo[nombre] ?? 0) + subtotal;
-        });
-      });
-    return Object.entries(conteo)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([nombre, total]) => ({ nombre, total }));
-  }, [todasVentasDeHoy]);
-
   // ── Cargar datos ──────────────────────────────────────────────────────────
   const cargar = async (esRefresh = false) => {
     if (esRefresh) setRefrescando(true);
     else setCargando(true);
 
     try {
-      const [todasVentas, resumenes, listaAbonos, gastosHoy] =
+      const [abierta, ultimaHoy, resumenes] = await Promise.all([
+        cajaRepo.getCajaAbierta(),
+        cajaRepo.getUltimaCajaDelDia(fechaHoy()),
+        creditoRepo.getResumenes(),
+      ]);
+      const cajaRelevante = abierta ?? ultimaHoy;
+      setDeudores(resumenes);
+
+      if (!cajaRelevante) {
+        setTodasVentasDeHoy([]);
+        setAbonos([]);
+        setGastos([]);
+        return;
+      }
+
+      const [ventasDeLaCaja, abonosDeLaCaja, gastosDeLaCaja] =
         await Promise.all([
-          ventaRepo.getAll(),
-          creditoRepo.getResumenes(),
-          creditoRepo.getAbonos ? creditoRepo.getAbonos() : Promise.resolve([]),
-          gastoRepo.getGastosPorFecha(fechaHoy()), // ← NUEVO
+          ventaRepo.getByCaja(cajaRelevante.id),
+          creditoRepo.getAbonosPorCaja(cajaRelevante.id),
+          gastoRepo.getGastosPorCaja(cajaRelevante.id),
         ]);
 
-      const ventasDeHoy = todasVentas.filter((v) => esHoy(v.fecha));
-      setTodasVentasDeHoy(ventasDeHoy);
-      setAbonos(listaAbonos);
-      setDeudores(resumenes);
-      setGastos(gastosHoy); // ← NUEVO
+      setTodasVentasDeHoy(ventasDeLaCaja);
+      setAbonos(abonosDeLaCaja);
+      setGastos(gastosDeLaCaja);
     } catch (e) {
       console.error(e);
     } finally {
@@ -816,8 +822,6 @@ export const VentaDelDiaScreen = () => {
 
       setModalAnularVisible(false);
       setVentaAAnular(null);
-
-      // Despierta al CajaWidget para que recalcule los totales (efectivo, etc.)
       setRefreshCajaTrigger((prev) => prev + 1);
 
       Alert.alert(
@@ -989,13 +993,21 @@ export const VentaDelDiaScreen = () => {
   const ventasVisibles = mostrarTodas
     ? ventasFiltradas
     : ventasFiltradas.slice(0, 5);
-  const medallas = ["🥇", "🥈", "🥉"];
-  const barColors = ["#F59E0B", "#9CA3AF", "#CD7C2F"];
-  const maxTotal = top3[0]?.total ?? 1;
+
+  const filtrosEstado: {
+    key: TipoEstado;
+    label: string;
+    color: string;
+  }[] = [
+    { key: "todas", label: "Todas", color: colors.primary },
+    { key: "pazysalvo", label: "Activas", color: "#16A34A" },
+    { key: "debe", label: "En mora", color: "#D97706" },
+    { key: "anulada", label: "Anuladas", color: "#DC2626" },
+  ];
 
   return (
     <ScreenWrapper title="Venta del día" showBtnB={false}>
-      {/* ══ CAJA — fuera del ScrollView para que sus modales cubran toda la pantalla ══ */}
+      {/* ══ CAJA ══ */}
       <View style={{ paddingHorizontal: 20, paddingTop: 16 }}>
         <CajaWidget
           onCajaActualizada={() => cargar(true)}
@@ -1024,9 +1036,9 @@ export const VentaDelDiaScreen = () => {
       >
         <View style={{ height: 4 }} />
 
-        {/* ══ FILTRO ESTADO ═════════════════════════════════════════════ */}
+        {/* ══ BUSCADOR — siempre visible ══════════════════════════════ */}
         {hayVentasHistoricasHoy && (
-          <View style={s.filterSection}>
+          <View style={{ marginBottom: 18 }}>
             <View style={s.contenedorBuscador}>
               <MaterialCommunityIcons
                 name="magnify"
@@ -1054,591 +1066,116 @@ export const VentaDelDiaScreen = () => {
                 </TouchableOpacity>
               )}
             </View>
-
-            <AppText style={[s.filterTitle, { marginTop: 16 }]}>
-              Estado de facturas
-            </AppText>
-            <View style={[s.filterRow, { flexWrap: "wrap" }]}>
-              {(
-                [
-                  {
-                    key: "todas",
-                    label: "Todas",
-                    color: colors.primary,
-                    bgSuave: "#EFF6FF",
-                  },
-                  {
-                    key: "pazysalvo",
-                    label: "Activas",
-                    color: "#16A34A",
-                    bgSuave: "#F0FDF4",
-                  },
-                  {
-                    key: "debe",
-                    label: "En mora",
-                    color: "#D97706",
-                    bgSuave: "#FFFBEB",
-                  },
-                  {
-                    key: "anulada",
-                    label: "Anuladas",
-                    color: "#DC2626",
-                    bgSuave: "#FEF2F2",
-                  },
-                ] as {
-                  key: TipoEstado;
-                  label: string;
-                  color: string;
-                  bgSuave: string;
-                }[]
-              ).map(({ key, label, color, bgSuave }) => {
-                const activo = filtroEstado === key;
-                const conteo =
-                  key === "todas"
-                    ? todasVentasDeHoy.length
-                    : key === "anulada"
-                      ? todasVentasDeHoy.filter((v) => v.estado === "anulada")
-                          .length
-                      : key === "pazysalvo"
-                        ? todasVentasDeHoy.filter(
-                            (v) =>
-                              v.estado !== "anulada" && evaluarFacturaPagada(v),
-                          ).length
-                        : todasVentasDeHoy.filter(
-                            (v) =>
-                              v.estado !== "anulada" &&
-                              !evaluarFacturaPagada(v),
-                          ).length;
-                return (
-                  <TouchableOpacity
-                    key={key}
-                    style={[
-                      s.filterBtn,
-                      { backgroundColor: activo ? color : bgSuave, flex: 1 },
-                    ]}
-                    onPress={() => {
-                      setFiltroEstado(key);
-                      setMostrarTodas(false);
-                      setBusqueda("");
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <AppText
-                      style={[
-                        s.filterBtnText,
-                        { color: activo ? "#FFF" : "#4B5563", fontSize: 13 },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {label}
-                    </AppText>
-                    <View
-                      style={{
-                        marginTop: 3,
-                        backgroundColor: activo
-                          ? "rgba(255,255,255,0.25)"
-                          : color,
-                        borderRadius: 10,
-                        minWidth: 22,
-                        height: 20,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        paddingHorizontal: 5,
-                      }}
-                    >
-                      <AppText
-                        style={{
-                          fontSize: 11,
-                          fontWeight: "800",
-                          color: "#FFF",
-                        }}
-                      >
-                        {conteo}
-                      </AppText>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
           </View>
         )}
-
-        {/* ══ EXPORTAR EXCEL ════════════════════════════════════════════ */}
-        <TouchableOpacity
-          style={[s.btnExcel, exportando && { opacity: 0.6 }]}
-          activeOpacity={0.8}
-          onPress={exportarExcel}
-          disabled={exportando}
-        >
-          {exportando ? (
-            <ActivityIndicator size="small" color="#15803D" />
-          ) : (
-            <MaterialCommunityIcons
-              name="file-excel"
-              size={24}
-              color="#15803D"
-            />
-          )}
-          <AppText style={s.btnExcelTxt}>
-            {exportando
-              ? "Generando archivo..."
-              : "Exportar ventas de hoy a Excel"}
-          </AppText>
-        </TouchableOpacity>
-
-        {/* ══ TARJETA PRINCIPAL ══════════════════════════════════════════ 
-        <View style={[s.card, { marginBottom: 16 }]}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "flex-start",
-              marginBottom: 2,
-            }}
-          >
-            <AppText style={s.labelGris}>
-              {filtroEstado === "debe"
-                ? "Dinero en mora"
-                : filtroEstado === "anulada"
-                  ? "Dinero anulado"
-                  : "Dinero recibido"}
-            </AppText>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 4,
-                backgroundColor: "#EFF6FF",
-                borderRadius: 8,
-                paddingHorizontal: 8,
-                paddingVertical: 4,
-              }}
-            >
-              <AppText style={{ fontSize: 12 }}>📅</AppText>
-              <AppText
-                style={{ fontSize: 12, color: "#2563EB", fontWeight: "700" }}
-              >
-                {new Date().toLocaleDateString("es-CO", {
-                  timeZone: "America/Bogota",
-                  weekday: "long",
-                  day: "numeric",
-                  month: "long",
-                })}
-              </AppText>
-            </View>
-          </View>
-
-          <AppText
-            style={[
-              s.totalGrande,
-              {
-                color:
-                  filtroEstado === "debe"
-                    ? "#D97706"
-                    : filtroEstado === "anulada"
-                      ? "#DC2626"
-                      : hayVentasHistoricasHoy
-                        ? colors.primary
-                        : colors.grayText,
-              },
-            ]}
-          >
-            {filtroEstado === "debe"
-              ? fmt(stats.totalEnMora)
-              : filtroEstado === "anulada"
-                ? fmt(stats.totalAnulado)
-                : fmt(stats.recibiidoHoy)}
-          </AppText>
-
-          {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
-            <View
-              style={{
-                backgroundColor: "#F8FAFF",
-                borderRadius: 14,
-                borderWidth: 1,
-                borderColor: "#E8EEFB",
-                padding: 14,
-                gap: 10,
-                marginBottom: 14,
-              }}
-            >
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
-                <View>
-                  <AppText
-                    style={{
-                      fontSize: 18,
-                      color: "#374151",
-                      fontWeight: "700",
-                    }}
-                  >
-                    Ventas pagadas
-                  </AppText>
-                  <AppText
-                    style={{
-                      fontSize: 14,
-                      color: "#9CA3AF",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Pago al contado
-                  </AppText>
-                </View>
-                <AppText
-                  style={{ fontSize: 20, color: "#16A34A", fontWeight: "800" }}
-                >
-                  {fmt(stats.totalContadoHoy)}
-                </AppText>
-              </View>
-
-              <View style={{ gap: 8 }}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="cash"
-                      size={17}
-                      color="#6B7280"
-                    />
-                    <AppText
-                      style={{
-                        fontSize: 16,
-                        color: "#6B7280",
-                        fontWeight: "500",
-                      }}
-                    >
-                      efectivo
-                    </AppText>
-                  </View>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#16A34A",
-                      fontWeight: "700",
-                    }}
-                  >
-                    {fmt(stats.totalEfectivoHoy)}
-                  </AppText>
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="bank-transfer"
-                      size={17}
-                      color="#6B7280"
-                    />
-                    <AppText
-                      style={{
-                        fontSize: 16,
-                        color: "#6B7280",
-                        fontWeight: "500",
-                      }}
-                    >
-                      transferencia
-                    </AppText>
-                  </View>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#16A34A",
-                      fontWeight: "700",
-                    }}
-                  >
-                    {fmt(stats.totalTransferenciaHoy)}
-                  </AppText>
-                </View>
-              </View>
-
-              {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
-                <>
-                  <View style={{ height: 1, backgroundColor: "#E8EEFB" }} />
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <View>
-                      <AppText
-                        style={{
-                          fontSize: 18,
-                          color: "#374151",
-                          fontWeight: "700",
-                        }}
-                      >
-                        Abonos recibidos
-                      </AppText>
-                      <AppText
-                        style={{
-                          fontSize: 14,
-                          color: "#9CA3AF",
-                          fontWeight: "500",
-                        }}
-                      >
-                        Pagos parciales de créditos
-                      </AppText>
-                    </View>
-                    <AppText
-                      style={{
-                        fontSize: 20,
-                        color: "#2563EB",
-                        fontWeight: "800",
-                      }}
-                    >
-                      {fmt(stats.totalAbonosHoy)}
-                    </AppText>
-                  </View>
-                </>
-              )}
-            </View>
-          )}
-
-          {stats.creditoSaldoHoy > 0 &&
-            (filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  backgroundColor: "#FFFBEB",
-                  borderRadius: 12,
-                  borderWidth: 1,
-                  borderColor: "#FDE68A",
-                  paddingHorizontal: 14,
-                  paddingVertical: 12,
-                  marginBottom: 14,
-                }}
-              >
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-                >
-                  <MaterialCommunityIcons
-                    name="clock-alert-outline"
-                    size={22}
-                    color="#D97706"
-                  />
-                  <View>
-                    <AppText
-                      style={{
-                        fontSize: 16,
-                        color: "#92400E",
-                        fontWeight: "700",
-                      }}
-                    >
-                      Pendiente de cobro
-                    </AppText>
-                    <AppText
-                      style={{
-                        fontSize: 12,
-                        color: "#B45309",
-                        fontWeight: "500",
-                      }}
-                    >
-                      Créditos sin saldar hoy
-                    </AppText>
-                  </View>
-                </View>
-                <AppText
-                  style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
-                >
-                  {fmt(stats.creditoSaldoHoy)}
-                </AppText>
-              </View>
-            )}
-
-          {stats.cantAnuladas > 0 && (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                backgroundColor: "#FEF2F2",
-                borderRadius: 12,
-                borderWidth: 1,
-                borderColor: "#FECACA",
-                paddingHorizontal: 14,
-                paddingVertical: 12,
-                marginBottom: 14,
-              }}
+        {/* ══ PANEL COLAPSABLE — solo chips de estado ══════════════════ */}
+        {hayVentasHistoricasHoy && (
+          <View style={s.filtrosPanel}>
+            <TouchableOpacity
+              style={s.filtrosHeader}
+              onPress={() => setFiltrosVisibles(!filtrosVisibles)}
+              activeOpacity={0.8}
             >
               <View
                 style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
               >
                 <MaterialCommunityIcons
-                  name="cancel"
-                  size={22}
-                  color="#DC2626"
-                />
-                <View>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      color: "#7F1D1D",
-                      fontWeight: "700",
-                    }}
-                  >
-                    Facturas anuladas
-                  </AppText>
-                  <AppText
-                    style={{
-                      fontSize: 12,
-                      color: "#991B1B",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Excluidas del total
-                  </AppText>
-                </View>
-              </View>
-              <AppText
-                style={{ fontSize: 18, color: "#DC2626", fontWeight: "800" }}
-              >
-                {stats.cantAnuladas}
-              </AppText>
-            </View>
-          )}
-
-          <View style={s.divisorH} />
-
-          <View style={s.filaCounts}>
-            <View style={s.countItem}>
-              <View style={[s.iconBubble, { backgroundColor: "#FFF3E0" }]}>
-                <MaterialCommunityIcons
-                  name="cart-outline"
+                  name="filter-variant"
                   size={24}
-                  color="#F59E0B"
+                  color={colors.primary}
                 />
+                <AppText style={s.filterTitle}>Filtros de Búsqueda</AppText>
               </View>
-              <View>
-                <AppText style={s.countNum}>{stats.ventasHoy}</AppText>
-                <AppText style={s.countLabel}>Ventas hoy</AppText>
-              </View>
-            </View>
-            <View style={s.divisorV} />
-            <View style={s.countItem}>
-              <View style={[s.iconBubble, { backgroundColor: "#FCE4EC" }]}>
-                <MaterialCommunityIcons
-                  name="account-outline"
-                  size={24}
-                  color="#E91E63"
-                />
-              </View>
-              <View>
-                <AppText style={s.countNum}>{stats.clientesHoy}</AppText>
-                <AppText style={s.countLabel}>Clientes hoy</AppText>
-              </View>
-            </View>
-          </View>
+              <MaterialCommunityIcons
+                name={filtrosVisibles ? "chevron-up" : "chevron-down"}
+                size={26}
+                color="#4B5563"
+              />
+            </TouchableOpacity>
 
-          {top3.length > 0 && (
-            <>
-              <View style={[s.divisorH, { marginTop: 4, marginBottom: 16 }]} />
-              <View style={{ gap: 12 }}>
-                <AppText
-                  style={{
-                    fontSize: 15,
-                    fontWeight: "700",
-                    color: "#111827",
-                    marginBottom: 2,
-                  }}
-                >
-                  🏆 Top productos hoy
+            {filtrosVisibles && (
+              <View style={s.filtrosContenido}>
+                <AppText style={s.seccionFiltroTitulo}>
+                  Estado de facturas
                 </AppText>
-                {top3.map((p, i) => (
-                  <View key={p.nombre} style={{ gap: 4 }}>
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                          flex: 1,
+                <View style={s.chipsGrid}>
+                  {filtrosEstado.map(({ key, label, color }) => {
+                    const activo = filtroEstado === key;
+                    const conteo =
+                      key === "todas"
+                        ? todasVentasDeHoy.length
+                        : key === "anulada"
+                          ? todasVentasDeHoy.filter(
+                              (v) => v.estado === "anulada",
+                            ).length
+                          : key === "pazysalvo"
+                            ? todasVentasDeHoy.filter(
+                                (v) =>
+                                  v.estado !== "anulada" &&
+                                  evaluarFacturaPagada(v),
+                              ).length
+                            : todasVentasDeHoy.filter(
+                                (v) =>
+                                  v.estado !== "anulada" &&
+                                  !evaluarFacturaPagada(v),
+                              ).length;
+
+                    return (
+                      <TouchableOpacity
+                        key={key}
+                        style={[
+                          s.chip,
+                          activo && {
+                            backgroundColor: color,
+                            borderColor: color,
+                          },
+                        ]}
+                        onPress={() => {
+                          setFiltroEstado(key);
+                          setMostrarTodas(false);
+                          setBusqueda("");
                         }}
+                        activeOpacity={0.8}
                       >
-                        <AppText style={{ fontSize: 18, lineHeight: 22 }}>
-                          {medallas[i]}
-                        </AppText>
                         <AppText
-                          style={{
-                            fontSize: 14,
-                            color: "#1F2937",
-                            fontWeight: "600",
-                            flex: 1,
-                          }}
-                          numberOfLines={1}
+                          style={[
+                            s.chipTxt,
+                            activo && { color: "#FFF", fontWeight: "700" },
+                          ]}
                         >
-                          {p.nombre}
+                          {label} · {conteo}
                         </AppText>
-                      </View>
-                      <AppText
-                        style={{
-                          fontSize: 14,
-                          color: "#6B7280",
-                          fontWeight: "700",
-                          marginLeft: 8,
-                        }}
-                      >
-                        $ {Number(p.total).toLocaleString("es-CO")}
-                      </AppText>
-                    </View>
-                    <View
-                      style={{
-                        height: 5,
-                        backgroundColor: "#F3F4F6",
-                        borderRadius: 4,
-                        overflow: "hidden",
-                      }}
-                    >
-                      <View
-                        style={{
-                          height: 5,
-                          borderRadius: 4,
-                          backgroundColor: barColors[i],
-                          width: `${Math.round((p.total / maxTotal) * 100)}%`,
-                        }}
-                      />
-                    </View>
-                  </View>
-                ))}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                {/* ══ EXPORTAR EXCEL ════════════════════════════════════════════ */}
+                <TouchableOpacity
+                  style={[s.exportarBtn, exportando && { opacity: 0.6 }]}
+                  activeOpacity={0.8}
+                  onPress={exportarExcel}
+                  disabled={exportando}
+                >
+                  {exportando ? (
+                    <ActivityIndicator size="small" color="#166534" />
+                  ) : (
+                    <MaterialCommunityIcons
+                      name="file-excel"
+                      size={22}
+                      color="#15803D"
+                    />
+                  )}
+                  <AppText style={s.exportarBtnTxt}>
+                    {exportando
+                      ? "Generando archivo..."
+                      : "Exportar ventas de hoy a Excel"}
+                  </AppText>
+                </TouchableOpacity>
               </View>
-            </>
-          )}
-        </View>*/}
+            )}
+          </View>
+        )}
 
         {/* ══ LISTA VENTAS DEL DÍA ══════════════════════════════════════ */}
         {hayVentasHistoricasHoy ? (
@@ -1660,17 +1197,12 @@ export const VentaDelDiaScreen = () => {
                 )}
               </View>
 
-              <View style={{ gap: 10, marginBottom: 16 }}>
-                {ventasVisibles.map((venta, index) => {
-                  const avatarColor =
-                    AVATAR_COLORS[index % AVATAR_COLORS.length];
-                  const inicial = venta.nombreCliente.charAt(0).toUpperCase();
+              <View style={{ marginBottom: 16 }}>
+                {ventasVisibles.map((venta) => {
                   const esAnulada = venta.estado === "anulada";
                   const esFacturaSaldada =
                     !esAnulada && evaluarFacturaPagada(venta);
-                  const saldo = saldoPorVenta.get(venta.id) ?? venta.total;
-                  const tieneAbonosParciales =
-                    !esAnulada && !esFacturaSaldada && saldo < venta.total;
+                  const totalAbonado = totalAbonadoPorVenta.get(venta.id) ?? 0;
 
                   const badgeBg = esAnulada
                     ? "#FEE2E2"
@@ -1688,164 +1220,135 @@ export const VentaDelDiaScreen = () => {
                       ? "Al día"
                       : "En mora";
 
-                  return (
-                    <View
-                      key={venta.id}
-                      style={[
-                        s.ventaCard,
-                        esAnulada && {
-                          opacity: 0.72,
-                          borderWidth: 1.5,
-                          borderColor: "#FECACA",
-                        },
-                      ]}
-                    >
-                      <View
-                        style={[
-                          s.avatar,
-                          {
-                            backgroundColor: esAnulada
-                              ? "#F3F4F6"
-                              : avatarColor.bg,
-                          },
-                        ]}
-                      >
-                        <AppText
-                          style={[
-                            s.avatarLetra,
-                            { color: esAnulada ? "#9CA3AF" : avatarColor.fg },
-                          ]}
-                        >
-                          {inicial}
-                        </AppText>
-                      </View>
+                  const metodoRaw = String(
+                    venta.metodoPago ||
+                      (venta as any).metodoCuotaInicial ||
+                      "efectivo",
+                  ).toLowerCase();
+                  const esTransferencia = metodoRaw.includes("transferencia");
+                  const metodoTexto = esTransferencia
+                    ? "Transferencia"
+                    : "Efectivo";
+                  const metodoIcono = esTransferencia ? "bank" : "cash";
+                  const metodoBg = esTransferencia ? "#EBF1FF" : "#EBF7EE";
+                  const metodoColor = esTransferencia ? "#1A56DB" : "#149246";
 
-                      <View style={{ flex: 1, marginLeft: 14 }}>
-                        <AppText
-                          style={[
-                            s.ventaNombre,
-                            esAnulada && { color: "#9CA3AF" },
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {venta.nombreCliente}
-                        </AppText>
-                        <AppText style={s.ventaHora}>
-                          {horaDeVenta(venta.fecha)}
-                        </AppText>
-                        {!esAnulada &&
-                          venta.tipo === "contado" &&
-                          venta.metodoPago && (
+                  return (
+                    <TouchableOpacity
+                      key={venta.id}
+                      style={[s.ventaCard, esAnulada && s.ventaCardAnulada]}
+                      activeOpacity={0.7}
+                      onPress={() => abrirModal(venta)}
+                    >
+                      <View style={s.ventaCardTop}>
+                        <View style={s.ventaCardLeft}>
+                          <View style={{ flex: 1 }}>
+                            <AppText
+                              style={[
+                                s.clienteName,
+                                esAnulada && {
+                                  textDecorationLine: "line-through",
+                                  color: "#9CA3AF",
+                                },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {venta.nombreCliente}
+                            </AppText>
+
                             <View
                               style={{
                                 flexDirection: "row",
                                 alignItems: "center",
-                                gap: 3,
-                                marginTop: 3,
+                                gap: 5,
+                                marginTop: 4,
                               }}
                             >
-                              <MaterialCommunityIcons
-                                name={
-                                  venta.metodoPago === "efectivo"
-                                    ? "cash"
-                                    : "bank-transfer"
-                                }
-                                size={13}
-                                color={
-                                  venta.metodoPago === "efectivo"
-                                    ? "#16A34A"
-                                    : "#7C3AED"
-                                }
-                              />
-                              <AppText
-                                style={{
-                                  fontSize: 12,
-                                  color:
-                                    venta.metodoPago === "efectivo"
-                                      ? "#16A34A"
-                                      : "#7C3AED",
-                                  fontWeight: "600",
-                                }}
-                              >
-                                {venta.metodoPago === "efectivo"
-                                  ? "Efectivo"
-                                  : "Transferencia"}
+                              <AppText style={s.ventaHora}>
+                                {horaDeVenta(venta.fecha)}
                               </AppText>
+                              {venta.numeroFactura && (
+                                <>
+                                  <AppText style={s.ventaDot}>•</AppText>
+                                  <AppText style={s.ventaFactura}>
+                                    #{venta.numeroFactura}
+                                  </AppText>
+                                </>
+                              )}
                             </View>
-                          )}
-                      </View>
 
-                      <View style={{ alignItems: "flex-end", marginRight: 12 }}>
-                        {!esAnulada && !esFacturaSaldada ? (
-                          <>
-                            <AppText
-                              style={[s.ventaMonto, { color: "#D97706" }]}
-                            >
-                              {fmt(saldo)}
-                            </AppText>
-                            {tieneAbonosParciales && (
-                              <AppText
-                                style={{
-                                  fontSize: 11,
-                                  color: "#9CA3AF",
-                                  marginBottom: 1,
-                                }}
+                            {!esAnulada && (
+                              <View
+                                style={[
+                                  s.metodoPill,
+                                  { backgroundColor: metodoBg },
+                                ]}
                               >
-                                de {fmt(venta.total)}
-                              </AppText>
+                                <MaterialCommunityIcons
+                                  name={metodoIcono as any}
+                                  size={13}
+                                  color={metodoColor}
+                                  style={{ marginRight: 4 }}
+                                />
+                                <AppText
+                                  style={[
+                                    s.metodoPillTxt,
+                                    { color: metodoColor },
+                                  ]}
+                                >
+                                  {metodoTexto}
+                                </AppText>
+                              </View>
                             )}
-                          </>
-                        ) : (
+                          </View>
+                        </View>
+
+                        <View
+                          style={{
+                            alignItems: "flex-end",
+                            justifyContent: "center",
+                          }}
+                        >
                           <AppText
                             style={[
-                              s.ventaMonto,
+                              s.ventaTotal,
                               esAnulada && {
-                                color: "#9CA3AF",
                                 textDecorationLine: "line-through",
-                                fontSize: 15,
+                                color: "#9CA3AF",
                               },
                             ]}
                           >
                             {fmt(venta.total)}
                           </AppText>
-                        )}
-                        <View style={[s.badge, { backgroundColor: badgeBg }]}>
-                          <AppText style={[s.badgeTxt, { color: badgeColor }]}>
-                            {badgeLabel}
-                          </AppText>
+
+                          <View
+                            style={[s.miniBadge, { backgroundColor: badgeBg }]}
+                          >
+                            <AppText
+                              style={[s.miniBadgeTxt, { color: badgeColor }]}
+                            >
+                              {badgeLabel}
+                            </AppText>
+                          </View>
+
+                          {!esAnulada && venta.tipo === "credito" && (
+                            <AppText style={s.ventaAbonoTxt}>
+                              Abono: {fmt(totalAbonado)}
+                            </AppText>
+                          )}
                         </View>
                       </View>
-
-                      <TouchableOpacity
-                        style={[
-                          s.btnVer,
-                          {
-                            borderColor: colors.grayBorder,
-                            backgroundColor: "#F3F4F6",
-                          },
-                        ]}
-                        activeOpacity={0.7}
-                        onPress={() => abrirModal(venta)}
-                      >
-                        <MaterialCommunityIcons
-                          name="file-eye-outline"
-                          size={20}
-                          color={colors.primary}
-                        />
-                        <AppText
-                          style={[s.btnVerTxt, { color: colors.primary }]}
-                        >
-                          Ver
-                        </AppText>
-                      </TouchableOpacity>
-                    </View>
+                    </TouchableOpacity>
                   );
                 })}
               </View>
             </>
           ) : (
             <View
-              style={[s.card, { alignItems: "center", paddingVertical: 48 }]}
+              style={[
+                s.metricaCard,
+                { alignItems: "center", paddingVertical: 48 },
+              ]}
             >
               <MaterialCommunityIcons
                 name="database-search-outline"
@@ -1859,7 +1362,12 @@ export const VentaDelDiaScreen = () => {
             </View>
           )
         ) : (
-          <View style={[s.card, { alignItems: "center", paddingVertical: 48 }]}>
+          <View
+            style={[
+              s.metricaCard,
+              { alignItems: "center", paddingVertical: 48 },
+            ]}
+          >
             <MaterialCommunityIcons
               name="cart-off"
               size={64}
@@ -1885,15 +1393,8 @@ export const VentaDelDiaScreen = () => {
               </AppText>
             </View>
 
-            <View style={[s.card, { padding: 14, gap: 10 }]}>
-              {/* Fila efectivo */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
+            <View style={s.metricaCard}>
+              <View style={s.metricaFila}>
                 <View
                   style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
                 >
@@ -1902,31 +1403,14 @@ export const VentaDelDiaScreen = () => {
                     size={16}
                     color="#2EAA6E"
                   />
-                  <AppText
-                    style={{
-                      fontSize: 15,
-                      color: "#6B7280",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Efectivo
-                  </AppText>
+                  <AppText style={s.metricaLabel}>Efectivo</AppText>
                 </View>
-                <AppText
-                  style={{ fontSize: 15, fontWeight: "700", color: "#E03E3E" }}
-                >
+                <AppText style={s.gastoMonto}>
                   -{fmt(stats.totalGastosEfectivo)}
                 </AppText>
               </View>
 
-              {/* Fila transferencia */}
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                }}
-              >
+              <View style={s.metricaFila}>
                 <View
                   style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
                 >
@@ -1935,62 +1419,29 @@ export const VentaDelDiaScreen = () => {
                     size={16}
                     color="#7C3AED"
                   />
-                  <AppText
-                    style={{
-                      fontSize: 15,
-                      color: "#6B7280",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Transferencia
-                  </AppText>
+                  <AppText style={s.metricaLabel}>Transferencia</AppText>
                 </View>
-                <AppText
-                  style={{ fontSize: 15, fontWeight: "700", color: "#E03E3E" }}
-                >
+                <AppText style={s.gastoMonto}>
                   -{fmt(stats.totalGastosTransferencia)}
                 </AppText>
               </View>
 
-              <View style={{ height: 1, backgroundColor: "#EAECF4" }} />
+              <View style={s.metricaDivisor} />
 
-              {/* Lista resumida — máx 3 */}
               {gastos.slice(0, 3).map((g) => (
-                <View
-                  key={g.id}
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
+                <View key={g.id} style={s.metricaFila}>
                   <View style={{ flex: 1 }}>
-                    <AppText
-                      style={{
-                        fontSize: 14,
-                        fontWeight: "600",
-                        color: "#111827",
-                      }}
-                      numberOfLines={1}
-                    >
+                    <AppText style={s.gastoNombre} numberOfLines={1}>
                       {g.descripcion}
                     </AppText>
-                    <AppText style={{ fontSize: 12, color: "#9CA3AF" }}>
+                    <AppText style={s.gastoSub}>
                       {g.categoria} ·{" "}
                       {g.metodoPago === "efectivo"
                         ? "Efectivo"
                         : "Transferencia"}
                     </AppText>
                   </View>
-                  <AppText
-                    style={{
-                      fontSize: 14,
-                      fontWeight: "700",
-                      color: "#E03E3E",
-                    }}
-                  >
-                    -{fmt(g.monto)}
-                  </AppText>
+                  <AppText style={s.gastoMonto}>-{fmt(g.monto)}</AppText>
                 </View>
               ))}
 
@@ -2015,31 +1466,26 @@ export const VentaDelDiaScreen = () => {
         {deudores.length > 0 && (
           <View style={s.creditoCard}>
             <View
-              style={[
-                s.iconBubble,
-                {
-                  backgroundColor: "#FEF3C7",
-                  width: 52,
-                  height: 52,
-                  borderRadius: 26,
-                },
-              ]}
+              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
             >
               <MaterialCommunityIcons
                 name="wallet-outline"
-                size={26}
+                size={22}
                 color="#D97706"
               />
+              <View>
+                <AppText style={s.creditoTitulo}>
+                  Cartera total pendiente
+                </AppText>
+                <AppText style={s.creditoSubtitulo}>Todos los días</AppText>
+              </View>
             </View>
-            <View style={{ flex: 1, marginLeft: 14 }}>
-              <AppText style={s.creditoTitulo}>Cartera total pendiente</AppText>
-              <AppText style={s.creditoSubtitulo}>todos los días</AppText>
+            <View style={{ alignItems: "flex-end" }}>
               <AppText style={s.creditoMonto}>
                 {fmt(stats.creditoPendiente)}
-                <AppText style={s.creditoClientes}>
-                  {" · "}
-                  {deudores.length} cliente{deudores.length !== 1 ? "s" : ""}
-                </AppText>
+              </AppText>
+              <AppText style={s.creditoClientes}>
+                {deudores.length} cliente{deudores.length !== 1 ? "s" : ""}
               </AppText>
             </View>
           </View>
@@ -2071,57 +1517,7 @@ export const VentaDelDiaScreen = () => {
 // ── Estilos ───────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   centrado: { flex: 1, justifyContent: "center", alignItems: "center" },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
-    padding: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 3,
-    marginBottom: 16,
-  },
-  labelGris: { fontSize: 17, fontWeight: "500", color: "#7B8499" },
-  totalGrande: {
-    fontSize: 46,
-    fontWeight: "900",
-    letterSpacing: -1,
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  divisorH: { height: 1.5, backgroundColor: "#EAECF4", marginBottom: 16 },
-  filaCounts: { flexDirection: "row", alignItems: "center" },
-  countItem: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10 },
-  divisorV: {
-    width: 1.5,
-    height: 40,
-    backgroundColor: "#EAECF4",
-    marginHorizontal: 8,
-  },
-  iconBubble: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  countNum: { fontSize: 22, fontWeight: "800", color: "#111827" },
-  countLabel: { fontSize: 15, color: "#7B8499", fontWeight: "500" },
-  btnExcel: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-    backgroundColor: "#F0FDF4",
-    borderWidth: 1.5,
-    borderColor: "#BBF7D0",
-    borderRadius: 16,
-    paddingVertical: 16,
-    marginBottom: 16,
-  },
-  btnExcelTxt: { fontSize: 16, fontWeight: "700", color: "#15803D" },
-  filterSection: { marginBottom: 16 },
+
   contenedorBuscador: {
     flexDirection: "row",
     alignItems: "center",
@@ -2138,310 +1534,354 @@ const s = StyleSheet.create({
     paddingHorizontal: 12,
     fontWeight: "500",
   },
-  filterTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: "#111827",
-    marginBottom: 12,
-  },
-  filterRow: { flexDirection: "row", gap: 8 },
-  filterBtn: {
-    minHeight: 58,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+
+  // ── Panel colapsable (igual que Historial) ─────────────────────────────
+  filtrosPanel: {
+    backgroundColor: "#FFF",
     borderRadius: 16,
-    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    padding: 16,
+    marginBottom: 18,
+  },
+  filtrosHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
   },
-  filterBtnText: { fontSize: 14, fontWeight: "700" },
+  filterTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#111827",
+  },
+  filtrosContenido: {
+    marginTop: 16,
+    gap: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#F3F4F6",
+    paddingTop: 14,
+  },
+  seccionFiltroTitulo: {
+    fontSize: 14,
+    fontWeight: "800",
+    color: "#4B5563",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  chipsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    rowGap: 10,
+  },
+  chip: {
+    width: "48.5%",
+    paddingVertical: 13,
+    borderRadius: 12,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  chipTxt: { fontSize: 15, color: "#4B5563", fontWeight: "600" },
+
+  exportarBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 12,
+    backgroundColor: "#F0FDF4",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#BBF7D0",
+    marginBottom: 18,
+  },
+  exportarBtnTxt: { fontSize: 15, fontWeight: "700", color: "#166534" },
+
   seccionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
   },
-  seccionTitulo: { fontSize: 20, fontWeight: "800", color: "#111827" },
+  seccionTitulo: { fontSize: 18, fontWeight: "800", color: "#111827" },
   verTodasTxt: { fontSize: 15, fontWeight: "700" },
+
   ventaCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 16,
+    flexDirection: "row",
+    backgroundColor: "#FFF",
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#F3F4F6",
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 2,
+  },
+  ventaCardAnulada: {
+    opacity: 0.72,
+    borderColor: "#FECACA",
+    borderWidth: 1.5,
+  },
+  ventaCardTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flex: 1,
+  },
+  ventaCardLeft: { flexDirection: "row", alignItems: "center", flex: 1 },
+  clienteName: { fontSize: 17, fontWeight: "700", color: "#0F172A" },
+  ventaHora: { fontSize: 13, color: "#94A3B8" },
+  ventaDot: { fontSize: 13, color: "#CBD5E1" },
+  ventaFactura: { fontSize: 13, color: "#94A3B8" },
+  metodoPill: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    marginTop: 6,
+  },
+  metodoPillTxt: { fontSize: 12, fontWeight: "700" },
+  ventaTotal: { fontSize: 20, fontWeight: "800", color: "#0F172A" },
+  miniBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 10,
+    marginTop: 4,
+  },
+  miniBadgeTxt: { fontSize: 12, fontWeight: "700" },
+  ventaAbonoTxt: {
+    fontSize: 12,
+    color: "#64748B",
+    marginTop: 5,
+    fontWeight: "500",
+  },
+
+  metricaCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    gap: 10,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
     elevation: 2,
   },
-  avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarLetra: { fontSize: 20, fontWeight: "800" },
-  ventaNombre: { fontSize: 17, fontWeight: "700", color: "#111827" },
-  ventaHora: { fontSize: 14, color: "#7B8499", marginTop: 2 },
-  ventaMonto: { fontSize: 17, fontWeight: "700", color: "#111827" },
-  badge: {
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 20,
-    marginTop: 4,
-  },
-  badgeTxt: { fontSize: 13, fontWeight: "700" },
-  btnVer: {
+  metricaFila: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    gap: 4,
-    borderWidth: 1.5,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginLeft: 8,
   },
-  btnVerTxt: { fontSize: 14, fontWeight: "700" },
+  metricaLabel: { fontSize: 15, color: "#6B7280", fontWeight: "500" },
+  metricaDivisor: { height: 1, backgroundColor: "#F0F2F7" },
+
+  gastoNombre: { fontSize: 14, fontWeight: "600", color: "#111827" },
+  gastoSub: { fontSize: 12, color: "#9CA3AF" },
+  gastoMonto: { fontSize: 14, fontWeight: "700", color: "#E03E3E" },
+
   creditoCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 18,
     flexDirection: "row",
     alignItems: "center",
-    padding: 18,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 10,
-    elevation: 3,
+    justifyContent: "space-between",
+    backgroundColor: "#FFFBEB",
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#FDE68A",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     marginBottom: 12,
   },
-  creditoTitulo: { fontSize: 17, fontWeight: "800", color: "#111827" },
-  creditoSubtitulo: { fontSize: 14, color: "#7B8499", marginTop: 2 },
-  creditoMonto: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#D97706",
-    marginTop: 4,
-  },
-  creditoClientes: { fontSize: 15, fontWeight: "500", color: "#7B8499" },
+  creditoTitulo: { fontSize: 16, color: "#92400E", fontWeight: "700" },
+  creditoSubtitulo: { fontSize: 12, color: "#B45309", fontWeight: "500" },
+  creditoMonto: { fontSize: 18, color: "#D97706", fontWeight: "800" },
+  creditoClientes: { fontSize: 13, fontWeight: "500", color: "#B45309" },
+
   vacioCabeza: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     color: "#111827",
     marginBottom: 8,
   },
   vacioSub: {
-    fontSize: 16,
+    fontSize: 15,
     color: "#7B8499",
     textAlign: "center",
-    lineHeight: 24,
+    lineHeight: 22,
   },
 });
 
 const ms = StyleSheet.create({
-  overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.45)",
-  },
+  overlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)" },
   sheet: {
-    marginTop: "auto",
-    backgroundColor: "#fff",
+    backgroundColor: "#FFF",
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    maxHeight: "85%",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 16,
-    elevation: 20,
+    maxHeight: "90%",
   },
   handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: "#E2E6EF",
-    borderRadius: 2,
+    width: 42,
+    height: 6,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 3,
     alignSelf: "center",
     marginTop: 12,
-    marginBottom: 4,
+    marginBottom: 6,
   },
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderBottomWidth: 1,
-    borderBottomColor: "#F0F2F7",
+    borderBottomColor: "#F3F4F6",
   },
-  headerTitulo: { fontSize: 20, fontWeight: "800", color: "#111827" },
-  headerFecha: { fontSize: 14, color: "#7B8499", marginTop: 2 },
+  headerTitulo: { fontSize: 22, fontWeight: "800", color: "#111827" },
+  headerFecha: { fontSize: 15, color: "#6B7280", marginTop: 3 },
   btnClose: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: "#9CA3AF",
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#374151",
     alignItems: "center",
     justifyContent: "center",
   },
   clienteRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 16,
+    marginVertical: 16,
   },
   avatarGrande: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarLetra: { fontSize: 22, fontWeight: "800" },
-  clienteNombre: { fontSize: 18, fontWeight: "700", color: "#111827" },
-  clienteHora: { fontSize: 14, color: "#7B8499", marginTop: 2 },
+  avatarLetra: { fontSize: 22, fontWeight: "700" },
+  clienteNombre: { fontSize: 20, fontWeight: "700", color: "#111827" },
+  clienteHora: { fontSize: 15, color: "#6B7280", marginTop: 2 },
   badge: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: 12,
+    gap: 5,
   },
-  badgeTxt: { fontSize: 13, fontWeight: "700" },
-  divisor: { height: 1, backgroundColor: "#F0F2F7", marginBottom: 8 },
+  badgeTxt: { fontSize: 14, fontWeight: "700" },
+  bloqueAnulacion: {
+    backgroundColor: "#FEF2F2",
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: "#FEE2E2",
+    marginBottom: 16,
+  },
+  anulacionFila: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginVertical: 3,
+  },
+  anulacionLabel: { fontSize: 14, fontWeight: "600", color: "#7F1D1D" },
+  anulacionValor: { fontSize: 14, color: "#991B1B" },
+  divisor: { height: 1, backgroundColor: "#E5E7EB", marginVertical: 14 },
   divisorDashed: {
-    height: 1,
-    borderTopWidth: 1,
+    borderWidth: 0.5,
+    borderColor: "#E5E7EB",
     borderStyle: "dashed",
-    borderColor: "#E2E6EF",
-    marginVertical: 8,
+    marginVertical: 14,
   },
-  tablaHeader: { flexDirection: "row", paddingVertical: 4 },
-  colHead: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#7B8499",
-    letterSpacing: 0.3,
-  },
-  colCant: { width: 44, textAlign: "center" },
-  colPrecio: { width: 80, textAlign: "right" },
-  colTotal: { width: 80, textAlign: "right" },
+  tablaHeader: { flexDirection: "row", paddingVertical: 6 },
+  colHead: { fontSize: 14, fontWeight: "700", color: "#6B7280" },
+  colCant: { width: 50, textAlign: "center" },
+  colPrecio: { width: 85, textAlign: "right" },
+  colTotal: { width: 95, textAlign: "right" },
   filaProducto: {
     flexDirection: "row",
     alignItems: "center",
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
-    borderBottomColor: "#E2E6EF",
+    borderBottomColor: "#F3F4F6",
   },
   productoNombre: { fontSize: 16, fontWeight: "600", color: "#111827" },
-  productoPrecioUnit: { fontSize: 13, color: "#7B8499", marginTop: 2 },
-  colValor: { fontSize: 15, fontWeight: "600", color: "#111827" },
+  productoPrecioUnit: { fontSize: 13, color: "#6B7280" },
+  colValor: { fontSize: 15, fontWeight: "600", color: "#374151" },
   totalRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
+    marginVertical: 16,
   },
-  totalLabel: { fontSize: 14, color: "#7B8499", fontWeight: "500" },
-  totalMonto: { fontSize: 28, fontWeight: "900", letterSpacing: -0.5 },
+  totalLabel: { fontSize: 15, fontWeight: "600", color: "#4B5563" },
+  totalMonto: { fontSize: 26, fontWeight: "800" },
   fiadoInfo: {
     flexDirection: "row",
-    alignItems: "flex-start",
     backgroundColor: "#FFFBEB",
     borderRadius: 12,
-    padding: 14,
+    padding: 12,
     gap: 8,
-    marginTop: 8,
     borderWidth: 1,
-    borderColor: "#FDE68A",
+    borderColor: "#FEF3C7",
   },
-  fiadoTxt: { flex: 1, fontSize: 14, color: "#92400E", lineHeight: 20 },
+  fiadoTxt: { flex: 1, fontSize: 14, color: "#B45309", lineHeight: 18 },
   facturaRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
     marginTop: 12,
-    justifyContent: "center",
   },
-  facturaTxt: { fontSize: 13, color: "#7B8499" },
-  bloqueAnulacion: {
-    backgroundColor: "#FEF2F2",
+  facturaTxt: { fontSize: 14, color: "#6B7280" },
+  btnAnular: {
+    height: 50,
     borderRadius: 14,
     borderWidth: 1.5,
-    borderColor: "#FECACA",
-    padding: 14,
-    marginBottom: 4,
-    marginTop: 8,
-  },
-  anulacionFila: { flexDirection: "row", gap: 8, alignItems: "flex-start" },
-  anulacionLabel: {
-    fontSize: 13,
-    color: "#9CA3AF",
-    fontWeight: "600",
-    width: 90,
-  },
-  anulacionValor: {
-    fontSize: 13,
-    color: "#7F1D1D",
-    fontWeight: "600",
-    flexShrink: 1,
-  },
-  btnAnular: {
+    borderColor: "#FCA5A5",
+    backgroundColor: "#FFF5F5",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginTop: 16,
-    paddingVertical: 14,
-    borderRadius: 16,
-    backgroundColor: "#FEF2F2",
-    borderWidth: 1.5,
-    borderColor: "#FECACA",
+    gap: 6,
+    marginTop: 24,
   },
-  btnAnularTxt: { fontSize: 16, fontWeight: "800", color: "#DC2626" },
+  btnAnularTxt: { fontSize: 16, fontWeight: "700", color: "#DC2626" },
   resumenAnulacion: {
     backgroundColor: "#F9FAFB",
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "#E5E7EB",
-    padding: 14,
-    gap: 8,
+    padding: 16,
+    gap: 10,
   },
-  resumenFila: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  resumenLabel: { fontSize: 14, color: "#6B7280", fontWeight: "500" },
-  resumenValor: { fontSize: 14, color: "#111827", fontWeight: "700" },
+  resumenFila: { flexDirection: "row", justifyContent: "space-between" },
+  resumenLabel: { fontSize: 15, color: "#4B5563" },
+  resumenValor: { fontSize: 15, color: "#111827", fontWeight: "600" },
   avisoAnulacion: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
-    backgroundColor: "#FFFBEB",
+    backgroundColor: "#FEF3C7",
     borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "#FDE68A",
+    padding: 12,
+    gap: 8,
   },
-  avisoTxt: { flex: 1, fontSize: 13, color: "#92400E", lineHeight: 19 },
+  avisoTxt: { flex: 1, fontSize: 14, color: "#92400E", lineHeight: 18 },
   inputAreaWrap: {
     backgroundColor: "#F9FAFB",
     borderWidth: 1.5,
     borderColor: "#E5E7EB",
-    borderRadius: 16,
-    padding: 14,
-    minHeight: 90,
+    borderRadius: 14,
+    padding: 12,
+    height: 95,
   },
-  inputArea: { fontSize: 16, color: "#111827", fontWeight: "500" },
+  inputArea: { flex: 1, fontSize: 16, color: "#111827" },
   btnCancelarAnulacion: {
     height: 52,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "#F3F4F6",
     alignItems: "center",
     justifyContent: "center",
@@ -2453,22 +1893,17 @@ const ms = StyleSheet.create({
   },
   btnConfirmarAnulacion: {
     height: 52,
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: "#DC2626",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
+    gap: 6,
   },
   btnConfirmarAnulacionTxt: { fontSize: 16, fontWeight: "800", color: "#FFF" },
 });
 
 const mf = StyleSheet.create({
-  label: { fontSize: 15, fontWeight: "700", color: "#374151" },
-  errorTxt: {
-    fontSize: 13,
-    color: "#EF4444",
-    fontWeight: "500",
-    paddingLeft: 4,
-  },
+  label: { fontSize: 16, fontWeight: "700", color: "#374151" },
+  errorTxt: { fontSize: 14, color: "#EF4444", marginTop: 3 },
 });

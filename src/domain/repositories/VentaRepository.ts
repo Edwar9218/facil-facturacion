@@ -8,6 +8,13 @@ export interface AnulacionData {
 export interface VentaRepository {
   getAll(): Promise<Venta[]>;
   getByCliente(clienteId: string): Promise<Venta[]>;
+
+  /**
+   * Devuelve únicamente las ventas registradas dentro de una caja específica.
+   * Es lo que usa "venta del día" para mostrar solo lo de la caja actual.
+   */
+  getByCaja(cajaId: string): Promise<Venta[]>;
+
   create(venta: Omit<Venta, "id">): Promise<Venta>;
   delete(id: string): Promise<void>;
 

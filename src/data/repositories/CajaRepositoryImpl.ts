@@ -44,42 +44,47 @@ export class CajaRepositoryImpl implements CajaRepository {
     return db.getAllSync<Caja>("SELECT * FROM caja ORDER BY creadoEn DESC;");
   }
 
-  // ── Resumen del día ──────────────────────────────────────────────────────
-  async getResumen(fecha: string): Promise<ResumenCaja> {
-    const caja = await this.getUltimaCajaDelDia(fecha);
+  // ── Resumen de una caja específica ──────────────────────────────────────
+  async getResumen(cajaId: string): Promise<ResumenCaja> {
+    const caja = db.getFirstSync<Caja>("SELECT * FROM caja WHERE id = ?;", [
+      cajaId,
+    ]);
 
     // ── Ventas ───────────────────────────────────────────────────────────
     const ventasEfectivo =
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(total), 0) as total
        FROM ventas
-       WHERE DATE(fecha) = ? AND tipo = 'contado' AND metodoPago = 'efectivo';`,
-        [fecha],
+       WHERE cajaId = ? AND tipo = 'contado' AND metodoPago = 'efectivo';`,
+        [cajaId],
       )?.total ?? 0;
 
     const ventasTransferencia =
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(total), 0) as total
        FROM ventas
-       WHERE DATE(fecha) = ? AND tipo = 'contado' AND metodoPago = 'transferencia';`,
-        [fecha],
+       WHERE cajaId = ? AND tipo = 'contado' AND metodoPago = 'transferencia';`,
+        [cajaId],
       )?.total ?? 0;
 
     // ── Abonos ───────────────────────────────────────────────────────────
+    // NOTA: el metodoPago de un abono se guarda como "Efectivo"/"Transferencia"
+    // (con mayúscula), a diferencia de ventas y gastos que usan minúscula.
+    // Por eso aquí se compara con LOWER() para no perder esos registros.
     const abonosEfectivo =
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(monto), 0) as total
        FROM abonos
-       WHERE DATE(fecha) = ? AND metodoPago = 'efectivo' AND estado = 'activo';`,
-        [fecha],
+       WHERE cajaId = ? AND LOWER(metodoPago) = 'efectivo' AND estado = 'activo';`,
+        [cajaId],
       )?.total ?? 0;
 
     const abonosTransferencia =
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(monto), 0) as total
        FROM abonos
-       WHERE DATE(fecha) = ? AND metodoPago = 'transferencia' AND estado = 'activo';`,
-        [fecha],
+       WHERE cajaId = ? AND LOWER(metodoPago) = 'transferencia' AND estado = 'activo';`,
+        [cajaId],
       )?.total ?? 0;
 
     // ── Gastos ───────────────────────────────────────────────────────────
@@ -87,16 +92,16 @@ export class CajaRepositoryImpl implements CajaRepository {
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(monto), 0) as total
        FROM gastos
-       WHERE fecha = ? AND metodoPago = 'efectivo';`,
-        [fecha],
+       WHERE cajaId = ? AND metodoPago = 'efectivo';`,
+        [cajaId],
       )?.total ?? 0;
 
     const gastosTransferencia =
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(monto), 0) as total
        FROM gastos
-       WHERE fecha = ? AND metodoPago = 'transferencia';`,
-        [fecha],
+       WHERE cajaId = ? AND metodoPago = 'transferencia';`,
+        [cajaId],
       )?.total ?? 0;
 
     // ── Cálculos ─────────────────────────────────────────────────────────

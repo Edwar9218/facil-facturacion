@@ -13,6 +13,14 @@ const timestampAhora = (): string =>
     .replace(" ", "T");
 
 export class GastoRepositoryImpl implements GastoRepository {
+  // ── Gastos por caja ──────────────────────────────────────────────────────
+  async getGastosPorCaja(cajaId: string): Promise<Gasto[]> {
+    return db.getAllSync<Gasto>(
+      "SELECT * FROM gastos WHERE cajaId = ? ORDER BY creadoEn DESC;",
+      [cajaId],
+    );
+  }
+
   // ── Gastos por fecha ─────────────────────────────────────────────────────
   async getGastosPorFecha(fecha: string): Promise<Gasto[]> {
     return db.getAllSync<Gasto>(

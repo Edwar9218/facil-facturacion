@@ -10,6 +10,12 @@ export interface Abono {
   estado?: "activo" | "anulado"; // default: "activo"
   motivoAnulacion?: string;
   fechaAnulacion?: string;
+  /**
+   * Id de la caja que estaba abierta cuando se registró el abono.
+   * undefined/null → no había ninguna caja abierta en ese momento, o el
+   * abono es anterior a este cambio.
+   */
+  cajaId?: string;
 }
 
 export interface AnulacionAbono {

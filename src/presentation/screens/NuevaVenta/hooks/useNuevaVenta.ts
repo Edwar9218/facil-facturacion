@@ -8,6 +8,7 @@ import {
   UIManager,
 } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-controller";
+import { CajaRepositoryImpl } from "../../../../data/repositories/CajaRepositoryImpl";
 import { ClienteRepositoryImpl } from "../../../../data/repositories/ClienteRepositoryImpl";
 import { ConfiguracionRepositoryImpl } from "../../../../data/repositories/ConfiguracionRepositoryImpl";
 import { ProductoRepositoryImpl } from "../../../../data/repositories/ProductoRepositoryImpl";
@@ -29,6 +30,7 @@ const clienteRepo = new ClienteRepositoryImpl();
 const productoRepo = new ProductoRepositoryImpl();
 const ventaRepo = new VentaRepositoryImpl();
 const configRepo = new ConfiguracionRepositoryImpl();
+const cajaRepo = new CajaRepositoryImpl();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 export const smoothLayout = () =>
@@ -459,6 +461,9 @@ export const useNuevaVenta = () => {
       metodoPago === "contado" ? subMetodoPago : null;
 
     try {
+      // ── NUEVO: vincular la venta a la caja abierta en este momento ────────
+      const cajaAbierta = await cajaRepo.getCajaAbierta();
+
       const venta = await ventaRepo.create({
         clienteId: clienteSeleccionado.id,
         nombreCliente: clienteSeleccionado.nombre,
@@ -474,6 +479,7 @@ export const useNuevaVenta = () => {
         tipo: metodoPago,
         metodoPago: metodoPagoReal,
         estado: metodoPago === "credito" ? "debe" : "pagado", // ← agregar esto
+        cajaId: cajaAbierta?.id ?? null,
         fecha: new Date()
           .toLocaleString("sv-SE", { timeZone: "America/Bogota" })
           .replace(" ", "T"),

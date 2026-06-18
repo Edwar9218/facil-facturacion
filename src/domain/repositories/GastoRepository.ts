@@ -10,6 +10,12 @@ export interface GastoRepository {
     fechaFin: string;
   }): Promise<Gasto[]>;
 
+  /**
+   * Devuelve únicamente los gastos registrados dentro de una caja específica.
+   * Es lo que usa "venta del día" para mostrar solo lo de la caja actual.
+   */
+  getGastosPorCaja(cajaId: string): Promise<Gasto[]>;
+
   // ── Acciones ─────────────────────────────────────────────────────────────
   registrarGasto(params: {
     descripcion: string;

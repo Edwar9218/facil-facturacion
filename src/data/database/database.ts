@@ -40,6 +40,28 @@ const migrarTablaCaja = (): void => {
   `);
 };
 
+// ── Migración: agregar "cajaId" a "ventas" y "abonos" ─────────────────────────
+// Estas dos tablas existían antes de vincularse a una caja. SQLite no soporta
+// "ALTER TABLE ... ADD COLUMN IF NOT EXISTS", así que primero se verifica si
+// la columna ya existe (vía PRAGMA table_info) antes de intentar agregarla.
+const columnaExiste = (tabla: string, columna: string): boolean => {
+  const filas = db.getAllSync<{ name: string }>(`PRAGMA table_info(${tabla});`);
+  return filas.some((f) => f.name === columna);
+};
+
+const migrarCajaIdEnVentasYAbonos = (): void => {
+  if (!columnaExiste("ventas", "cajaId")) {
+    db.execSync(
+      `ALTER TABLE ventas ADD COLUMN cajaId TEXT REFERENCES caja(id);`,
+    );
+  }
+  if (!columnaExiste("abonos", "cajaId")) {
+    db.execSync(
+      `ALTER TABLE abonos ADD COLUMN cajaId TEXT REFERENCES caja(id);`,
+    );
+  }
+};
+
 export const initDatabase = (): void => {
   db.execSync(`PRAGMA foreign_keys = ON;`);
 
@@ -184,6 +206,9 @@ export const initDatabase = (): void => {
     );
   `);
 
+  // ── NUEVO: agrega cajaId a ventas/abonos si vienen de una versión anterior ──
+  migrarCajaIdEnVentasYAbonos();
+
   db.execSync(`
     DROP TRIGGER IF EXISTS desactivar_cliente_si_tiene_ventas;
     DROP TRIGGER IF EXISTS desactivar_producto_en_delete;
@@ -230,6 +255,13 @@ export const initDatabase = (): void => {
 
     CREATE INDEX IF NOT EXISTS idx_gastos_metodoPago
       ON gastos(metodoPago);
+
+    -- ── NUEVO: índices cajaId en ventas y abonos ────────────────────────────
+    CREATE INDEX IF NOT EXISTS idx_ventas_cajaId
+      ON ventas(cajaId);
+
+    CREATE INDEX IF NOT EXISTS idx_abonos_cajaId
+      ON abonos(cajaId);
   `);
 };
 
