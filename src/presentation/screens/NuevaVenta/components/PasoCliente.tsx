@@ -3,7 +3,6 @@ import React from "react";
 import {
   Animated,
   ScrollView,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
@@ -62,7 +61,7 @@ export function PasoCliente({
 
   const CircleStep = ({ num, active }: { num: number; active: boolean }) => (
     <View style={[s.circle, active ? s.circleActive : s.circleInactive]}>
-      <Text style={s.circleText}>{num}</Text>
+      <AppText style={s.circleText}>{num}</AppText>
     </View>
   );
 
@@ -97,7 +96,11 @@ export function PasoCliente({
         gap: spacing.xs,
       }}
     >
-      <MaterialIcons name="search" size={sizes.iconSm} color={colors.grayText} />
+      <MaterialIcons
+        name="search"
+        size={sizes.iconSm}
+        color={colors.grayText}
+      />
       <TextInput
         ref={inputRef}
         style={{
@@ -115,7 +118,11 @@ export function PasoCliente({
       />
       {value.length > 0 && (
         <TouchableOpacity onPress={onClear}>
-          <MaterialIcons name="cancel" size={sizes.iconSm} color={colors.grayText} />
+          <MaterialIcons
+            name="cancel"
+            size={sizes.iconSm}
+            color={colors.grayText}
+          />
         </TouchableOpacity>
       )}
     </View>
@@ -158,11 +165,15 @@ export function PasoCliente({
           justifyContent: "center",
         }}
       >
-        <MaterialIcons name={iconName as any} size={20} color={colors.primary} />
+        <MaterialIcons
+          name={iconName as any}
+          size={20}
+          color={colors.primary}
+        />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={T.bodyBold}>{label}</Text>
-        {sublabel ? <Text style={T.caption}>{sublabel}</Text> : null}
+        <AppText style={T.bodyBold}>{label}</AppText>
+        {sublabel ? <AppText style={T.caption}>{sublabel}</AppText> : null}
       </View>
       <MaterialIcons name="chevron-right" size={18} color={colors.primary} />
     </TouchableOpacity>
@@ -177,14 +188,14 @@ export function PasoCliente({
       <View style={s.contentCol}>
         <View style={s.stepHeader}>
           <Ionicons name="person" size={16} color={step >= 1 ? BLUE : "#CCC"} />
-          <Text
+          <AppText
             style={[
               T.h3,
               step >= 1 ? { color: INK, fontWeight: "700" } : { color: "#CCC" },
             ]}
           >
             Seleccionar cliente
-          </Text>
+          </AppText>
         </View>
 
         {step === 1 && (
@@ -250,7 +261,9 @@ export function PasoCliente({
                             color="#7B8499"
                             style={{ marginBottom: 8 }}
                           />
-                          <Text style={T.body}>Escribe para buscar un cliente</Text>
+                          <AppText style={T.body}>
+                            Escribe para buscar un cliente
+                          </AppText>
                         </View>
                       ) : clientesFiltrados.length === 0 ? (
                         <View>
@@ -269,9 +282,9 @@ export function PasoCliente({
                             label: (
                               <>
                                 Crear{" "}
-                                <Text style={{ color: BLUE }}>
+                                <AppText style={{ color: BLUE }}>
                                   "{filtroCliente.trim()}"
-                                </Text>
+                                </AppText>
                               </>
                             ),
                             onPress: () => {
@@ -352,17 +365,17 @@ export function PasoCliente({
                       justifyContent: "center",
                     }}
                   >
-                    <Text
+                    <AppText
                       style={{ fontSize: 19, fontWeight: "700", color: GREEN }}
                     >
                       {clienteSeleccionado.nombre.charAt(0).toUpperCase()}
-                    </Text>
+                    </AppText>
                   </View>
                   <View style={{ flex: 1 }}>
                     <AppText variant="label">Cliente seleccionado</AppText>
-                    <Text style={[T.h2, { marginTop: 2 }]}>
+                    <AppText style={[T.h2, { marginTop: 2 }]}>
                       {clienteSeleccionado.nombre}
-                    </Text>
+                    </AppText>
                     <View
                       style={{
                         flexDirection: "row",
@@ -371,9 +384,11 @@ export function PasoCliente({
                       }}
                     >
                       <MaterialIcons name="phone" size={12} color={BLUE} />
-                      <Text style={[T.caption, { marginLeft: 2, color: BLUE }]}>
+                      <AppText
+                        style={[T.caption, { marginLeft: 2, color: BLUE }]}
+                      >
                         {clienteSeleccionado.telefono}
-                      </Text>
+                      </AppText>
                     </View>
                   </View>
                   <TouchableOpacity
@@ -384,7 +399,7 @@ export function PasoCliente({
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity style={s.btnPrimary} onPress={siguiente}>
-                  <Text style={s.btnPrimaryText}>Continuar</Text>
+                  <AppText style={s.btnPrimaryText}>Continuar</AppText>
                   <MaterialIcons name="arrow-forward" size={18} color="#fff" />
                 </TouchableOpacity>
               </View>

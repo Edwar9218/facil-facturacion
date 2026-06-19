@@ -2,9 +2,10 @@
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import React from "react";
-import { Image, Text, TouchableOpacity, View } from "react-native";
+import { Image, TouchableOpacity, View } from "react-native";
 import { Gasto } from "../../../../domain/entities/Gasto";
 import { useTheme } from "../../../../theme";
+import { AppText } from "../../../components/ui/AppText";
 
 const fmt = (n: number) =>
   n.toLocaleString("es-CO", {
@@ -71,7 +72,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
             }}
           >
             <MaterialCommunityIcons name="cancel" size={14} color="#DC2626" />
-            <Text
+            <AppText
               style={{
                 fontSize: typography.size.xs,
                 fontWeight: typography.weight.bold,
@@ -79,7 +80,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
               }}
             >
               ANULADO
-            </Text>
+            </AppText>
           </View>
         )}
 
@@ -117,7 +118,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
 
           {/* Descripción y categoría */}
           <View style={{ flex: 1 }}>
-            <Text
+            <AppText
               style={{
                 fontSize: typography.size.md,
                 fontWeight: typography.weight.bold,
@@ -127,7 +128,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
               numberOfLines={1}
             >
               {gasto.descripcion}
-            </Text>
+            </AppText>
             <View
               style={{
                 flexDirection: "row",
@@ -144,7 +145,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
                   borderRadius: 20,
                 }}
               >
-                <Text
+                <AppText
                   style={{
                     fontSize: typography.size.xs,
                     fontWeight: typography.weight.semiBold,
@@ -152,10 +153,10 @@ export function GastoCard({ gasto, onAnular }: Props) {
                   }}
                 >
                   {gasto.categoria}
-                </Text>
+                </AppText>
               </View>
               {!esAnulado && (
-                <Text
+                <AppText
                   style={{
                     fontSize: typography.size.xs,
                     color: esEfectivo ? "#2EAA6E" : "#7C3AED",
@@ -163,14 +164,14 @@ export function GastoCard({ gasto, onAnular }: Props) {
                   }}
                 >
                   {esEfectivo ? "Efectivo" : "Transferencia"}
-                </Text>
+                </AppText>
               )}
             </View>
           </View>
 
           {/* Monto y botón anular */}
           <View style={{ alignItems: "flex-end", gap: 8 }}>
-            <Text
+            <AppText
               style={{
                 fontSize: typography.size.lg,
                 fontWeight: typography.weight.black,
@@ -179,7 +180,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
               }}
             >
               -{fmt(gasto.monto)}
-            </Text>
+            </AppText>
 
             {/* Botón anular — solo si el gasto está activo */}
             {!esAnulado && (
@@ -203,7 +204,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
                   size={16}
                   color="#D97706"
                 />
-                <Text
+                <AppText
                   style={{
                     fontSize: typography.size.xs,
                     fontWeight: typography.weight.bold,
@@ -211,7 +212,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
                   }}
                 >
                   Anular
-                </Text>
+                </AppText>
               </TouchableOpacity>
             )}
           </View>
@@ -236,7 +237,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
               color="#DC2626"
               style={{ marginTop: 1 }}
             />
-            <Text
+            <AppText
               style={{
                 flex: 1,
                 fontSize: typography.size.xs,
@@ -245,7 +246,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
               }}
             >
               Motivo: {gasto.motivoAnulacion}
-            </Text>
+            </AppText>
           </View>
         )}
 
@@ -277,7 +278,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
                 paddingVertical: 2,
               }}
             >
-              <Text
+              <AppText
                 style={{
                   color: "#fff",
                   fontSize: typography.size.xs,
@@ -285,7 +286,7 @@ export function GastoCard({ gasto, onAnular }: Props) {
                 }}
               >
                 {fotoExpandida ? "Ver menos" : "Ver foto"}
-              </Text>
+              </AppText>
             </View>
           </TouchableOpacity>
         ) : null}

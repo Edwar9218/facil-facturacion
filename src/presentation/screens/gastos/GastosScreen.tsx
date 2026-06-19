@@ -7,7 +7,6 @@ import {
   Modal,
   ScrollView,
   StyleSheet,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
@@ -17,6 +16,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { CATEGORIAS_SUGERIDAS, Gasto } from "../../../domain/entities/Gasto";
 import { useTheme } from "../../../theme";
 import { ScreenWrapper } from "../../components/layout/ScreenWrapper";
+import { AppText } from "../../components/ui/AppText";
 import { Campo, FormularioModal } from "../../components/ui/FormularioModal";
 import { GastoCard } from "./components/GastoCard";
 import { TipoEstadoFiltro, TipoPeriodo, useGastos } from "./hooks/useGastos";
@@ -113,8 +113,8 @@ const ModalElegirFecha = ({
         <View style={gs.handle} />
         <View style={gs.sheetHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={gs.sheetTitulo}>Rango de fechas</Text>
-            <Text style={gs.sheetSubtitulo}>Formato: AAAA-MM-DD</Text>
+            <AppText style={gs.sheetTitulo}>Rango de fechas</AppText>
+            <AppText style={gs.sheetSubtitulo}>Formato: AAAA-MM-DD</AppText>
           </View>
           <TouchableOpacity style={gs.btnClose} onPress={onClose}>
             <MaterialCommunityIcons name="close" size={22} color="#fff" />
@@ -123,7 +123,7 @@ const ModalElegirFecha = ({
 
         <View style={{ padding: 20, gap: 20 }}>
           <View style={{ gap: 8 }}>
-            <Text style={gs.inputLabel}>📅 Fecha inicial</Text>
+            <AppText style={gs.inputLabel}>📅 Fecha inicial</AppText>
             <View
               style={[gs.inputRow, errorInicio ? gs.inputError : undefined]}
             >
@@ -148,11 +148,13 @@ const ModalElegirFecha = ({
                 />
               )}
             </View>
-            {!!errorInicio && <Text style={gs.errorTxt}>{errorInicio}</Text>}
+            {!!errorInicio && (
+              <AppText style={gs.errorTxt}>{errorInicio}</AppText>
+            )}
           </View>
 
           <View style={{ gap: 8 }}>
-            <Text style={gs.inputLabel}>📅 Fecha final</Text>
+            <AppText style={gs.inputLabel}>📅 Fecha final</AppText>
             <View style={[gs.inputRow, errorFin ? gs.inputError : undefined]}>
               <TextInput
                 style={gs.input}
@@ -176,7 +178,7 @@ const ModalElegirFecha = ({
                 />
               )}
             </View>
-            {!!errorFin && <Text style={gs.errorTxt}>{errorFin}</Text>}
+            {!!errorFin && <AppText style={gs.errorTxt}>{errorFin}</AppText>}
           </View>
 
           <TouchableOpacity
@@ -191,7 +193,7 @@ const ModalElegirFecha = ({
             activeOpacity={0.8}
           >
             <MaterialCommunityIcons name="magnify" size={22} color="#FFF" />
-            <Text style={gs.btnPrimarioTxt}>Buscar gastos</Text>
+            <AppText style={gs.btnPrimarioTxt}>Buscar gastos</AppText>
           </TouchableOpacity>
         </View>
       </KeyboardAwareScrollView>
@@ -262,10 +264,10 @@ const ModalAnularGasto = ({
             <View style={gs.handle} />
             <View style={[gs.sheetHeader, { borderBottomColor: "#FEE2E2" }]}>
               <View style={{ flex: 1 }}>
-                <Text style={[gs.sheetTitulo, { color: RED }]}>
+                <AppText style={[gs.sheetTitulo, { color: RED }]}>
                   Anular gasto
-                </Text>
-                <Text style={gs.sheetSubtitulo}>{gasto.descripcion}</Text>
+                </AppText>
+                <AppText style={gs.sheetSubtitulo}>{gasto.descripcion}</AppText>
               </View>
               <TouchableOpacity
                 style={[gs.btnClose, { backgroundColor: "#FCA5A5" }]}
@@ -279,28 +281,28 @@ const ModalAnularGasto = ({
               {/* Resumen del gasto */}
               <View style={gs.resumenAnulacion}>
                 <View style={gs.resumenFila}>
-                  <Text style={gs.resumenLabel}>Descripción</Text>
-                  <Text style={gs.resumenValor}>{gasto.descripcion}</Text>
+                  <AppText style={gs.resumenLabel}>Descripción</AppText>
+                  <AppText style={gs.resumenValor}>{gasto.descripcion}</AppText>
                 </View>
                 <View style={gs.resumenFila}>
-                  <Text style={gs.resumenLabel}>Monto</Text>
-                  <Text
+                  <AppText style={gs.resumenLabel}>Monto</AppText>
+                  <AppText
                     style={[gs.resumenValor, { color: RED, fontWeight: "800" }]}
                   >
                     {fmt(gasto.monto)}
-                  </Text>
+                  </AppText>
                 </View>
                 <View style={gs.resumenFila}>
-                  <Text style={gs.resumenLabel}>Categoría</Text>
-                  <Text style={gs.resumenValor}>{gasto.categoria}</Text>
+                  <AppText style={gs.resumenLabel}>Categoría</AppText>
+                  <AppText style={gs.resumenValor}>{gasto.categoria}</AppText>
                 </View>
                 <View style={gs.resumenFila}>
-                  <Text style={gs.resumenLabel}>Método</Text>
-                  <Text style={gs.resumenValor}>
+                  <AppText style={gs.resumenLabel}>Método</AppText>
+                  <AppText style={gs.resumenValor}>
                     {gasto.metodoPago === "efectivo"
                       ? "Efectivo"
                       : "Transferencia"}
-                  </Text>
+                  </AppText>
                 </View>
               </View>
 
@@ -311,15 +313,15 @@ const ModalAnularGasto = ({
                   size={20}
                   color="#92400E"
                 />
-                <Text style={gs.avisoTxt}>
+                <AppText style={gs.avisoTxt}>
                   Al anular el gasto quedará excluido de los totales del
                   periodo. Esta acción no se puede deshacer.
-                </Text>
+                </AppText>
               </View>
 
               {/* Motivo */}
               <View style={{ gap: 8 }}>
-                <Text style={gs.inputLabel}>Motivo de anulación</Text>
+                <AppText style={gs.inputLabel}>Motivo de anulación</AppText>
                 <View
                   style={[
                     gs.inputAreaWrap,
@@ -347,9 +349,9 @@ const ModalAnularGasto = ({
                   />
                 </View>
                 {!!errorMotivo && (
-                  <Text style={gs.errorTxt}>{errorMotivo}</Text>
+                  <AppText style={gs.errorTxt}>{errorMotivo}</AppText>
                 )}
-                <Text
+                <AppText
                   style={{
                     fontSize: 13,
                     color: "#9CA3AF",
@@ -357,7 +359,7 @@ const ModalAnularGasto = ({
                   }}
                 >
                   {motivo.length}/200
-                </Text>
+                </AppText>
               </View>
 
               <View style={{ flexDirection: "row", gap: 12 }}>
@@ -367,7 +369,7 @@ const ModalAnularGasto = ({
                   activeOpacity={0.8}
                   disabled={anulando}
                 >
-                  <Text style={gs.btnSecundarioTxt}>Cancelar</Text>
+                  <AppText style={gs.btnSecundarioTxt}>Cancelar</AppText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
@@ -388,7 +390,7 @@ const ModalAnularGasto = ({
                         size={18}
                         color="#fff"
                       />
-                      <Text style={gs.btnDangerTxt}>Anular</Text>
+                      <AppText style={gs.btnDangerTxt}>Anular</AppText>
                     </>
                   )}
                 </TouchableOpacity>
@@ -478,7 +480,7 @@ export default function GastosScreen() {
           }}
         >
           <MaterialCommunityIcons name="cash" size={16} color="#2EAA6E" />
-          <Text
+          <AppText
             style={{
               fontSize: typography.size.sm,
               fontWeight: typography.weight.bold,
@@ -486,9 +488,9 @@ export default function GastosScreen() {
             }}
           >
             Efectivo
-          </Text>
+          </AppText>
         </View>
-        <Text
+        <AppText
           style={{
             fontSize: typography.size.xl,
             fontWeight: typography.weight.black,
@@ -496,7 +498,7 @@ export default function GastosScreen() {
           }}
         >
           -{fmt(totalEfectivo)}
-        </Text>
+        </AppText>
       </View>
 
       <View
@@ -523,7 +525,7 @@ export default function GastosScreen() {
             size={16}
             color="#7C3AED"
           />
-          <Text
+          <AppText
             style={{
               fontSize: typography.size.sm,
               fontWeight: typography.weight.bold,
@@ -531,9 +533,9 @@ export default function GastosScreen() {
             }}
           >
             Transferencia
-          </Text>
+          </AppText>
         </View>
-        <Text
+        <AppText
           style={{
             fontSize: typography.size.xl,
             fontWeight: typography.weight.black,
@@ -541,7 +543,7 @@ export default function GastosScreen() {
           }}
         >
           -{fmt(totalTransferencia)}
-        </Text>
+        </AppText>
       </View>
     </View>
   );
@@ -575,7 +577,7 @@ export default function GastosScreen() {
             size={22}
             color={colors.primary}
           />
-          <Text
+          <AppText
             style={{
               fontSize: typography.size.md,
               fontWeight: typography.weight.bold,
@@ -583,7 +585,7 @@ export default function GastosScreen() {
             }}
           >
             Filtros de Búsqueda
-          </Text>
+          </AppText>
         </View>
         <MaterialCommunityIcons
           name={filtrosVisibles ? "chevron-up" : "chevron-down"}
@@ -596,7 +598,7 @@ export default function GastosScreen() {
         <View style={{ padding: spacing.md, paddingTop: 0, gap: spacing.md }}>
           {/* Periodo de tiempo */}
           <View>
-            <Text
+            <AppText
               style={{
                 fontSize: typography.size.xs,
                 fontWeight: typography.weight.bold,
@@ -607,7 +609,7 @@ export default function GastosScreen() {
               }}
             >
               Periodo de tiempo
-            </Text>
+            </AppText>
             <View
               style={{
                 flexDirection: "row",
@@ -646,7 +648,7 @@ export default function GastosScreen() {
                       }}
                       activeOpacity={0.8}
                     >
-                      <Text
+                      <AppText
                         style={{
                           fontSize: typography.size.sm,
                           fontWeight: activo
@@ -656,7 +658,7 @@ export default function GastosScreen() {
                         }}
                       >
                         {etiquetas[p]}
-                      </Text>
+                      </AppText>
                     </TouchableOpacity>
                   );
                 },
@@ -666,7 +668,7 @@ export default function GastosScreen() {
 
           {/* Estado */}
           <View>
-            <Text
+            <AppText
               style={{
                 fontSize: typography.size.xs,
                 fontWeight: typography.weight.bold,
@@ -677,7 +679,7 @@ export default function GastosScreen() {
               }}
             >
               Estado
-            </Text>
+            </AppText>
             <View style={{ flexDirection: "row", gap: spacing.sm }}>
               {(
                 [
@@ -703,7 +705,7 @@ export default function GastosScreen() {
                     onPress={() => setFiltroEstado(estado)}
                     activeOpacity={0.8}
                   >
-                    <Text
+                    <AppText
                       style={{
                         fontSize: typography.size.sm,
                         fontWeight: activo
@@ -713,7 +715,7 @@ export default function GastosScreen() {
                       }}
                     >
                       {label}
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 );
               })}
@@ -815,7 +817,7 @@ export default function GastosScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* Periodo activo */}
-          <Text
+          <AppText
             style={{
               fontSize: typography.size.sm,
               color: colors.grayText,
@@ -824,7 +826,7 @@ export default function GastosScreen() {
             }}
           >
             {etiquetaPeriodo()}
-          </Text>
+          </AppText>
 
           {renderResumen()}
           {renderFiltros()}
@@ -839,8 +841,8 @@ export default function GastosScreen() {
             <View
               style={{ alignItems: "center", paddingVertical: 48, gap: 10 }}
             >
-              <Text style={{ fontSize: 40 }}>💸</Text>
-              <Text
+              <AppText style={{ fontSize: 40 }}>💸</AppText>
+              <AppText
                 style={{
                   fontSize: typography.size.lg,
                   fontWeight: typography.weight.bold,
@@ -848,8 +850,8 @@ export default function GastosScreen() {
                 }}
               >
                 Sin gastos
-              </Text>
-              <Text
+              </AppText>
+              <AppText
                 style={{
                   fontSize: typography.size.md,
                   color: colors.grayText,
@@ -857,7 +859,7 @@ export default function GastosScreen() {
                 }}
               >
                 No hay gastos en el periodo seleccionado
-              </Text>
+              </AppText>
             </View>
           ) : (
             gastos.map((g) => (

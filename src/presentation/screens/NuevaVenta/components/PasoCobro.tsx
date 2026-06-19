@@ -1,14 +1,6 @@
-import {
-  MaterialCommunityIcons,
-  MaterialIcons,
-} from "@expo/vector-icons";
+import { MaterialCommunityIcons, MaterialIcons } from "@expo/vector-icons";
 import React from "react";
-import {
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { TextInput, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../../../theme";
 import { AppText } from "../../../components/ui/AppText";
 import { fmt } from "../hooks/useNuevaVenta";
@@ -57,7 +49,7 @@ export function PasoCobro({
 
   const CircleStep = ({ num, active }: { num: number; active: boolean }) => (
     <View style={[s.circle, active ? s.circleActive : s.circleInactive]}>
-      <Text style={s.circleText}>{num}</Text>
+      <AppText style={s.circleText}>{num}</AppText>
     </View>
   );
 
@@ -73,14 +65,16 @@ export function PasoCobro({
             size={16}
             color={step >= 3 ? BLUE : "#CCC"}
           />
-          <Text
+          <AppText
             style={[
               T.h3,
-              step >= 3 ? { color: "#111827", fontWeight: "700" } : { color: "#CCC" },
+              step >= 3
+                ? { color: "#111827", fontWeight: "700" }
+                : { color: "#CCC" },
             ]}
           >
             Finalizar cobro
-          </Text>
+          </AppText>
         </View>
 
         {step === 3 && (
@@ -90,16 +84,20 @@ export function PasoCobro({
               <View style={[s.ticketStripe, { backgroundColor: BLUE }]} />
               <View style={s.ticketBody}>
                 <View style={s.ticketRow}>
-                  <Text style={T.label}>Cliente</Text>
-                  <Text style={T.bodyBold}>{clienteSeleccionado?.nombre}</Text>
+                  <AppText style={T.label}>Cliente</AppText>
+                  <AppText style={T.bodyBold}>
+                    {clienteSeleccionado?.nombre}
+                  </AppText>
                 </View>
                 <View style={s.dividerDashed} />
                 {carrito.length === 0 ? (
                   <View style={{ paddingVertical: 14, alignItems: "center" }}>
-                    <Text style={{ fontSize: 28, marginBottom: 6 }}>🛒</Text>
-                    <Text style={[T.caption, { textAlign: "center" }]}>
+                    <AppText style={{ fontSize: 28, marginBottom: 6 }}>
+                      🛒
+                    </AppText>
+                    <AppText style={[T.caption, { textAlign: "center" }]}>
                       No hay productos en el pedido
-                    </Text>
+                    </AppText>
                   </View>
                 ) : (
                   carrito.map((item) => (
@@ -108,14 +106,14 @@ export function PasoCobro({
                       style={[s.ticketRow, { paddingVertical: 5 }]}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={T.body}>{item.nombre}</Text>
-                        <Text style={T.caption}>
+                        <AppText style={T.body}>{item.nombre}</AppText>
+                        <AppText style={T.caption}>
                           {item.qty} {item.unidad} × {fmt(item.precio)}
-                        </Text>
+                        </AppText>
                       </View>
-                      <Text style={T.bodyBold}>
+                      <AppText style={T.bodyBold}>
                         {fmt(item.precio * item.qty)}
-                      </Text>
+                      </AppText>
                     </View>
                   ))
                 )}
@@ -127,13 +125,13 @@ export function PasoCobro({
                   ]}
                 >
                   <View>
-                    <Text style={T.label}>Total a cobrar</Text>
-                    <Text style={T.number}>{fmt(totalCarrito)}</Text>
+                    <AppText style={T.label}>Total a cobrar</AppText>
+                    <AppText style={T.number}>{fmt(totalCarrito)}</AppText>
                   </View>
                   <View style={[s.totalBadge, { backgroundColor: BLUE_LIGHT }]}>
-                    <Text style={[s.totalBadgeText, { color: BLUE }]}>
+                    <AppText style={[s.totalBadgeText, { color: BLUE }]}>
                       {carrito.length} ítem{carrito.length !== 1 ? "s" : ""}
-                    </Text>
+                    </AppText>
                   </View>
                 </View>
               </View>
@@ -185,15 +183,15 @@ export function PasoCobro({
                     color={metodoPago === "contado" ? "#fff" : BLUE}
                   />
                 </View>
-                <Text
+                <AppText
                   style={[
                     s.metodoBtnLabel,
                     metodoPago === "contado" && s.metodoBtnLabelActive,
                   ]}
                 >
                   Contado
-                </Text>
-                <Text
+                </AppText>
+                <AppText
                   style={[
                     T.caption,
                     metodoPago === "contado"
@@ -202,7 +200,7 @@ export function PasoCobro({
                   ]}
                 >
                   Pago inmediato
-                </Text>
+                </AppText>
               </TouchableOpacity>
 
               {/* CRÉDITO */}
@@ -236,15 +234,15 @@ export function PasoCobro({
                     color={metodoPago === "credito" ? "#fff" : "#F59E0B"}
                   />
                 </View>
-                <Text
+                <AppText
                   style={[
                     s.metodoBtnLabel,
                     metodoPago === "credito" && { color: "#fff" },
                   ]}
                 >
                   Crédito
-                </Text>
-                <Text
+                </AppText>
+                <AppText
                   style={[
                     T.caption,
                     metodoPago === "credito"
@@ -253,7 +251,7 @@ export function PasoCobro({
                   ]}
                 >
                   Queda pendiente
-                </Text>
+                </AppText>
               </TouchableOpacity>
             </View>
 
@@ -266,9 +264,9 @@ export function PasoCobro({
                 >
                   Método de pago
                 </AppText>
-                <Text style={[T.caption, { marginBottom: spacing.sm }]}>
+                <AppText style={[T.caption, { marginBottom: spacing.sm }]}>
                   Selecciona cómo recibió el pago
-                </Text>
+                </AppText>
 
                 <View style={s.metodoPagoGrid}>
                   {/* EFECTIVO */}
@@ -317,15 +315,15 @@ export function PasoCobro({
                         color={subMetodoPago === "efectivo" ? "#fff" : GREEN}
                       />
                     </View>
-                    <Text
+                    <AppText
                       style={[
                         s.metodoBtnLabel,
                         subMetodoPago === "efectivo" && s.metodoBtnLabelActive,
                       ]}
                     >
                       Efectivo
-                    </Text>
-                    <Text
+                    </AppText>
+                    <AppText
                       style={[
                         T.caption,
                         { textAlign: "center" },
@@ -335,7 +333,7 @@ export function PasoCobro({
                       ]}
                     >
                       El cliente paga{"\n"}en efectivo
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
 
                   {/* TRANSFERENCIA */}
@@ -386,7 +384,7 @@ export function PasoCobro({
                         }
                       />
                     </View>
-                    <Text
+                    <AppText
                       style={[
                         s.metodoBtnLabel,
                         subMetodoPago === "transferencia" &&
@@ -394,8 +392,8 @@ export function PasoCobro({
                       ]}
                     >
                       Transferencia
-                    </Text>
-                    <Text
+                    </AppText>
+                    <AppText
                       style={[
                         T.caption,
                         { textAlign: "center" },
@@ -405,7 +403,7 @@ export function PasoCobro({
                       ]}
                     >
                       El cliente paga{"\n"}por transferencia
-                    </Text>
+                    </AppText>
                   </TouchableOpacity>
                 </View>
               </>
@@ -446,14 +444,14 @@ export function PasoCobro({
                           size={18}
                           color={RED}
                         />
-                        <Text
+                        <AppText
                           style={[T.captionMd, { color: RED, marginTop: 4 }]}
                         >
                           Pago insuficiente, falta saldo
-                        </Text>
-                        <Text style={[T.number, { color: RED }]}>
+                        </AppText>
+                        <AppText style={[T.number, { color: RED }]}>
                           {fmt(totalCarrito - paganConNum)}
-                        </Text>
+                        </AppText>
                       </>
                     ) : (
                       <>
@@ -462,14 +460,14 @@ export function PasoCobro({
                           size={18}
                           color={GREEN}
                         />
-                        <Text
+                        <AppText
                           style={[T.captionMd, { color: GREEN, marginTop: 4 }]}
                         >
                           Cambio para el cliente
-                        </Text>
-                        <Text style={[T.number, { color: GREEN }]}>
+                        </AppText>
+                        <AppText style={[T.number, { color: GREEN }]}>
                           {fmt(devuelve)}
-                        </Text>
+                        </AppText>
                       </>
                     )}
                   </View>
@@ -490,14 +488,14 @@ export function PasoCobro({
                   size={16}
                   color="#7C3AED"
                 />
-                <Text
+                <AppText
                   style={[
                     T.caption,
                     { flex: 1, marginLeft: 8, color: "#5B21B6" },
                   ]}
                 >
                   Pago por transferencia. No aplica cálculo de cambio.
-                </Text>
+                </AppText>
               </View>
             )}
 
@@ -505,18 +503,18 @@ export function PasoCobro({
             {metodoPago === "credito" && (
               <View style={s.CreditoInfo}>
                 <MaterialIcons name="info-outline" size={16} color="#F59E0B" />
-                <Text
+                <AppText
                   style={[
                     T.caption,
                     { flex: 1, marginLeft: 8, color: "#92400E" },
                   ]}
                 >
                   Esta venta quedará registrada como deuda de{" "}
-                  <Text style={{ fontWeight: "700" }}>
+                  <AppText style={{ fontWeight: "700" }}>
                     {clienteSeleccionado?.nombre}
-                  </Text>
+                  </AppText>
                   . Podrás cobrarla después desde su perfil.
-                </Text>
+                </AppText>
               </View>
             )}
 
@@ -524,7 +522,9 @@ export function PasoCobro({
             <View style={[s.botonesRow, { marginTop: 24 }]}>
               <TouchableOpacity style={s.btnOutline} onPress={retroceder}>
                 <MaterialIcons name="arrow-back" size={16} color={BLUE} />
-                <Text style={[s.btnOutlineText, { color: BLUE }]}>Atrás</Text>
+                <AppText style={[s.btnOutlineText, { color: BLUE }]}>
+                  Atrás
+                </AppText>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -539,7 +539,7 @@ export function PasoCobro({
                 activeOpacity={0.85}
               >
                 <MaterialIcons name="check-circle" size={20} color="#fff" />
-                <Text style={s.btnPrimaryText}>¡Listo, vendido!</Text>
+                <AppText style={s.btnPrimaryText}>¡Listo, vendido!</AppText>
               </TouchableOpacity>
             </View>
           </View>

@@ -18,9 +18,12 @@ interface Props {
   children: React.ReactNode;
   variant?: Variant;
   color?: string;
-  style?: TextStyle;
+  style?: TextStyle | TextStyle[];
   numberOfLines?: number;
   align?: "left" | "center" | "right";
+  ellipsizeMode?: "head" | "middle" | "tail" | "clip";
+  onPress?: () => void;
+  selectable?: boolean;
 }
 
 export const AppText = ({
@@ -30,6 +33,9 @@ export const AppText = ({
   style,
   numberOfLines,
   align = "left",
+  ellipsizeMode,
+  onPress,
+  selectable,
 }: Props) => {
   const { typography, colors } = useTheme();
 
@@ -91,6 +97,10 @@ export const AppText = ({
   return (
     <Text
       numberOfLines={numberOfLines}
+      ellipsizeMode={ellipsizeMode}
+      onPress={onPress}
+      selectable={selectable}
+      maxFontSizeMultiplier={1.3}
       style={[
         variantStyles[variant],
         { textAlign: align },

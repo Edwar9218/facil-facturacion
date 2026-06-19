@@ -1,7 +1,8 @@
 import { Feather } from "@expo/vector-icons";
 import React from "react";
-import { Modal, Text, TouchableOpacity, View } from "react-native";
+import { Modal, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../../theme";
+import { AppText } from "./AppText";
 
 interface Props {
   visible: boolean;
@@ -69,7 +70,7 @@ export const AppModal = ({
             }}
           >
             <View style={{ flex: 1 }}>
-              <Text
+              <AppText
                 style={{
                   fontSize: typography.size.xl,
                   fontWeight: typography.weight.bold,
@@ -77,9 +78,9 @@ export const AppModal = ({
                 }}
               >
                 {title}
-              </Text>
+              </AppText>
               {subtitle && (
-                <Text
+                <AppText
                   style={{
                     fontSize: typography.size.sm,
                     color: colors.grayText,
@@ -87,7 +88,7 @@ export const AppModal = ({
                   }}
                 >
                   {subtitle}
-                </Text>
+                </AppText>
               )}
             </View>
             <TouchableOpacity

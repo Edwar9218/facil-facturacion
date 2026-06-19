@@ -4,7 +4,6 @@ import {
   Alert,
   Animated,
   ScrollView,
-  Text,
   TextInput,
   TouchableOpacity,
   View,
@@ -93,7 +92,7 @@ export function PasoProductos({
 
   const CircleStep = ({ num, active }: { num: number; active: boolean }) => (
     <View style={[s.circle, active ? s.circleActive : s.circleInactive]}>
-      <Text style={s.circleText}>{num}</Text>
+      <AppText style={s.circleText}>{num}</AppText>
     </View>
   );
 
@@ -128,7 +127,11 @@ export function PasoProductos({
         gap: spacing.xs,
       }}
     >
-      <MaterialIcons name="search" size={sizes.iconSm} color={colors.grayText} />
+      <MaterialIcons
+        name="search"
+        size={sizes.iconSm}
+        color={colors.grayText}
+      />
       <TextInput
         ref={inputRef}
         style={{
@@ -146,7 +149,11 @@ export function PasoProductos({
       />
       {value.length > 0 && (
         <TouchableOpacity onPress={onClear}>
-          <MaterialIcons name="cancel" size={sizes.iconSm} color={colors.grayText} />
+          <MaterialIcons
+            name="cancel"
+            size={sizes.iconSm}
+            color={colors.grayText}
+          />
         </TouchableOpacity>
       )}
     </View>
@@ -189,11 +196,15 @@ export function PasoProductos({
           justifyContent: "center",
         }}
       >
-        <MaterialIcons name={iconName as any} size={20} color={colors.primary} />
+        <MaterialIcons
+          name={iconName as any}
+          size={20}
+          color={colors.primary}
+        />
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={T.bodyBold}>{label}</Text>
-        {sublabel ? <Text style={T.caption}>{sublabel}</Text> : null}
+        <AppText style={T.bodyBold}>{label}</AppText>
+        {sublabel ? <AppText style={T.caption}>{sublabel}</AppText> : null}
       </View>
       <MaterialIcons name="chevron-right" size={18} color={colors.primary} />
     </TouchableOpacity>
@@ -208,14 +219,14 @@ export function PasoProductos({
       <View style={s.contentCol}>
         <View style={s.stepHeader}>
           <Ionicons name="cart" size={16} color={step >= 2 ? BLUE : "#CCC"} />
-          <Text
+          <AppText
             style={[
               T.h3,
               step >= 2 ? { color: INK, fontWeight: "700" } : { color: "#CCC" },
             ]}
           >
             Agregar productos
-          </Text>
+          </AppText>
         </View>
 
         {step === 2 && (
@@ -230,7 +241,7 @@ export function PasoProductos({
                       : { backgroundColor: "#E6F7EF" },
                   ]}
                 >
-                  <Text
+                  <AppText
                     style={[
                       T.captionMd,
                       { color: modoModal === "editar" ? BLUE : "#2EAA6E" },
@@ -239,24 +250,24 @@ export function PasoProductos({
                     {modoModal === "editar"
                       ? "✏️  Editando producto"
                       : "➕  Agregar producto"}
-                  </Text>
+                  </AppText>
                 </View>
 
                 <View style={s.productoModal}>
                   <View style={s.modalHeader}>
-                    <Text style={{ fontSize: 30 }}>
+                    <AppText style={{ fontSize: 30 }}>
                       {EMOJIS[productoActivo.nombre] ?? "🛒"}
-                    </Text>
+                    </AppText>
                     <View style={{ flex: 1, marginLeft: 10 }}>
-                      <Text style={T.h2}>{productoActivo.nombre}</Text>
-                      <Text style={T.caption}>
+                      <AppText style={T.h2}>{productoActivo.nombre}</AppText>
+                      <AppText style={T.caption}>
                         {modoModal === "editar"
                           ? `Cantidad actual: ${
                               carrito.find((i) => i.id === productoActivo.id)
                                 ?.qty ?? "-"
                             }`
                           : `Disponible: ${productoActivo.stock ?? 0} ${productoActivo.unidad}`}
-                      </Text>
+                      </AppText>
                     </View>
                     <TouchableOpacity
                       onPress={cerrarModal}
@@ -268,7 +279,7 @@ export function PasoProductos({
 
                   <View style={s.modalGrid}>
                     <View style={s.modalField}>
-                      <Text style={T.label}>Precio unitario</Text>
+                      <AppText style={T.label}>Precio unitario</AppText>
                       <TextInput
                         style={[s.cantidadInput, { color: BLUE }]}
                         keyboardType="numeric"
@@ -282,9 +293,9 @@ export function PasoProductos({
                       />
                     </View>
                     <View style={s.modalField}>
-                      <Text style={T.label}>
+                      <AppText style={T.label}>
                         Cantidad ({productoActivo.unidad})
-                      </Text>
+                      </AppText>
                       <TextInput
                         ref={filtroInputRef}
                         style={s.cantidadInput}
@@ -296,10 +307,10 @@ export function PasoProductos({
                   </View>
 
                   <View style={s.subtotalRow}>
-                    <Text style={T.caption}>Subtotal</Text>
-                    <Text style={[T.h2, { color: BLUE }]}>
+                    <AppText style={T.caption}>Subtotal</AppText>
+                    <AppText style={[T.h2, { color: BLUE }]}>
                       {fmt(subtotalModal)}
-                    </Text>
+                    </AppText>
                   </View>
                 </View>
 
@@ -310,11 +321,11 @@ export function PasoProductos({
                   ]}
                   onPress={agregarAlCarrito}
                 >
-                  <Text style={s.btnPrimaryText}>
+                  <AppText style={s.btnPrimaryText}>
                     {modoModal === "editar"
                       ? "Guardar cambios"
                       : "Agregar al pedido"}
-                  </Text>
+                  </AppText>
                   <MaterialIcons
                     name={
                       modoModal === "editar" ? "check" : "add-shopping-cart"
@@ -391,9 +402,9 @@ export function PasoProductos({
                             color={GRAY_TEXT}
                             style={{ marginBottom: 8 }}
                           />
-                          <Text style={T.body}>
+                          <AppText style={T.body}>
                             Escribe para buscar un producto
-                          </Text>
+                          </AppText>
                         </View>
                       ) : productosFiltrados.length === 0 ? (
                         <View>
@@ -412,9 +423,9 @@ export function PasoProductos({
                             label: (
                               <>
                                 Crear{" "}
-                                <Text style={{ color: BLUE }}>
+                                <AppText style={{ color: BLUE }}>
                                   "{filtroProducto.trim()}"
-                                </Text>
+                                </AppText>
                               </>
                             ),
                             onPress: () => {
@@ -457,7 +468,12 @@ export function PasoProductos({
                                       Alert.alert(
                                         "Producto agotado",
                                         `"${p.nombre}" no tiene stock disponible y no puede agregarse a la venta.`,
-                                        [{ text: "Entendido", style: "cancel" }],
+                                        [
+                                          {
+                                            text: "Entendido",
+                                            style: "cancel",
+                                          },
+                                        ],
                                       );
                                       return;
                                     }
@@ -479,9 +495,9 @@ export function PasoProductos({
                                 <>
                                   <View style={s.separadorYaAgregado}>
                                     <View style={s.separadorLinea} />
-                                    <Text style={s.separadorTexto}>
+                                    <AppText style={s.separadorTexto}>
                                       Ya en el pedido
-                                    </Text>
+                                    </AppText>
                                     <View style={s.separadorLinea} />
                                   </View>
                                   {yaEnPedido.map(renderCard)}
@@ -530,15 +546,15 @@ export function PasoProductos({
                   }}
                 >
                   <View style={s.ticketRow}>
-                    <Text style={T.label}>Cliente</Text>
-                    <Text style={T.bodyBoldC}>
+                    <AppText style={T.label}>Cliente</AppText>
+                    <AppText style={T.bodyBoldC}>
                       {clienteSeleccionado?.nombre}
-                    </Text>
+                    </AppText>
                   </View>
                   <View style={s.tablaHeaderRow}>
-                    <Text style={[T.label, s.colDesc]}>Producto</Text>
-                    <Text style={[T.label, s.colCant]}>Cant</Text>
-                    <Text style={[T.label, s.colTotal]}>Total</Text>
+                    <AppText style={[T.label, s.colDesc]}>Producto</AppText>
+                    <AppText style={[T.label, s.colCant]}>Cant</AppText>
+                    <AppText style={[T.label, s.colTotal]}>Total</AppText>
                     <View style={{ width: 28 }} />
                   </View>
                   <View style={s.dividerDashed} />
@@ -551,10 +567,10 @@ export function PasoProductos({
                         gap: 6,
                       }}
                     >
-                      <Text style={{ fontSize: 32 }}>🛒</Text>
-                      <Text style={[T.caption, { textAlign: "center" }]}>
+                      <AppText style={{ fontSize: 32 }}>🛒</AppText>
+                      <AppText style={[T.caption, { textAlign: "center" }]}>
                         Aún no has agregado productos
-                      </Text>
+                      </AppText>
                     </View>
                   )}
 
@@ -583,24 +599,24 @@ export function PasoProductos({
                                 alignItems: "center",
                               }}
                             >
-                              <Text
+                              <AppText
                                 style={[T.bodyBold, s.colDesc]}
                                 numberOfLines={1}
                               >
                                 {item.nombre}
-                              </Text>
-                              <Text style={[T.body, s.colCant]}>
+                              </AppText>
+                              <AppText style={[T.body, s.colCant]}>
                                 {item.qty}
-                              </Text>
-                              <Text style={[T.bodyBold, s.colTotal]}>
+                              </AppText>
+                              <AppText style={[T.bodyBold, s.colTotal]}>
                                 {(item.precio * item.qty).toLocaleString(
                                   "es-CO",
                                 )}
-                              </Text>
+                              </AppText>
                             </View>
-                            <Text style={[T.caption, { marginTop: 2 }]}>
+                            <AppText style={[T.caption, { marginTop: 2 }]}>
                               {fmt(item.precio)} / {item.unidad}
-                            </Text>
+                            </AppText>
                           </View>
                           <View
                             style={{
@@ -653,10 +669,10 @@ export function PasoProductos({
                         size={13}
                         color={GRAY_TEXT}
                       />
-                      <Text style={T.caption}>
+                      <AppText style={T.caption}>
                         {carrito.length}{" "}
                         {carrito.length === 1 ? "producto" : "productos"}
-                      </Text>
+                      </AppText>
                     </View>
                     <View
                       style={{
@@ -665,10 +681,10 @@ export function PasoProductos({
                         gap: 6,
                       }}
                     >
-                      <Text style={T.label}>Total</Text>
-                      <Text style={[T.h2, { color: INK }]}>
+                      <AppText style={T.label}>Total</AppText>
+                      <AppText style={[T.h2, { color: INK }]}>
                         {fmt(totalCarrito)}
-                      </Text>
+                      </AppText>
                       <MaterialIcons
                         name={
                           carritoExpandido
@@ -688,16 +704,18 @@ export function PasoProductos({
               <View style={[s.botonesRow, { marginTop: 24 }]}>
                 <TouchableOpacity style={s.btnOutline} onPress={retroceder}>
                   <MaterialIcons name="arrow-back" size={16} color={BLUE} />
-                  <Text style={[s.btnOutlineText, { color: BLUE }]}>Atrás</Text>
+                  <AppText style={[s.btnOutlineText, { color: BLUE }]}>
+                    Atrás
+                  </AppText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[s.btnPrimary, carrito.length === 0 && s.btnDisabled]}
                   onPress={carrito.length > 0 ? siguiente : undefined}
                   activeOpacity={carrito.length > 0 ? 0.7 : 1}
                 >
-                  <Text style={s.btnPrimaryText}>
+                  <AppText style={s.btnPrimaryText}>
                     {carrito.length === 0 ? "Agrega un producto" : "Continuar"}
-                  </Text>
+                  </AppText>
                   {carrito.length > 0 && (
                     <MaterialIcons
                       name="arrow-forward"

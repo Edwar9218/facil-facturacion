@@ -10,7 +10,6 @@ import {
   AppState,
   AppStateStatus,
   Keyboard,
-  Text,
   TouchableOpacity,
   View,
   useWindowDimensions,
@@ -21,6 +20,7 @@ import { CajaRepositoryImpl } from "../../../data/repositories/CajaRepositoryImp
 import { CreditoRepositoryImpl } from "../../../data/repositories/CreditoRepositoryImpl";
 import { ResumenCredito } from "../../../domain/entities/Credito";
 import { useTheme } from "../../../theme";
+import { AppText } from "../../components/ui/AppText";
 import { FormularioModal } from "../../components/ui/FormularioModal";
 import { PasoCliente } from "./components/PasoCliente";
 import { PasoCobro } from "./components/PasoCobro";
@@ -164,12 +164,12 @@ export default function NuevaVentaScreen() {
           <View style={s.sheetHandle} />
           <View style={s.opcionesHeader}>
             <View>
-              <Text
+              <AppText
                 style={{ fontSize: 20, fontWeight: "700", color: "#111827" }}
               >
                 Opciones del producto
-              </Text>
-              <Text
+              </AppText>
+              <AppText
                 style={{
                   fontSize: 16,
                   fontWeight: "400",
@@ -178,7 +178,7 @@ export default function NuevaVentaScreen() {
                 }}
               >
                 Selecciona una acción para este producto
-              </Text>
+              </AppText>
             </View>
             <TouchableOpacity style={s.closeGray} onPress={cerrarMenu}>
               <MaterialIcons name="close" size={16} color="#fff" />
@@ -194,12 +194,12 @@ export default function NuevaVentaScreen() {
               <MaterialIcons name="edit" size={24} color={BLUE} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text
+              <AppText
                 style={{ fontSize: 17, fontWeight: "700", color: "#111827" }}
               >
                 Editar producto
-              </Text>
-              <Text
+              </AppText>
+              <AppText
                 style={{
                   fontSize: 16,
                   fontWeight: "400",
@@ -208,7 +208,7 @@ export default function NuevaVentaScreen() {
                 }}
               >
                 Modifica la cantidad o precio
-              </Text>
+              </AppText>
             </View>
             <MaterialIcons name="chevron-right" size={20} color={BLUE} />
           </TouchableOpacity>
@@ -222,12 +222,12 @@ export default function NuevaVentaScreen() {
               <MaterialIcons name="delete-outline" size={24} color="#E03E3E" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text
+              <AppText
                 style={{ fontSize: 17, fontWeight: "700", color: "#E03E3E" }}
               >
                 Eliminar producto
-              </Text>
-              <Text
+              </AppText>
+              <AppText
                 style={{
                   fontSize: 16,
                   fontWeight: "400",
@@ -236,14 +236,14 @@ export default function NuevaVentaScreen() {
                 }}
               >
                 Quita este producto de la venta
-              </Text>
+              </AppText>
             </View>
             <MaterialIcons name="chevron-right" size={20} color="#E03E3E" />
           </TouchableOpacity>
 
           <View style={s.avisoRow}>
             <MaterialIcons name="info-outline" size={14} color="#7B8499" />
-            <Text
+            <AppText
               style={{
                 fontSize: 16,
                 fontWeight: "400",
@@ -252,7 +252,7 @@ export default function NuevaVentaScreen() {
               }}
             >
               Esta acción solo afecta la venta actual
-            </Text>
+            </AppText>
           </View>
         </TouchableOpacity>
       </TouchableOpacity>
@@ -309,7 +309,7 @@ export default function NuevaVentaScreen() {
                 size={36}
                 color={colors.primary}
               />
-              <Text
+              <AppText
                 style={{
                   fontSize: typography.size.xxl,
                   fontWeight: typography.weight.black,
@@ -318,7 +318,7 @@ export default function NuevaVentaScreen() {
                 }}
               >
                 Fácil
-              </Text>
+              </AppText>
             </View>
             <View style={{ width: 100, alignItems: "flex-end" }}>
               <TouchableOpacity
@@ -326,7 +326,7 @@ export default function NuevaVentaScreen() {
                 activeOpacity={0.7}
                 onPress={() => router.back()}
               >
-                <Text
+                <AppText
                   style={{
                     fontSize: typography.size.lg,
                     fontWeight: typography.weight.regular,
@@ -334,7 +334,7 @@ export default function NuevaVentaScreen() {
                   }}
                 >
                   salir
-                </Text>
+                </AppText>
                 <MaterialCommunityIcons
                   name="logout-variant"
                   size={sizes.iconMd}
@@ -379,7 +379,7 @@ export default function NuevaVentaScreen() {
               <MaterialIcons name="lock-outline" size={38} color="#EA580C" />
             </View>
 
-            <Text
+            <AppText
               style={{
                 fontSize: 22,
                 fontWeight: "800",
@@ -389,8 +389,8 @@ export default function NuevaVentaScreen() {
               }}
             >
               Caja cerrada
-            </Text>
-            <Text
+            </AppText>
+            <AppText
               style={{
                 fontSize: 17,
                 fontWeight: "400",
@@ -401,7 +401,7 @@ export default function NuevaVentaScreen() {
               }}
             >
               Para registrar ventas primero debes{"\n"}abrir la caja del día.
-            </Text>
+            </AppText>
 
             <TouchableOpacity
               onPress={() => router.back()}
@@ -420,9 +420,11 @@ export default function NuevaVentaScreen() {
                 elevation: 4,
               }}
             >
-              <Text style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}>
+              <AppText
+                style={{ color: "#fff", fontSize: 18, fontWeight: "700" }}
+              >
                 Volver a abrir caja
-              </Text>
+              </AppText>
             </TouchableOpacity>
           </View>
         </View>
@@ -462,7 +464,7 @@ export default function NuevaVentaScreen() {
                     size={sizes.iconMd}
                     color={colors.grayText}
                   />
-                  <Text
+                  <AppText
                     style={{
                       fontSize: typography.size.lg,
                       fontWeight: typography.weight.regular,
@@ -470,7 +472,7 @@ export default function NuevaVentaScreen() {
                     }}
                   >
                     volver
-                  </Text>
+                  </AppText>
                 </TouchableOpacity>
               )}
             </View>
@@ -487,7 +489,7 @@ export default function NuevaVentaScreen() {
                 size={36}
                 color={colors.primary}
               />
-              <Text
+              <AppText
                 style={{
                   fontSize: typography.size.xxl,
                   fontWeight: typography.weight.black,
@@ -496,7 +498,7 @@ export default function NuevaVentaScreen() {
                 }}
               >
                 Fácil
-              </Text>
+              </AppText>
             </View>
 
             <View style={{ width: 100, alignItems: "flex-end" }}>
@@ -505,7 +507,7 @@ export default function NuevaVentaScreen() {
                 activeOpacity={0.7}
                 onPress={() => router.back()}
               >
-                <Text
+                <AppText
                   style={{
                     fontSize: typography.size.lg,
                     fontWeight: typography.weight.regular,
@@ -513,7 +515,7 @@ export default function NuevaVentaScreen() {
                   }}
                 >
                   salir
-                </Text>
+                </AppText>
                 <MaterialCommunityIcons
                   name="logout-variant"
                   size={sizes.iconMd}
@@ -545,7 +547,7 @@ export default function NuevaVentaScreen() {
           showsVerticalScrollIndicator={false}
           enabled={true}
         >
-          <Text
+          <AppText
             style={{
               fontSize: typography.size.xxl,
               fontWeight: typography.weight.extraBold,
@@ -555,7 +557,7 @@ export default function NuevaVentaScreen() {
             }}
           >
             Nueva venta
-          </Text>
+          </AppText>
 
           <PasoCliente
             step={step}
