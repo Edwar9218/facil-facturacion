@@ -1553,9 +1553,9 @@ export const HistorialScreen = () => {
                   Gastos del periodo
                 </AppText>
               </View>
-              <AppText style={s.seccionGastosMonto}>
+              {/* <AppText style={s.seccionGastosMonto}>
                 -{fmt(stats.totalGastos)}
-              </AppText>
+              </AppText> */}
             </View>
 
             <View style={s.gastoCard}>

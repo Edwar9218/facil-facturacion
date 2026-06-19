@@ -92,7 +92,7 @@ export class CajaRepositoryImpl implements CajaRepository {
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(monto), 0) as total
        FROM gastos
-       WHERE cajaId = ? AND metodoPago = 'efectivo';`,
+       WHERE cajaId = ? AND metodoPago = 'efectivo' AND estado = 'activo';`,
         [cajaId],
       )?.total ?? 0;
 
@@ -100,7 +100,7 @@ export class CajaRepositoryImpl implements CajaRepository {
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(monto), 0) as total
        FROM gastos
-       WHERE cajaId = ? AND metodoPago = 'transferencia';`,
+       WHERE cajaId = ? AND metodoPago = 'transferencia' AND estado = 'activo'`,
         [cajaId],
       )?.total ?? 0;
 

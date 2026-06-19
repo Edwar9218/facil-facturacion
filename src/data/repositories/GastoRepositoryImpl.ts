@@ -24,7 +24,7 @@ export class GastoRepositoryImpl implements GastoRepository {
   // ── Gastos por fecha ─────────────────────────────────────────────────────
   async getGastosPorFecha(fecha: string): Promise<Gasto[]> {
     return db.getAllSync<Gasto>(
-      "SELECT * FROM gastos WHERE fecha = ? ORDER BY creadoEn DESC;",
+      "SELECT * FROM gastos WHERE fecha = ? AND estado = 'activo' ORDER BY creadoEn DESC;",
       [fecha],
     );
   }
@@ -39,7 +39,7 @@ export class GastoRepositoryImpl implements GastoRepository {
   }): Promise<Gasto[]> {
     return db.getAllSync<Gasto>(
       `SELECT * FROM gastos
-       WHERE fecha >= ? AND fecha <= ?
+       WHERE fecha >= ? AND fecha <= ? AND estado = 'activo'
        ORDER BY fecha DESC, creadoEn DESC;`,
       [fechaInicio, fechaFin],
     );

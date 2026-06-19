@@ -1389,7 +1389,7 @@ export const VentaDelDiaScreen = () => {
               <AppText
                 style={{ fontSize: 15, fontWeight: "700", color: "#E03E3E" }}
               >
-                -{fmt(stats.totalGastos)}
+                {/* -{fmt(stats.totalGastos)} */}
               </AppText>
             </View>
 
