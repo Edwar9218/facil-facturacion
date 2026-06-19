@@ -729,7 +729,7 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
       {caja?.estado === "abierta" && renderCajaAbierta()}
       {caja?.estado === "cerrada" && renderCajaCerrada()}
 
-      {/* ── Panel de pruebas (solo __DEV__, no se ve en producción) ── */}
+      {/* ── Panel de pruebas (solo __DEV__, no se ve en producción) ──
       {__DEV__ && (
         <View
           style={{
@@ -787,7 +787,7 @@ export function CajaWidget({ onCajaActualizada, refreshTrigger }: Props) {
             </TouchableOpacity>
           </View>
         </View>
-      )}
+      )} */}
 
       <Modal
         visible={modalApertura}

@@ -114,9 +114,28 @@ export class CreditoRepositoryImpl implements CreditoRepository {
       acumuladorTotalAbonos += abonadoAFactura;
       acumuladorSaldoActual += v.total - abonadoAFactura;
 
+      // Primero busca en venta_items, si no hay usa el JSON de la columna items
+      const itemsDeTabla = db.getAllSync<any>(
+        `SELECT productoId, nombreProducto, precioUnitario, cantidad, subtotal, unidad
+         FROM venta_items WHERE ventaId = ? ORDER BY rowid ASC;`,
+        [v.id],
+      );
+      const items =
+        itemsDeTabla.length > 0
+          ? itemsDeTabla
+          : v.items
+            ? (() => {
+                try {
+                  return JSON.parse(v.items);
+                } catch {
+                  return [];
+                }
+              })()
+            : [];
+
       return {
         ...v,
-        items: JSON.parse(v.items),
+        items,
         numeroFactura: v.numeroFactura ?? "Sin factura",
         fecha: formatearFecha(v.fecha),
         estado: v.estado ?? "debe",

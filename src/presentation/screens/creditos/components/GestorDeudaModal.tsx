@@ -51,8 +51,6 @@ interface Props {
 const fmt = (n: number) =>
   "$ " + Number(n).toLocaleString("es-CO", { minimumFractionDigits: 0 });
 
-const MAX_MOTIVO = 250;
-
 export const GestorDeudaModal = ({
   modal,
   detalle,
@@ -68,31 +66,31 @@ export const GestorDeudaModal = ({
 }: Props) => {
   const { colors, spacing, radius, sizes, typography } = useTheme();
 
-  // ── Estado filtros del historial ─────────────────────────────────────────
-  // Valores del panel (pendientes de aplicar)
+  // ── Filtros historial ────────────────────────────────────────────────────
   const [filtroMetodo, setFiltroMetodo] = useState<MetodoPagoFiltro>("Todos");
   const [filtroEstado, setFiltroEstado] = useState<EstadoFiltro>("Todos");
   const [filtroOrden, setFiltroOrden] = useState<OrdenFiltro>("reciente");
-  // Valores aplicados (los que realmente filtran la lista)
   const [metodoActivo, setMetodoActivo] = useState<MetodoPagoFiltro>("Todos");
   const [estadoActivo, setEstadoActivo] = useState<EstadoFiltro>("Todos");
   const [ordenActivo, setOrdenActivo] = useState<OrdenFiltro>("reciente");
-  // UI
   const [filtrosVisibles, setFiltrosVisibles] = useState(false);
   const [ordenModalVisible, setOrdenModalVisible] = useState(false);
 
-  // ── Android: animar modal con teclado ────────────────────────────────────
+  // ── Venta seleccionada (mini modal detalle) ──────────────────────────────
+  const [ventaSeleccionada, setVentaSeleccionada] = useState<
+    import("../../../../domain/entities/Venta").Venta | null
+  >(null);
   const androidBottom = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     if (Platform.OS !== "android") return;
-    const showSub = Keyboard.addListener("keyboardDidShow", (e) => {
+    const show = Keyboard.addListener("keyboardDidShow", (e) => {
       Animated.timing(androidBottom, {
         toValue: e.endCoordinates.height,
         duration: 200,
         useNativeDriver: false,
       }).start();
     });
-    const hideSub = Keyboard.addListener("keyboardDidHide", () => {
+    const hide = Keyboard.addListener("keyboardDidHide", () => {
       Animated.timing(androidBottom, {
         toValue: 0,
         duration: 200,
@@ -100,8 +98,8 @@ export const GestorDeudaModal = ({
       }).start();
     });
     return () => {
-      showSub.remove();
-      hideSub.remove();
+      show.remove();
+      hide.remove();
     };
   }, []);
 
@@ -111,18 +109,10 @@ export const GestorDeudaModal = ({
     onChangeMonto(clean.replace(/\B(?=(\d{3})+(?!\d))/g, "."));
   };
 
-  const titulos: Record<VistaGestor, string> = {
-    detalle: "Detalle de la deuda",
-    historial: "Historial de Abonos",
-    abono: "Nuevo Abono/Pago",
-  };
-
   const isVisible = modal?.visible ?? false;
-  const closeModal = () => {
-    modal?.cerrar();
-  };
+  const closeModal = () => modal?.cerrar();
 
-  // ── Helpers de filtros ────────────────────────────────────────────────────
+  // ── Cálculos ─────────────────────────────────────────────────────────────
   const parseFecha = (s: string): Date => {
     try {
       const m = s.match(
@@ -201,252 +191,444 @@ export const GestorDeudaModal = ({
     menor: "Menor monto",
   };
 
-  // ── Contenido principal del modal ────────────────────────────────────────
+  // ── Tabs ─────────────────────────────────────────────────────────────────
+  const tabs: { id: VistaGestor; label: string; icon: string }[] = [
+    { id: "detalle", label: "Detalle", icon: "file-text" },
+    { id: "historial", label: "Historial", icon: "clock" },
+    { id: "abono", label: "Abonar", icon: "plus-circle" },
+  ];
+
+  // ── Contenido del modal ──────────────────────────────────────────────────
   const modalInner = (
     <View
       style={[
-        styles.modalContent,
+        s.sheet,
         {
           backgroundColor: colors.white,
-          borderTopLeftRadius: radius.xl,
-          borderTopRightRadius: radius.xl,
-          padding: spacing.lg,
+          borderTopLeftRadius: radius.xxl,
+          borderTopRightRadius: radius.xxl,
         },
       ]}
     >
-      {/* Header */}
-      <View style={styles.headerRow}>
-        <View style={{ width: 32 }} />
-        <View
-          style={[styles.dragIndicator, { backgroundColor: colors.grayBorder }]}
-        />
-        <TouchableOpacity
-          onPress={closeModal}
-          style={[styles.closeButton, { backgroundColor: colors.grayBg }]}
-          activeOpacity={0.7}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        >
-          <Feather name="x" size={18} color={colors.grayText} />
-        </TouchableOpacity>
+      {/* Drag handle */}
+      <View style={s.dragWrap}>
+        <View style={[s.drag, { backgroundColor: colors.grayBorder }]} />
       </View>
 
       {cargando || !detalle ? (
-        <View style={styles.loadingContainer}>
+        <View style={s.loading}>
           <AppText color={colors.grayText}>Cargando...</AppText>
         </View>
       ) : (
-        <View style={styles.flexContainer}>
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: spacing.md }}
-            style={styles.scrollView}
+        <>
+          {/* ── HEADER FIJO: cliente + saldo ─────────────────────────────── */}
+          <View
+            style={[
+              s.headerFijo,
+              {
+                paddingHorizontal: spacing.lg,
+                paddingBottom: spacing.md,
+                borderBottomColor: colors.grayBorder,
+              },
+            ]}
           >
-            <AppText variant="h3" style={{ marginBottom: spacing.md }}>
-              {titulos[vistaActiva]}
-            </AppText>
-
-            {/* Cliente */}
-            <View
-              style={[
-                styles.rowCenter,
-                { gap: spacing.sm, marginBottom: spacing.md },
-              ]}
-            >
-              <Feather
-                name="user"
-                size={sizes.iconMd}
-                color={colors.grayText}
-              />
-              <AppText variant="bodyBold">{detalle.nombreCliente}</AppText>
-            </View>
-
-            {/* Resumen financiero */}
-            <AppCard style={{ marginBottom: spacing.md }}>
-              <View style={[styles.rowSpace, { marginBottom: spacing.xs }]}>
-                <AppText variant="body" color={colors.grayText}>
-                  Deuda total:
-                </AppText>
-                <AppText variant="bodyBold">{fmt(detalle.deudaTotal)}</AppText>
+            <View style={s.clienteRow}>
+              <View
+                style={[
+                  s.avatarCircle,
+                  { backgroundColor: colors.primaryLight },
+                ]}
+              >
+                <Feather name="user" size={18} color={colors.primary} />
               </View>
-              <View style={[styles.rowSpace, { marginBottom: spacing.xs }]}>
-                <AppText variant="body" color={colors.grayText}>
-                  Total abono:
+              <View style={{ flex: 1 }}>
+                <AppText
+                  style={{ fontSize: 19, fontWeight: "700", color: colors.ink }}
+                >
+                  {detalle.nombreCliente}
                 </AppText>
-                <AppText variant="bodyBold" color={colors.success}>
-                  {fmt(detalle.totalAbonos)}
+                <AppText
+                  style={{ fontSize: 15, color: colors.grayText, marginTop: 1 }}
+                >
+                  Deuda total: {fmt(detalle.deudaTotal)}
                 </AppText>
               </View>
-              <View style={styles.rowSpace}>
-                <AppText variant="body" color={colors.grayText}>
-                  Saldo actual:
-                </AppText>
-                <AppText variant="bodyBold" color={colors.danger}>
+              <View
+                style={[s.saldoBadge, { backgroundColor: colors.dangerLight }]}
+              >
+                <AppText
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "700",
+                    color: colors.danger,
+                  }}
+                >
                   {fmt(detalle.saldoActual)}
                 </AppText>
               </View>
-            </AppCard>
+              <TouchableOpacity
+                onPress={closeModal}
+                style={[s.closeBtn, { backgroundColor: colors.grayBg }]}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Feather name="x" size={16} color={colors.grayText} />
+              </TouchableOpacity>
+            </View>
 
-            {/* ── Vista: Detalle ─────────────────────────────────────────── */}
-            {vistaActiva === "detalle" &&
-              (detalle.ventas.length === 0 ? (
-                <View
-                  style={{ alignItems: "center", paddingVertical: spacing.lg }}
-                >
-                  <AppText variant="body" color={colors.grayText}>
-                    Sin compras registradas
-                  </AppText>
-                </View>
-              ) : (
-                detalle.ventas.map((venta) => (
-                  <AppCard key={venta.id} style={{ marginBottom: spacing.sm }}>
-                    <AppText variant="caption" color={colors.grayText}>
-                      Compra del {venta.fecha}
+            {/* Tabs */}
+            <View
+              style={[
+                s.tabsRow,
+                {
+                  backgroundColor: colors.grayBg,
+                  borderRadius: radius.lg,
+                  marginTop: spacing.md,
+                  padding: 3,
+                },
+              ]}
+            >
+              {tabs.map((tab) => {
+                const activo = vistaActiva === tab.id;
+                return (
+                  <TouchableOpacity
+                    key={tab.id}
+                    style={[
+                      s.tab,
+                      {
+                        borderRadius: radius.md,
+                        backgroundColor: activo ? colors.white : "transparent",
+                      },
+                    ]}
+                    onPress={() => setVistaActiva(tab.id)}
+                    activeOpacity={0.7}
+                  >
+                    <Feather
+                      name={tab.icon as any}
+                      size={13}
+                      color={activo ? colors.primary : colors.grayText}
+                    />
+                    <AppText
+                      style={{
+                        fontSize: 15,
+                        fontWeight: activo ? "700" : "400",
+                        color: activo ? colors.primary : colors.grayText,
+                        marginLeft: 4,
+                      }}
+                    >
+                      {tab.label}
                     </AppText>
-                    <View style={[styles.rowSpace, { marginTop: spacing.xxs }]}>
-                      <AppText variant="captionBold">
-                        Factura N°: {venta.numeroFactura}
-                      </AppText>
-                      <AppText variant="captionBold">
-                        Total: {fmt(venta.total)}
-                      </AppText>
-                    </View>
-                  </AppCard>
-                ))
-              ))}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
 
-            {/* ── Vista: Historial ───────────────────────────────────────── */}
-            {vistaActiva === "historial" && (
+          {/* ── SCROLL CONTENT ───────────────────────────────────────────── */}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{
+              padding: spacing.lg,
+              paddingBottom: spacing.xxl,
+            }}
+          >
+            {/* ── DETALLE ──────────────────────────────────────────────── */}
+            {vistaActiva === "detalle" && (
               <>
-                {/* Cards de resumen */}
-                <View style={[styles.statsRow, { marginBottom: spacing.md }]}>
-                  {/* Total abonado */}
+                {/* Resumen financiero */}
+                <View style={[s.resumenRow, { marginBottom: spacing.md }]}>
                   <View
                     style={[
-                      styles.statCard,
+                      s.resumenCard,
                       {
-                        backgroundColor: colors.grayBg,
+                        backgroundColor: colors.primaryLight,
                         borderRadius: radius.lg,
-                        padding: spacing.sm,
-                        flex: 1.4,
                       },
                     ]}
                   >
                     <AppText
-                      variant="caption"
-                      color={colors.grayText}
-                      style={{ fontSize: 14, marginBottom: 4 }}
+                      style={{
+                        fontSize: 14,
+                        color: colors.primary,
+                        fontWeight: "600",
+                      }}
+                    >
+                      Abonado
+                    </AppText>
+                    <AppText
+                      style={{
+                        fontSize: 20,
+                        fontWeight: "800",
+                        color: colors.primary,
+                        marginTop: 2,
+                      }}
+                    >
+                      {fmt(detalle.totalAbonos)}
+                    </AppText>
+                  </View>
+                  <View
+                    style={[
+                      s.resumenCard,
+                      {
+                        backgroundColor: colors.dangerLight,
+                        borderRadius: radius.lg,
+                      },
+                    ]}
+                  >
+                    <AppText
+                      style={{
+                        fontSize: 14,
+                        color: colors.danger,
+                        fontWeight: "600",
+                      }}
+                    >
+                      Saldo
+                    </AppText>
+                    <AppText
+                      style={{
+                        fontSize: 20,
+                        fontWeight: "800",
+                        color: colors.danger,
+                        marginTop: 2,
+                      }}
+                    >
+                      {fmt(detalle.saldoActual)}
+                    </AppText>
+                  </View>
+                </View>
+
+                {/* Lista de compras */}
+                <AppText
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "700",
+                    color: colors.grayText,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    marginBottom: spacing.sm,
+                  }}
+                >
+                  Compras
+                </AppText>
+                {detalle.ventas.length === 0 ? (
+                  <View
+                    style={{
+                      alignItems: "center",
+                      paddingVertical: spacing.xxl,
+                    }}
+                  >
+                    <Feather
+                      name="shopping-bag"
+                      size={32}
+                      color={colors.grayBorder}
+                    />
+                    <AppText
+                      style={{ color: colors.grayText, marginTop: spacing.sm }}
+                    >
+                      Sin compras registradas
+                    </AppText>
+                  </View>
+                ) : (
+                  detalle.ventas.map((venta) => (
+                    <AppCard
+                      key={venta.id}
+                      style={{ marginBottom: spacing.sm }}
+                      onPress={() => setVentaSeleccionada(venta)}
+                    >
+                      <View style={s.rowSpace}>
+                        <View style={{ flex: 1 }}>
+                          <AppText
+                            style={{ fontSize: 15, color: colors.grayText }}
+                          >
+                            Factura N° {venta.numeroFactura}
+                          </AppText>
+                          <AppText
+                            style={{
+                              fontSize: 13,
+                              color: colors.grayText,
+                              marginTop: 2,
+                            }}
+                          >
+                            {venta.fecha}
+                          </AppText>
+                        </View>
+                        <View style={{ alignItems: "flex-end", gap: 6 }}>
+                          <AppText
+                            style={{
+                              fontSize: 17,
+                              fontWeight: "700",
+                              color: colors.ink,
+                            }}
+                          >
+                            {fmt(venta.total)}
+                          </AppText>
+                          <View style={[s.rowCenter, { gap: 3 }]}>
+                            <Feather
+                              name="eye"
+                              size={12}
+                              color={colors.primary}
+                            />
+                            <AppText
+                              style={{
+                                fontSize: 12,
+                                color: colors.primary,
+                                fontWeight: "600",
+                              }}
+                            >
+                              Ver detalle
+                            </AppText>
+                          </View>
+                        </View>
+                      </View>
+                    </AppCard>
+                  ))
+                )}
+              </>
+            )}
+
+            {/* ── HISTORIAL ────────────────────────────────────────────── */}
+            {vistaActiva === "historial" && (
+              <>
+                {/* Stats */}
+                <View style={[s.statsRow, { marginBottom: spacing.md }]}>
+                  <View
+                    style={[
+                      s.statCard,
+                      {
+                        backgroundColor: colors.primaryLight,
+                        borderRadius: radius.lg,
+                      },
+                    ]}
+                  >
+                    <AppText
+                      style={{
+                        fontSize: 14,
+                        color: colors.primary,
+                        fontWeight: "600",
+                      }}
                     >
                       Total abonado
                     </AppText>
                     <AppText
-                      variant="bodyBold"
-                      color={colors.primary}
-                      style={{ fontSize: 20 }}
+                      style={{
+                        fontSize: 22,
+                        fontWeight: "800",
+                        color: colors.primary,
+                        marginTop: 2,
+                      }}
                     >
                       {fmt(totalAbonado)}
                     </AppText>
                   </View>
-
-                  {/* Abonos activos */}
                   <View
                     style={[
-                      styles.statCard,
+                      s.statCardSm,
                       {
-                        backgroundColor: colors.grayBg,
+                        backgroundColor: colors.successLight,
                         borderRadius: radius.lg,
-                        padding: spacing.sm,
-                        flex: 1,
                       },
                     ]}
                   >
                     <AppText
-                      variant="caption"
-                      color={colors.grayText}
-                      style={{ fontSize: 14, marginBottom: 4 }}
+                      style={{
+                        fontSize: 14,
+                        color: colors.success,
+                        fontWeight: "600",
+                      }}
                     >
                       Abonos
                     </AppText>
                     <AppText
-                      variant="bodyBold"
-                      color={colors.success}
-                      style={{ fontSize: 20 }}
+                      style={{
+                        fontSize: 22,
+                        fontWeight: "800",
+                        color: colors.success,
+                        marginTop: 2,
+                      }}
                     >
                       {abonosActivos.length}
                     </AppText>
                   </View>
-
-                  {/* Anulados */}
                   <View
                     style={[
-                      styles.statCard,
+                      s.statCardSm,
                       {
-                        backgroundColor: colors.grayBg,
+                        backgroundColor: colors.dangerLight,
                         borderRadius: radius.lg,
-                        padding: spacing.sm,
-                        flex: 1,
                       },
                     ]}
                   >
                     <AppText
-                      variant="caption"
-                      color={colors.grayText}
-                      style={{ fontSize: 14, marginBottom: 4 }}
+                      style={{
+                        fontSize: 14,
+                        color: colors.danger,
+                        fontWeight: "600",
+                      }}
                     >
                       Anulados
                     </AppText>
                     <AppText
-                      variant="bodyBold"
-                      color={colors.danger}
-                      style={{ fontSize: 20 }}
+                      style={{
+                        fontSize: 22,
+                        fontWeight: "800",
+                        color: colors.danger,
+                        marginTop: 2,
+                      }}
                     >
                       {abonosAnulados.length}
                     </AppText>
                   </View>
                 </View>
 
-                {/* Panel de filtros colapsable */}
+                {/* Filtros colapsables */}
                 <View
                   style={[
-                    styles.filtrosPanel,
+                    s.filtrosPanel,
                     {
                       backgroundColor: colors.grayBg,
                       borderRadius: radius.lg,
                       marginBottom: spacing.md,
-                      overflow: "hidden",
                     },
                   ]}
                 >
-                  {/* Header del panel — siempre visible */}
                   <TouchableOpacity
-                    style={[styles.filtrosHeader, { padding: spacing.sm }]}
+                    style={[s.filtrosHeader, { padding: spacing.sm }]}
                     onPress={() => setFiltrosVisibles((v) => !v)}
                     activeOpacity={0.8}
                   >
-                    <View style={[styles.rowCenter, { gap: spacing.xs }]}>
+                    <View style={s.rowCenter}>
                       <Feather
                         name="filter"
-                        size={15}
-                        color={hayFiltrosActivos ? colors.primary : colors.ink}
+                        size={14}
+                        color={
+                          hayFiltrosActivos ? colors.primary : colors.grayText
+                        }
                       />
                       <AppText
-                        variant="captionBold"
-                        color={hayFiltrosActivos ? colors.primary : colors.ink}
-                        style={{ fontSize: 16 }}
+                        style={{
+                          fontSize: 16,
+                          fontWeight: "600",
+                          color: hayFiltrosActivos
+                            ? colors.primary
+                            : colors.ink,
+                          marginLeft: 6,
+                        }}
                       >
                         Filtros
                       </AppText>
                       {hayFiltrosActivos && (
                         <View
                           style={[
-                            styles.filtrosBadge,
-                            { backgroundColor: colors.primary },
+                            s.badge,
+                            { backgroundColor: colors.primary, marginLeft: 6 },
                           ]}
                         >
                           <AppText
-                            variant="caption"
-                            color={colors.white}
-                            style={{ fontSize: 10 }}
+                            style={{
+                              fontSize: 12,
+                              color: colors.white,
+                              fontWeight: "700",
+                            }}
                           >
                             Activos
                           </AppText>
@@ -455,25 +637,32 @@ export const GestorDeudaModal = ({
                     </View>
                     <Feather
                       name={filtrosVisibles ? "chevron-up" : "chevron-down"}
-                      size={16}
+                      size={15}
                       color={colors.grayText}
                     />
                   </TouchableOpacity>
 
-                  {/* Contenido del panel */}
                   {filtrosVisibles && (
-                    <View style={{ padding: spacing.sm, paddingTop: 0 }}>
-                      {/* Método de pago */}
+                    <View
+                      style={{
+                        paddingHorizontal: spacing.sm,
+                        paddingBottom: spacing.sm,
+                      }}
+                    >
+                      {/* Método */}
                       <AppText
-                        variant="label"
-                        color={colors.grayText}
-                        style={{ marginBottom: spacing.xs, fontSize: 15 }}
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "600",
+                          color: colors.grayText,
+                          marginBottom: spacing.xs,
+                        }}
                       >
                         Método de pago
                       </AppText>
                       <View
                         style={[
-                          styles.selectorRow,
+                          s.selector,
                           {
                             backgroundColor: colors.white,
                             borderRadius: radius.md,
@@ -492,9 +681,9 @@ export const GestorDeudaModal = ({
                           <TouchableOpacity
                             key={op}
                             style={[
-                              styles.selectorOp,
+                              s.selectorOp,
                               {
-                                borderRadius: radius.md - 2,
+                                borderRadius: radius.sm,
                                 backgroundColor:
                                   filtroMetodo === op
                                     ? colors.primary
@@ -505,13 +694,14 @@ export const GestorDeudaModal = ({
                             activeOpacity={0.8}
                           >
                             <AppText
-                              variant="caption"
-                              color={
-                                filtroMetodo === op
-                                  ? colors.white
-                                  : colors.grayText
-                              }
-                              style={{ fontSize: 15, fontWeight: "600" }}
+                              style={{
+                                fontSize: 15,
+                                fontWeight: "600",
+                                color:
+                                  filtroMetodo === op
+                                    ? colors.white
+                                    : colors.grayText,
+                              }}
                             >
                               {op}
                             </AppText>
@@ -521,20 +711,22 @@ export const GestorDeudaModal = ({
 
                       {/* Estado */}
                       <AppText
-                        variant="label"
-                        style={{ fontSize: 15 }}
-                        color={colors.grayText}
-                        style={{ marginBottom: spacing.xs, fontSize: 15 }}
+                        style={{
+                          fontSize: 15,
+                          fontWeight: "600",
+                          color: colors.grayText,
+                          marginBottom: spacing.xs,
+                        }}
                       >
-                        Estado del abono
+                        Estado
                       </AppText>
                       <View
                         style={[
-                          styles.selectorRow,
+                          s.selector,
                           {
                             backgroundColor: colors.white,
                             borderRadius: radius.md,
-                            marginBottom: spacing.sm,
+                            marginBottom: spacing.md,
                             padding: 3,
                           },
                         ]}
@@ -549,9 +741,9 @@ export const GestorDeudaModal = ({
                           <TouchableOpacity
                             key={val}
                             style={[
-                              styles.selectorOp,
+                              s.selectorOp,
                               {
-                                borderRadius: radius.md - 2,
+                                borderRadius: radius.sm,
                                 backgroundColor:
                                   filtroEstado === val
                                     ? colors.primary
@@ -562,12 +754,14 @@ export const GestorDeudaModal = ({
                             activeOpacity={0.8}
                           >
                             <AppText
-                              variant="caption"
-                              color={
-                                filtroEstado === val
-                                  ? colors.white
-                                  : colors.grayText
-                              }
+                              style={{
+                                fontSize: 15,
+                                fontWeight: "600",
+                                color:
+                                  filtroEstado === val
+                                    ? colors.white
+                                    : colors.grayText,
+                              }}
                             >
                               {label}
                             </AppText>
@@ -575,11 +769,11 @@ export const GestorDeudaModal = ({
                         ))}
                       </View>
 
-                      {/* Botones */}
-                      <View style={[styles.rowCenter, { gap: spacing.sm }]}>
+                      {/* Botones filtro */}
+                      <View style={[s.rowCenter, { gap: spacing.sm }]}>
                         <TouchableOpacity
                           style={[
-                            styles.btnSecundario,
+                            s.btnSecundario,
                             {
                               borderColor: colors.grayBorder,
                               borderRadius: radius.lg,
@@ -594,15 +788,20 @@ export const GestorDeudaModal = ({
                             name="refresh-ccw"
                             size={13}
                             color={colors.ink}
-                            style={{ marginRight: 5 }}
                           />
-                          <AppText variant="captionBold">
-                            Limpiar filtros
+                          <AppText
+                            style={{
+                              fontSize: 15,
+                              fontWeight: "600",
+                              marginLeft: 5,
+                            }}
+                          >
+                            Limpiar
                           </AppText>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[
-                            styles.btnPrimario,
+                            s.btnPrimario,
                             {
                               backgroundColor: colors.primary,
                               borderRadius: radius.lg,
@@ -614,13 +813,19 @@ export const GestorDeudaModal = ({
                           activeOpacity={0.8}
                         >
                           <Feather
-                            name="search"
+                            name="check"
                             size={13}
                             color={colors.white}
-                            style={{ marginRight: 5 }}
                           />
-                          <AppText variant="captionBold" color={colors.white}>
-                            Aplicar filtros
+                          <AppText
+                            style={{
+                              fontSize: 15,
+                              fontWeight: "600",
+                              color: colors.white,
+                              marginLeft: 5,
+                            }}
+                          >
+                            Aplicar
                           </AppText>
                         </TouchableOpacity>
                       </View>
@@ -628,16 +833,26 @@ export const GestorDeudaModal = ({
                   )}
                 </View>
 
-                {/* Encabezado lista + ordenamiento */}
+                {/* Encabezado lista + orden */}
                 <View
                   style={[
-                    styles.rowSpace,
+                    s.rowSpace,
                     { alignItems: "center", marginBottom: spacing.sm },
                   ]}
                 >
-                  <AppText variant="captionBold">Lista de abonos</AppText>
+                  <AppText
+                    style={{
+                      fontSize: 15,
+                      fontWeight: "700",
+                      color: colors.grayText,
+                      textTransform: "uppercase",
+                      letterSpacing: 0.5,
+                    }}
+                  >
+                    Lista de abonos
+                  </AppText>
                   <TouchableOpacity
-                    style={[styles.rowCenter, { gap: 4 }]}
+                    style={s.rowCenter}
                     onPress={() => setOrdenModalVisible(true)}
                     activeOpacity={0.7}
                   >
@@ -646,18 +861,24 @@ export const GestorDeudaModal = ({
                       size={13}
                       color={colors.grayText}
                     />
-                    <AppText variant="caption" color={colors.grayText}>
+                    <AppText
+                      style={{
+                        fontSize: 15,
+                        color: colors.grayText,
+                        marginHorizontal: 3,
+                      }}
+                    >
                       {ordenLabels[ordenActivo]}
                     </AppText>
                     <Feather
                       name="chevron-down"
-                      size={12}
+                      size={13}
                       color={colors.grayText}
                     />
                   </TouchableOpacity>
                 </View>
 
-                {/* Lista de abonos filtrada */}
+                {/* Lista */}
                 {abonosFiltrados.length === 0 ? (
                   <View
                     style={{
@@ -667,9 +888,7 @@ export const GestorDeudaModal = ({
                   >
                     <Feather name="inbox" size={32} color={colors.grayBorder} />
                     <AppText
-                      variant="body"
-                      color={colors.grayText}
-                      style={{ marginTop: spacing.sm }}
+                      style={{ color: colors.grayText, marginTop: spacing.sm }}
                     >
                       Sin abonos para mostrar
                     </AppText>
@@ -683,99 +902,97 @@ export const GestorDeudaModal = ({
                         style={[
                           { marginBottom: spacing.sm },
                           esAnulado && {
-                            opacity: 0.75,
+                            opacity: 0.7,
                             borderLeftWidth: 3,
                             borderLeftColor: colors.danger,
                           },
                         ]}
                       >
-                        <View style={styles.rowCenter}>
-                          {/* Ícono */}
+                        <View style={s.rowCenter}>
                           <View
                             style={[
-                              styles.iconContainer,
+                              s.iconCircle,
                               {
                                 backgroundColor: esAnulado
-                                  ? (colors.dangerLight ?? "#FEE2E2")
+                                  ? colors.dangerLight
                                   : colors.successLight,
                               },
                             ]}
                           >
                             <Feather
                               name={esAnulado ? "x" : "check"}
-                              size={sizes.iconSm}
+                              size={14}
                               color={esAnulado ? colors.danger : colors.success}
                             />
                           </View>
-
-                          {/* Info */}
-                          <View style={[styles.abonoInfo, { gap: 3 }]}>
+                          <View style={{ flex: 1 }}>
                             <AppText
-                              variant="body"
                               style={[
-                                { fontSize: 18, fontWeight: "700" },
-                                esAnulado
-                                  ? {
-                                      textDecorationLine: "line-through",
-                                      color: colors.grayText,
-                                    }
-                                  : {},
+                                {
+                                  fontSize: 19,
+                                  fontWeight: "700",
+                                  color: colors.ink,
+                                },
+                                esAnulado && {
+                                  textDecorationLine: "line-through",
+                                  color: colors.grayText,
+                                },
                               ]}
                             >
                               {fmt(item.monto)}
                             </AppText>
                             <AppText
-                              variant="caption"
-                              color={colors.grayText}
-                              style={{ fontSize: 13 }}
+                              style={{
+                                fontSize: 15,
+                                color: colors.grayText,
+                                marginTop: 2,
+                              }}
                             >
                               {item.fecha}
                             </AppText>
                             {item.metodoPago && (
                               <AppText
-                                variant="caption"
-                                color={colors.primary}
-                                style={{ fontSize: 13, fontWeight: "600" }}
+                                style={{
+                                  fontSize: 14,
+                                  color: colors.primary,
+                                  fontWeight: "600",
+                                  marginTop: 2,
+                                }}
                               >
                                 {item.metodoPago}
                               </AppText>
                             )}
                             {esAnulado && item.motivoAnulacion && (
                               <AppText
-                                variant="caption"
-                                color={colors.danger}
-                                style={{ fontSize: 13 }}
+                                style={{
+                                  fontSize: 14,
+                                  color: colors.danger,
+                                  marginTop: 2,
+                                }}
                               >
                                 Motivo: {item.motivoAnulacion}
                               </AppText>
                             )}
                           </View>
-
-                          {/* Badge + botón anular */}
-                          <View
-                            style={{
-                              alignItems: "flex-end",
-                              justifyContent: "space-between",
-                              alignSelf: "stretch",
-                              gap: spacing.xs,
-                            }}
-                          >
+                          <View style={{ alignItems: "flex-end", gap: 8 }}>
                             <View
                               style={[
-                                styles.badge,
+                                s.badge,
                                 {
                                   backgroundColor: esAnulado
-                                    ? (colors.dangerLight ?? "#FEE2E2")
+                                    ? colors.dangerLight
                                     : colors.successLight,
                                 },
                               ]}
                             >
                               <AppText
-                                variant="caption"
-                                color={
-                                  esAnulado ? colors.danger : colors.success
-                                }
-                                style={{ fontSize: 12, fontWeight: "600" }}
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: "700",
+                                  color: esAnulado
+                                    ? colors.danger
+                                    : colors.success,
+                                }}
                               >
                                 {esAnulado ? "Anulado" : "Completado"}
                               </AppText>
@@ -793,16 +1010,13 @@ export const GestorDeudaModal = ({
                                   right: 8,
                                 }}
                                 style={[
-                                  styles.anularBtn,
-                                  {
-                                    backgroundColor:
-                                      colors.dangerLight ?? "#FEE2E2",
-                                  },
+                                  s.anularBtn,
+                                  { backgroundColor: colors.dangerLight },
                                 ]}
                               >
                                 <Feather
                                   name="trash-2"
-                                  size={15}
+                                  size={14}
                                   color={colors.danger}
                                 />
                               </TouchableOpacity>
@@ -818,32 +1032,32 @@ export const GestorDeudaModal = ({
                 {abonosFiltrados.length > 0 && (
                   <View
                     style={[
-                      styles.rowSpace,
+                      s.rowSpace,
                       {
                         paddingTop: spacing.sm,
                         borderTopWidth: 1,
                         borderTopColor: colors.grayBorder,
                         marginTop: spacing.xs,
-                        marginBottom: spacing.sm,
                       },
                     ]}
                   >
-                    <AppText variant="caption" color={colors.grayText}>
+                    <AppText style={{ fontSize: 15, color: colors.grayText }}>
                       {abonosFiltrados.length}{" "}
-                      {abonosFiltrados.length === 1
-                        ? "abono encontrado"
-                        : "abonos encontrados"}
+                      {abonosFiltrados.length === 1 ? "abono" : "abonos"}
                     </AppText>
-                    <View style={styles.rowCenter}>
-                      <AppText variant="captionBold">Total: </AppText>
-                      <AppText variant="captionBold" color={colors.primary}>
-                        {fmt(totalFiltrado)}
-                      </AppText>
-                    </View>
+                    <AppText
+                      style={{
+                        fontSize: 15,
+                        fontWeight: "700",
+                        color: colors.primary,
+                      }}
+                    >
+                      Total: {fmt(totalFiltrado)}
+                    </AppText>
                   </View>
                 )}
 
-                {/* Modal de ordenamiento */}
+                {/* Modal orden */}
                 <Modal
                   visible={ordenModalVisible}
                   transparent
@@ -851,12 +1065,12 @@ export const GestorDeudaModal = ({
                   onRequestClose={() => setOrdenModalVisible(false)}
                 >
                   <Pressable
-                    style={styles.ordenOverlay}
+                    style={s.ordenOverlay}
                     onPress={() => setOrdenModalVisible(false)}
                   >
                     <View
                       style={[
-                        styles.ordenPanel,
+                        s.ordenPanel,
                         {
                           backgroundColor: colors.white,
                           borderRadius: radius.xl,
@@ -866,8 +1080,12 @@ export const GestorDeudaModal = ({
                       ]}
                     >
                       <AppText
-                        variant="bodyBold"
-                        style={{ marginBottom: spacing.sm }}
+                        style={{
+                          fontSize: 18,
+                          fontWeight: "700",
+                          color: colors.ink,
+                          marginBottom: spacing.sm,
+                        }}
                       >
                         Ordenar por
                       </AppText>
@@ -877,11 +1095,11 @@ export const GestorDeudaModal = ({
                         <TouchableOpacity
                           key={key}
                           style={[
-                            styles.ordenOp,
+                            s.ordenOp,
                             {
                               backgroundColor:
                                 ordenActivo === key
-                                  ? (colors.primaryLight ?? "#EEF2FF")
+                                  ? colors.primaryLight
                                   : "transparent",
                               borderRadius: radius.md,
                               paddingVertical: spacing.sm,
@@ -896,10 +1114,13 @@ export const GestorDeudaModal = ({
                           activeOpacity={0.8}
                         >
                           <AppText
-                            variant="body"
-                            color={
-                              ordenActivo === key ? colors.primary : colors.ink
-                            }
+                            style={{
+                              fontSize: 17,
+                              color:
+                                ordenActivo === key
+                                  ? colors.primary
+                                  : colors.ink,
+                            }}
                           >
                             {label}
                           </AppText>
@@ -918,128 +1139,141 @@ export const GestorDeudaModal = ({
               </>
             )}
 
-            {/* ── Vista: Abono ───────────────────────────────────────────── */}
+            {/* ── ABONO ────────────────────────────────────────────────── */}
             {vistaActiva === "abono" && (
               <>
-                {/* Selector método de pago */}
-                <AppText variant="label" style={{ marginBottom: spacing.sm }}>
+                {/* Saldo pendiente */}
+                <View
+                  style={[
+                    s.saldoCard,
+                    {
+                      backgroundColor: colors.dangerLight,
+                      borderRadius: radius.lg,
+                      marginBottom: spacing.lg,
+                    },
+                  ]}
+                >
+                  <AppText
+                    style={{
+                      fontSize: 15,
+                      color: colors.danger,
+                      fontWeight: "600",
+                    }}
+                  >
+                    Saldo pendiente
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 28,
+                      fontWeight: "800",
+                      color: colors.danger,
+                      marginTop: 4,
+                    }}
+                  >
+                    {fmt(detalle.saldoActual)}
+                  </AppText>
+                </View>
+
+                {/* Método de pago */}
+                <AppText
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "700",
+                    color: colors.grayText,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    marginBottom: spacing.sm,
+                  }}
+                >
                   Método de pago
                 </AppText>
                 <View
                   style={[
-                    styles.tabContainer,
+                    s.tabsRow,
                     {
                       backgroundColor: colors.grayBg,
                       borderRadius: radius.lg,
-                      marginBottom: spacing.md,
-                      padding: 4,
+                      marginBottom: spacing.lg,
+                      padding: 3,
                     },
                   ]}
                 >
-                  <TouchableOpacity
-                    style={[
-                      styles.tab,
-                      {
-                        borderRadius: radius.md,
-                        backgroundColor:
-                          metodoPago === "Efectivo"
-                            ? colors.primary
-                            : "transparent",
-                      },
-                    ]}
-                    onPress={() => onChangeMetodoPago("Efectivo")}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.rowCenter, { gap: spacing.xxs }]}>
-                      <Feather
-                        name="dollar-sign"
-                        size={14}
-                        color={
-                          metodoPago === "Efectivo"
-                            ? colors.white
-                            : colors.grayText
-                        }
-                      />
-                      <AppText
-                        variant="captionBold"
-                        color={
-                          metodoPago === "Efectivo"
-                            ? colors.white
-                            : colors.grayText
-                        }
+                  {(["Efectivo", "Transferencia"] as const).map((op) => {
+                    const activo = metodoPago === op;
+                    return (
+                      <TouchableOpacity
+                        key={op}
+                        style={[
+                          s.tab,
+                          {
+                            borderRadius: radius.md,
+                            backgroundColor: activo
+                              ? colors.primary
+                              : "transparent",
+                          },
+                        ]}
+                        onPress={() => onChangeMetodoPago(op)}
+                        activeOpacity={0.8}
                       >
-                        Efectivo
-                      </AppText>
-                    </View>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[
-                      styles.tab,
-                      {
-                        borderRadius: radius.md,
-                        backgroundColor:
-                          metodoPago === "Transferencia"
-                            ? colors.primary
-                            : "transparent",
-                      },
-                    ]}
-                    onPress={() => onChangeMetodoPago("Transferencia")}
-                    activeOpacity={0.8}
-                  >
-                    <View style={[styles.rowCenter, { gap: spacing.xxs }]}>
-                      <Feather
-                        name="smartphone"
-                        size={14}
-                        color={
-                          metodoPago === "Transferencia"
-                            ? colors.white
-                            : colors.grayText
-                        }
-                      />
-                      <AppText
-                        variant="captionBold"
-                        color={
-                          metodoPago === "Transferencia"
-                            ? colors.white
-                            : colors.grayText
-                        }
-                      >
-                        Transferencia
-                      </AppText>
-                    </View>
-                  </TouchableOpacity>
+                        <Feather
+                          name={
+                            op === "Efectivo" ? "dollar-sign" : "smartphone"
+                          }
+                          size={14}
+                          color={activo ? colors.white : colors.grayText}
+                        />
+                        <AppText
+                          style={{
+                            fontSize: 16,
+                            fontWeight: "600",
+                            color: activo ? colors.white : colors.grayText,
+                            marginLeft: 4,
+                          }}
+                        >
+                          {op}
+                        </AppText>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
                 {/* Input monto */}
-                <AppText variant="label" style={{ marginBottom: spacing.sm }}>
-                  Monto a Pagar
+                <AppText
+                  style={{
+                    fontSize: 15,
+                    fontWeight: "700",
+                    color: colors.grayText,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.5,
+                    marginBottom: spacing.sm,
+                  }}
+                >
+                  Monto a pagar
                 </AppText>
                 <View
                   style={[
-                    styles.inputContainer,
+                    s.inputWrap,
                     {
                       backgroundColor: colors.grayBg,
                       borderRadius: radius.md,
                       borderColor: colors.grayBorder,
-                      paddingHorizontal: spacing.md,
-                      paddingVertical: spacing.sm,
-                      gap: spacing.xs,
-                      marginBottom: spacing.md,
+                      marginBottom: spacing.lg,
                     },
                   ]}
                 >
                   <Feather
                     name="dollar-sign"
-                    size={sizes.iconSm}
+                    size={18}
                     color={colors.grayText}
                   />
                   <TextInput
                     style={{
                       flex: 1,
-                      fontSize: typography.size.lg,
+                      fontSize: 22,
+                      fontWeight: "700",
                       color: colors.ink,
                       paddingVertical: spacing.xs,
+                      marginLeft: spacing.xs,
                     }}
                     placeholder="0"
                     placeholderTextColor={colors.grayText}
@@ -1050,19 +1284,15 @@ export const GestorDeudaModal = ({
                   />
                   {montoAbono.length > 0 && (
                     <TouchableOpacity onPress={() => onChangeMonto("")}>
-                      <Feather
-                        name="x"
-                        size={sizes.iconSm}
-                        color={colors.grayText}
-                      />
+                      <Feather name="x" size={18} color={colors.grayText} />
                     </TouchableOpacity>
                   )}
                 </View>
 
-                {/* Botón dentro del scroll — sube con el teclado */}
+                {/* Botón registrar */}
                 <TouchableOpacity
                   style={[
-                    styles.button,
+                    s.btnPrimario,
                     {
                       backgroundColor: colors.primary,
                       borderRadius: radius.lg,
@@ -1072,261 +1302,386 @@ export const GestorDeudaModal = ({
                   onPress={onRegistrarAbono}
                   activeOpacity={0.8}
                 >
-                  <AppText variant="bodyBold" color={colors.white}>
-                    Finalizar Abono
+                  <Feather name="check-circle" size={18} color={colors.white} />
+                  <AppText
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "700",
+                      color: colors.white,
+                      marginLeft: spacing.xs,
+                    }}
+                  >
+                    Finalizar abono
                   </AppText>
                 </TouchableOpacity>
               </>
             )}
           </ScrollView>
-
-          {/* Footer con botones */}
-          <View
-            style={[
-              styles.fixedFooter,
-              { borderTopColor: colors.grayBorder, paddingTop: spacing.md },
-            ]}
-          >
-            {vistaActiva === "detalle" && (
-              <View style={{ gap: spacing.sm }}>
-                <TouchableOpacity
-                  style={[
-                    styles.button,
-                    {
-                      backgroundColor: colors.success,
-                      borderRadius: radius.lg,
-                      padding: spacing.md,
-                    },
-                  ]}
-                  onPress={() => {
-                    setVistaActiva("historial");
-                  }}
-                  activeOpacity={0.8}
-                >
-                  <AppText variant="bodyBold" color={colors.white}>
-                    Ver Historial de Pagos
-                  </AppText>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.button,
-                    {
-                      backgroundColor: colors.primary,
-                      borderRadius: radius.lg,
-                      padding: spacing.md,
-                    },
-                  ]}
-                  onPress={() => setVistaActiva("abono")}
-                  activeOpacity={0.8}
-                >
-                  <AppText variant="bodyBold" color={colors.white}>
-                    Registrar Abono/Pago ($)
-                  </AppText>
-                </TouchableOpacity>
-              </View>
-            )}
-            {vistaActiva === "historial" && (
-              <TouchableOpacity
-                style={[
-                  styles.button,
-                  {
-                    backgroundColor: colors.primary,
-                    borderRadius: radius.lg,
-                    padding: spacing.md,
-                  },
-                ]}
-                onPress={() => setVistaActiva("detalle")}
-                activeOpacity={0.8}
-              >
-                <AppText variant="bodyBold" color={colors.white}>
-                  Volver al detalle
-                </AppText>
-              </TouchableOpacity>
-            )}
-            {/* Vista abono: el botón vive dentro del ScrollView para subir con el teclado */}
-          </View>
-        </View>
+        </>
       )}
     </View>
   );
 
   return (
-    <>
-      {/* ── Modal principal ───────────────────────────────────────────────── */}
+    <Modal
+      visible={isVisible}
+      animationType="slide"
+      transparent
+      onRequestClose={closeModal}
+    >
+      <View style={s.overlay}>
+        <Pressable style={s.backdrop} onPress={closeModal} />
+        {Platform.OS === "ios" ? (
+          <KeyboardAvoidingView
+            behavior="padding"
+            style={s.kav}
+            keyboardVerticalOffset={-34}
+          >
+            {modalInner}
+          </KeyboardAvoidingView>
+        ) : (
+          <Animated.View style={[s.kav, { marginBottom: androidBottom }]}>
+            {modalInner}
+          </Animated.View>
+        )}
+      </View>
+      {/* ── MINI MODAL: detalle de compra ─────────────────────────────── */}
       <Modal
-        visible={isVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={closeModal}
+        visible={!!ventaSeleccionada}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setVentaSeleccionada(null)}
       >
-        <View style={styles.overlay}>
-          <Pressable style={styles.backdrop} onPress={closeModal} />
-          {Platform.OS === "ios" ? (
-            <KeyboardAvoidingView
-              behavior="padding"
-              style={styles.keyboardView}
-              keyboardVerticalOffset={-34}
-            >
-              {modalInner}
-            </KeyboardAvoidingView>
-          ) : (
-            <Animated.View
-              style={[styles.keyboardView, { marginBottom: androidBottom }]}
-            >
-              {modalInner}
-            </Animated.View>
-          )}
-        </View>
+        <Pressable
+          style={s.ordenOverlay}
+          onPress={() => setVentaSeleccionada(null)}
+        >
+          <Pressable
+            style={[
+              s.ventaModal,
+              {
+                backgroundColor: colors.white,
+                borderRadius: radius.xl,
+                margin: spacing.lg,
+              },
+            ]}
+            onPress={(e) => e.stopPropagation()}
+          >
+            {ventaSeleccionada && (
+              <>
+                {/* Header mini modal */}
+                <View style={[s.rowSpace, { marginBottom: spacing.md }]}>
+                  <View>
+                    <AppText
+                      style={{
+                        fontSize: 17,
+                        fontWeight: "800",
+                        color: colors.ink,
+                      }}
+                    >
+                      Factura N° {ventaSeleccionada.numeroFactura}
+                    </AppText>
+                    <AppText
+                      style={{
+                        fontSize: 14,
+                        color: colors.grayText,
+                        marginTop: 2,
+                      }}
+                    >
+                      {ventaSeleccionada.fecha}
+                    </AppText>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setVentaSeleccionada(null)}
+                    style={[s.closeBtn, { backgroundColor: colors.grayBg }]}
+                  >
+                    <Feather name="x" size={16} color={colors.grayText} />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Lista de productos */}
+                <View
+                  style={[
+                    {
+                      backgroundColor: colors.grayBg,
+                      borderRadius: radius.lg,
+                      padding: spacing.sm,
+                      marginBottom: spacing.md,
+                    },
+                  ]}
+                >
+                  <View
+                    style={[
+                      s.rowSpace,
+                      {
+                        paddingHorizontal: spacing.xs,
+                        paddingBottom: spacing.xs,
+                        borderBottomWidth: 1,
+                        borderBottomColor: colors.grayBorder,
+                        marginBottom: spacing.xs,
+                      },
+                    ]}
+                  >
+                    <AppText
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: colors.grayText,
+                        flex: 2,
+                      }}
+                    >
+                      Producto
+                    </AppText>
+                    <AppText
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: colors.grayText,
+                        textAlign: "center",
+                        flex: 1,
+                      }}
+                    >
+                      Cant.
+                    </AppText>
+                    <AppText
+                      style={{
+                        fontSize: 13,
+                        fontWeight: "700",
+                        color: colors.grayText,
+                        textAlign: "right",
+                        flex: 1,
+                      }}
+                    >
+                      Subtotal
+                    </AppText>
+                  </View>
+                  {!ventaSeleccionada.items ||
+                  ventaSeleccionada.items.length === 0 ? (
+                    <View
+                      style={{
+                        alignItems: "center",
+                        paddingVertical: spacing.md,
+                      }}
+                    >
+                      <Feather
+                        name="package"
+                        size={24}
+                        color={colors.grayBorder}
+                      />
+                      <AppText
+                        style={{
+                          fontSize: 14,
+                          color: colors.grayText,
+                          marginTop: spacing.xs,
+                        }}
+                      >
+                        Sin productos registrados
+                      </AppText>
+                    </View>
+                  ) : (
+                    (Array.isArray(ventaSeleccionada.items)
+                      ? ventaSeleccionada.items
+                      : JSON.parse(ventaSeleccionada.items as any)
+                    ).map(
+                      (
+                        item: import("../../../../domain/entities/Venta").ItemVenta,
+                        i: number,
+                      ) => (
+                        <View
+                          key={i}
+                          style={[
+                            s.rowSpace,
+                            {
+                              paddingVertical: spacing.xs,
+                              paddingHorizontal: spacing.xs,
+                              borderBottomWidth:
+                                i < ventaSeleccionada.items.length - 1 ? 1 : 0,
+                              borderBottomColor: colors.grayBorder,
+                            },
+                          ]}
+                        >
+                          <View style={{ flex: 2 }}>
+                            <AppText
+                              style={{
+                                fontSize: 15,
+                                fontWeight: "600",
+                                color: colors.ink,
+                              }}
+                            >
+                              {item.nombreProducto}
+                            </AppText>
+                            <AppText
+                              style={{ fontSize: 13, color: colors.grayText }}
+                            >
+                              {fmt(item.precioUnitario)} c/u
+                            </AppText>
+                          </View>
+                          <AppText
+                            style={{
+                              fontSize: 15,
+                              color: colors.inkSoft,
+                              textAlign: "center",
+                              flex: 1,
+                            }}
+                          >
+                            {item.cantidad} {item.unidad}
+                          </AppText>
+                          <AppText
+                            style={{
+                              fontSize: 15,
+                              fontWeight: "700",
+                              color: colors.ink,
+                              textAlign: "right",
+                              flex: 1,
+                            }}
+                          >
+                            {fmt(item.subtotal)}
+                          </AppText>
+                        </View>
+                      ),
+                    )
+                  )}
+                </View>
+
+                {/* Total */}
+                <View
+                  style={[
+                    s.rowSpace,
+                    {
+                      backgroundColor: colors.primaryLight,
+                      borderRadius: radius.lg,
+                      padding: spacing.md,
+                    },
+                  ]}
+                >
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      fontWeight: "700",
+                      color: colors.primary,
+                    }}
+                  >
+                    Total
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 20,
+                      fontWeight: "800",
+                      color: colors.primary,
+                    }}
+                  >
+                    {fmt(ventaSeleccionada.total)}
+                  </AppText>
+                </View>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
       </Modal>
-    </>
+    </Modal>
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-    paddingTop: 50,
-  },
+const s = StyleSheet.create({
+  overlay: { flex: 1, justifyContent: "flex-end", paddingTop: 50 },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    backgroundColor: "rgba(0,0,0,0.45)",
   },
-  keyboardView: {
-    flex: 1,
-    width: "100%",
-    justifyContent: "flex-end",
-  },
-  modalContent: {
-    flex: 1,
-    width: "100%",
-  },
-  flexContainer: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  headerRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 15,
-  },
-  dragIndicator: {
+  kav: { flex: 1, width: "100%", justifyContent: "flex-end" },
+  sheet: { flex: 1, width: "100%" },
+  dragWrap: { alignItems: "center", paddingTop: 12, paddingBottom: 4 },
+  drag: { width: 40, height: 5, borderRadius: 3 },
+  loading: { minHeight: 200, alignItems: "center", justifyContent: "center" },
+
+  // Header fijo
+  headerFijo: { borderBottomWidth: 1 },
+  clienteRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  avatarCircle: {
     width: 40,
-    height: 5,
-    borderRadius: 3,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
   },
-  closeButton: {
+  saldoBadge: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10 },
+  closeBtn: {
     width: 32,
     height: 32,
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  scrollView: {
+
+  // Tabs
+  tabsRow: { flexDirection: "row" },
+  tab: {
     flex: 1,
-  },
-  fixedFooter: {
-    width: "100%",
-    borderTopWidth: 1,
-    backgroundColor: "#fff",
-    paddingBottom: Platform.OS === "ios" ? 20 : 10,
-  },
-  loadingContainer: {
-    minHeight: 200,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  rowCenter: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 8,
   },
+
+  // Layout helpers
+  rowCenter: { flexDirection: "row", alignItems: "center" },
   rowSpace: {
     flexDirection: "row",
     justifyContent: "space-between",
-  },
-  iconContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-  abonoInfo: {
-    flex: 1,
-  },
-  inputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-  },
-  button: {
     alignItems: "center",
   },
-  tabContainer: {
-    flexDirection: "row",
-  },
-  tab: {
-    flex: 1,
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  anularBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  // ── Estilos del nuevo historial ───────────────────────────────────────────
-  statsRow: {
-    flexDirection: "row",
-    gap: 6,
-  },
-  statCard: {
-    shadowColor: "#000",
-    shadowOpacity: 0.03,
-    shadowRadius: 3,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 1,
-  },
-  statIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  filtrosPanel: {
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
+
+  // Resumen cards
+  resumenRow: { flexDirection: "row", gap: 8 },
+  resumenCard: { flex: 1, padding: 14 },
+  statsRow: { flexDirection: "row", gap: 6 },
+  statCard: { flex: 1.4, padding: 12 },
+  statCardSm: { flex: 1, padding: 12 },
+  saldoCard: { padding: 16 },
+
+  // Filtros
+  filtrosPanel: { overflow: "hidden" },
   filtrosHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  filtrosBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-  selectorRow: {
-    flexDirection: "row",
-  },
+  selector: { flexDirection: "row" },
   selectorOp: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 7,
   },
-  badge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 20,
+  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 20 },
+
+  // Abonos
+  iconCircle: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
   },
+  anularBtn: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Input
+  inputWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+
+  // Botones
   btnSecundario: {
     flexDirection: "row",
     alignItems: "center",
@@ -1338,31 +1693,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+
+  // Orden modal
   ordenOverlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.35)",
     justifyContent: "center",
   },
   ordenPanel: {
+    elevation: 8,
     shadowColor: "#000",
     shadowOpacity: 0.15,
     shadowRadius: 12,
     shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
   },
   ordenOp: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  anulacionSheet: {
-    width: "100%",
-  },
-  textAreaContainer: {
-    borderWidth: 1,
-    minHeight: 100,
-  },
-  textArea: {
-    minHeight: 80,
+  ventaModal: {
+    padding: 20,
+    elevation: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 4 },
   },
 });

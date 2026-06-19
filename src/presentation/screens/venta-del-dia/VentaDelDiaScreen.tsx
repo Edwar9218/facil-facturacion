@@ -1463,7 +1463,7 @@ export const VentaDelDiaScreen = () => {
         )}
 
         {/* ══ CRÉDITO PENDIENTE HISTÓRICO ═══════════════════════════════ */}
-        {deudores.length > 0 && (
+        {/* {deudores.length > 0 && (
           <View style={s.creditoCard}>
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
@@ -1489,7 +1489,7 @@ export const VentaDelDiaScreen = () => {
               </AppText>
             </View>
           </View>
-        )}
+        )} */}
       </ScrollView>
 
       <ModalFactura
