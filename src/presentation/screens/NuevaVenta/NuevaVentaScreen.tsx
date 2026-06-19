@@ -282,66 +282,65 @@ export default function NuevaVentaScreen() {
         {/* Header igual al normal */}
         <View
           style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingHorizontal: 16,
+            paddingBottom: 10,
+            paddingTop: insets.top,
             backgroundColor: colors.white,
-            paddingHorizontal: spacing.sm,
-            paddingBottom: spacing.md,
-            paddingTop: insets.top + 8,
-            ...shadows.md,
+            borderBottomWidth: 1,
+            borderBottomColor: "#F0F0F0",
           }}
         >
-          <View
+          {/* BOTÓN VOLVER (Vacío para mantener la alineación) */}
+          <View style={{ width: 90, justifyContent: "center" }} />
+
+          {/* TÍTULO CENTRAL */}
+          <AppText
             style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
+              fontSize: 20,
+              fontWeight: "800",
+              color: colors.primary,
+              letterSpacing: -0.3,
             }}
           >
-            <View style={{ width: 100 }} />
-            <View
+            Fácil
+          </AppText>
+
+          {/* BOTÓN SALIR */}
+          <View
+            style={{
+              width: 90,
+              justifyContent: "center",
+              alignItems: "flex-end",
+            }}
+          >
+            <TouchableOpacity
               style={{
-                flex: 1,
+                flexDirection: "row",
                 alignItems: "center",
-                justifyContent: "center",
+                gap: 2,
+                paddingVertical: 8,
               }}
+              activeOpacity={0.7}
+              onPress={() => router.back()}
             >
-              <MaterialCommunityIcons
-                name="receipt-text-check-outline"
-                size={36}
-                color={colors.primary}
-              />
               <AppText
                 style={{
-                  fontSize: typography.size.xxl,
-                  fontWeight: typography.weight.black,
-                  color: colors.primary,
-                  marginTop: -4,
+                  fontSize: typography.size.md,
+                  color: colors.grayText,
+                  fontWeight: typography.weight.regular,
                 }}
               >
-                Fácil
+                salir
               </AppText>
-            </View>
-            <View style={{ width: 100, alignItems: "flex-end" }}>
-              <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
-                activeOpacity={0.7}
-                onPress={() => router.back()}
-              >
-                <AppText
-                  style={{
-                    fontSize: typography.size.lg,
-                    fontWeight: typography.weight.regular,
-                    color: colors.grayText,
-                  }}
-                >
-                  salir
-                </AppText>
-                <MaterialCommunityIcons
-                  name="logout-variant"
-                  size={sizes.iconMd}
-                  color={colors.grayText}
-                />
-              </TouchableOpacity>
-            </View>
+              <MaterialCommunityIcons
+                name="logout-variant"
+                size={22}
+                color={colors.grayText}
+              />
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -438,91 +437,93 @@ export default function NuevaVentaScreen() {
         {/* HEADER */}
         <View
           style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingHorizontal: 16,
+            paddingBottom: 10,
+            paddingTop: insets.top,
             backgroundColor: colors.white,
-            paddingHorizontal: spacing.sm,
-            paddingBottom: spacing.md,
-            paddingTop: insets.top + 8,
-            ...shadows.md,
+            borderBottomWidth: 1,
+            borderBottomColor: "#F0F0F0",
           }}
         >
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-            }}
-          >
-            <View style={{ width: 100, alignItems: "flex-start" }}>
-              {step > 1 && (
-                <TouchableOpacity
-                  style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
-                  activeOpacity={0.7}
-                  onPress={retroceder}
-                >
-                  <Feather
-                    name="chevron-left"
-                    size={sizes.iconMd}
-                    color={colors.grayText}
-                  />
-                  <AppText
-                    style={{
-                      fontSize: typography.size.lg,
-                      fontWeight: typography.weight.regular,
-                      color: colors.grayText,
-                    }}
-                  >
-                    volver
-                  </AppText>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            <View
-              style={{
-                flex: 1,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <MaterialCommunityIcons
-                name="receipt-text-check-outline"
-                size={36}
-                color={colors.primary}
-              />
-              <AppText
-                style={{
-                  fontSize: typography.size.xxl,
-                  fontWeight: typography.weight.black,
-                  color: colors.primary,
-                  marginTop: -4,
-                }}
-              >
-                Fácil
-              </AppText>
-            </View>
-
-            <View style={{ width: 100, alignItems: "flex-end" }}>
+          {/* BOTÓN VOLVER */}
+          <View style={{ width: 90, justifyContent: "center" }}>
+            {step > 1 && (
               <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 2,
+                  paddingVertical: 8,
+                }}
                 activeOpacity={0.7}
-                onPress={() => router.back()}
+                onPress={retroceder}
               >
+                <Feather
+                  name="chevron-left"
+                  size={22}
+                  color={colors.grayText}
+                />
                 <AppText
                   style={{
-                    fontSize: typography.size.lg,
+                    fontSize: typography.size.md,
                     fontWeight: typography.weight.regular,
                     color: colors.grayText,
                   }}
                 >
-                  salir
+                  volver
                 </AppText>
-                <MaterialCommunityIcons
-                  name="logout-variant"
-                  size={sizes.iconMd}
-                  color={colors.grayText}
-                />
               </TouchableOpacity>
-            </View>
+            )}
+          </View>
+
+          {/* TÍTULO CENTRAL */}
+          <AppText
+            style={{
+              fontSize: 20,
+              fontWeight: "800",
+              color: colors.primary,
+              letterSpacing: -0.3,
+            }}
+          >
+            Fácil
+          </AppText>
+
+          {/* BOTÓN SALIR */}
+          <View
+            style={{
+              width: 90,
+              justifyContent: "center",
+              alignItems: "flex-end",
+            }}
+          >
+            <TouchableOpacity
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 2,
+                paddingVertical: 8,
+              }}
+              activeOpacity={0.7}
+              onPress={() => router.back()}
+            >
+              <AppText
+                style={{
+                  fontSize: typography.size.md,
+                  fontWeight: typography.weight.regular,
+                  color: colors.grayText,
+                }}
+              >
+                salir
+              </AppText>
+              <MaterialCommunityIcons
+                name="logout-variant"
+                size={22}
+                color={colors.grayText}
+              />
+            </TouchableOpacity>
           </View>
         </View>
 

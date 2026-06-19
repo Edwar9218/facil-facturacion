@@ -1,4 +1,4 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
@@ -6,12 +6,13 @@ import {
   Platform,
   ScrollView,
   StatusBar,
-  Text,
+  StyleSheet,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../../theme";
+import { AppText } from "../ui/AppText";
 
 interface Props {
   children: React.ReactNode;
@@ -38,7 +39,7 @@ export const ScreenWrapper = ({
 }: Props) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { colors, typography, spacing, shadows, sizes } = useTheme();
+  const { colors, typography, spacing } = useTheme();
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.grayBg }}>
@@ -48,101 +49,75 @@ export const ScreenWrapper = ({
         translucent
       />
 
-      {/* HEADER */}
+      {/* HEADER estilo WhatsApp */}
       <View
         style={[
+          s.header,
           {
             backgroundColor: colors.white,
-            paddingHorizontal: spacing.sm,
-            paddingBottom: spacing.md,
-            ...shadows.md,
+            paddingTop: insets.top,
+            borderBottomColor: "#F0F0F0",
           },
-          { paddingTop: insets.top + 8 },
         ]}
       >
-        <View
+        {/* BOTÓN VOLVER */}
+        <View style={s.sideSlot}>
+          {showBackButton && showBtnA && labelBtnA ? (
+            <TouchableOpacity
+              style={s.backBtn}
+              activeOpacity={0.7}
+              onPress={onPressBtnA ?? (() => router.back())}
+            >
+              <Feather name="chevron-left" size={22} color={colors.grayText} />
+              <AppText
+                style={{
+                  fontSize: typography.size.md,
+                  color: colors.grayText,
+                  fontWeight: typography.weight.regular,
+                }}
+              >
+                {labelBtnA}
+              </AppText>
+            </TouchableOpacity>
+          ) : (
+            <View />
+          )}
+        </View>
+
+        {/* TÍTULO CENTRAL */}
+        <AppText
           style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
+            fontSize: 20,
+            fontWeight: "800",
+            color: colors.primary,
+            letterSpacing: -0.3,
           }}
         >
-          {/* BOTÓN A */}
-          <View style={{ width: 100, alignItems: "flex-start" }}>
-            {showBackButton && showBtnA && labelBtnA ? (
-              <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
-                activeOpacity={0.7}
-                onPress={onPressBtnA ?? (() => router.back())}
-              >
-                <Feather
-                  name="chevron-left"
-                  size={sizes.iconMd}
-                  color={colors.grayText}
-                />
-                <Text
-                  style={{
-                    fontSize: typography.size.lg,
-                    fontWeight: typography.weight.regular,
-                    color: colors.grayText,
-                  }}
-                >
-                  {labelBtnA}
-                </Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={{ width: 100, height: 46 }} />
-            )}
-          </View>
+          Fácil
+        </AppText>
 
-          {/* LOGO */}
-          <View
-            style={{ flex: 1, alignItems: "center", justifyContent: "center" }}
-          >
-            <MaterialCommunityIcons
-              name="receipt-text-check-outline"
-              size={36}
-              color={colors.primary}
-            />
-            <Text
-              style={{
-                fontSize: typography.size.xxl,
-                fontWeight: typography.weight.black,
-                color: colors.primary,
-                marginTop: -4,
-              }}
+        {/* BOTÓN B */}
+        <View style={[s.sideSlot, { alignItems: "flex-end" }]}>
+          {showBtnB && labelBtnB ? (
+            <TouchableOpacity
+              style={s.backBtn}
+              activeOpacity={0.7}
+              onPress={onPressBtnB}
             >
-              Fácil
-            </Text>
-          </View>
-
-          {/* BOTÓN B */}
-          <View style={{ width: 100, alignItems: "flex-end" }}>
-            {showBtnB && labelBtnB ? (
-              <TouchableOpacity
-                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
-                activeOpacity={0.7}
-                onPress={onPressBtnB}
+              <AppText
+                style={{
+                  fontSize: typography.size.md,
+                  color: colors.grayText,
+                  fontWeight: typography.weight.regular,
+                }}
               >
-                <Text
-                  style={{
-                    fontSize: typography.size.lg,
-                    fontWeight: typography.weight.regular,
-                    color: colors.grayText,
-                  }}
-                >
-                  {labelBtnB}
-                </Text>
-                <Feather
-                  name="chevron-right"
-                  size={sizes.iconMd}
-                  color={colors.grayText}
-                />
-              </TouchableOpacity>
-            ) : (
-              <View style={{ width: 100, height: 46 }} />
-            )}
-          </View>
+                {labelBtnB}
+              </AppText>
+              <Feather name="chevron-right" size={22} color={colors.grayText} />
+            </TouchableOpacity>
+          ) : (
+            <View />
+          )}
         </View>
       </View>
 
@@ -159,9 +134,9 @@ export const ScreenWrapper = ({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* TÍTULO */}
+          {/* TÍTULO DE PANTALLA */}
           {title && (
-            <Text
+            <AppText
               style={{
                 fontSize: typography.size.xxl,
                 fontWeight: typography.weight.extraBold,
@@ -172,7 +147,7 @@ export const ScreenWrapper = ({
               }}
             >
               {title}
-            </Text>
+            </AppText>
           )}
 
           {children}
@@ -181,3 +156,24 @@ export const ScreenWrapper = ({
     </View>
   );
 };
+
+const s = StyleSheet.create({
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+  },
+  sideSlot: {
+    width: 90,
+    justifyContent: "center",
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    paddingVertical: 8,
+  },
+});
