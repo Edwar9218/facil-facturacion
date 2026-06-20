@@ -3,26 +3,26 @@ import { radius } from "./radius";
 import { shadows } from "./shadows";
 import { sizes } from "./sizes";
 import { spacing } from "./spacing";
-import { typography } from "./typography";
+import { buildTypography } from "./typography";
 
 export const lightTheme = {
   colors,
-  typography,
+  typography: buildTypography("normal"),
   spacing,
   radius,
   sizes,
   shadows,
   isDark: false,
-} as const;
+};
 
 export const darkTheme = {
   colors: colorsDark,
-  typography,
+  typography: buildTypography("normal"),
   spacing,
   radius,
   sizes,
   shadows,
   isDark: true,
-} as const;
+};
 
 export type Theme = typeof lightTheme;
