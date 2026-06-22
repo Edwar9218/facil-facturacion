@@ -1381,86 +1381,74 @@ export const VentaDelDiaScreen = () => {
           </View>
         )}
 
-        {/* ══ GASTOS DEL DÍA ════════════════════════════════════════════ */}
-        {gastos.length > 0 && (
-          <View style={{ marginBottom: 16 }}>
-            <View style={s.seccionHeader}>
-              <AppText style={s.seccionTitulo}>Gastos de hoy</AppText>
-              <AppText
-                style={{ fontSize: 15, fontWeight: "700", color: "#E03E3E" }}
-              >
-                {/* -{fmt(stats.totalGastos)} */}
-              </AppText>
-            </View>
-
-            <View style={s.metricaCard}>
-              <View style={s.metricaFila}>
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="cash"
-                    size={16}
-                    color="#2EAA6E"
-                  />
-                  <AppText style={s.metricaLabel}>Efectivo</AppText>
-                </View>
-                <AppText style={s.gastoMonto}>
-                  -{fmt(stats.totalGastosEfectivo)}
-                </AppText>
+        {/* ══ GASTOS DEL DÍA ══════════════════════════════════════════════
+            Se oculta por completo cuando el Estado del pago es
+            "En mora" o "Anuladas". ──────────────────────────────────── */}
+        {filtroEstado !== "debe" &&
+          filtroEstado !== "anulada" &&
+          gastos.length > 0 && (
+            <View style={{ marginBottom: 16 }}>
+              <View style={s.seccionHeader}>
+                <AppText style={s.seccionTitulo}>Gastos de hoy</AppText>
               </View>
 
-              <View style={s.metricaFila}>
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-                >
-                  <MaterialCommunityIcons
-                    name="bank-transfer"
-                    size={16}
-                    color="#7C3AED"
-                  />
-                  <AppText style={s.metricaLabel}>Transferencia</AppText>
+              <View style={s.metricaCard}>
+                <View style={s.metricaFila}>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      fontWeight: "700",
+                      color: "#111827",
+                    }}
+                  >
+                    Total
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "800",
+                      color: "#DC2626",
+                    }}
+                  >
+                    -{fmt(stats.totalGastos)}
+                  </AppText>
                 </View>
-                <AppText style={s.gastoMonto}>
-                  -{fmt(stats.totalGastosTransferencia)}
-                </AppText>
-              </View>
 
-              <View style={s.metricaDivisor} />
+                <View style={s.metricaDivisor} />
 
-              {gastos.slice(0, 3).map((g) => (
-                <View key={g.id} style={s.metricaFila}>
-                  <View style={{ flex: 1 }}>
-                    <AppText style={s.gastoNombre} numberOfLines={1}>
-                      {g.descripcion}
-                    </AppText>
-                    <AppText style={s.gastoSub}>
-                      {g.categoria} ·{" "}
-                      {g.metodoPago === "efectivo"
-                        ? "Efectivo"
-                        : "Transferencia"}
-                    </AppText>
+                {gastos.slice(0, 3).map((g) => (
+                  <View key={g.id} style={s.metricaFila}>
+                    <View style={{ flex: 1 }}>
+                      <AppText style={s.gastoNombre} numberOfLines={1}>
+                        {g.descripcion}
+                      </AppText>
+                      <AppText style={s.gastoSub}>
+                        {g.categoria} ·{" "}
+                        {g.metodoPago === "efectivo"
+                          ? "Efectivo"
+                          : "Transferencia"}
+                      </AppText>
+                    </View>
+                    <AppText style={s.gastoMonto}>-{fmt(g.monto)}</AppText>
                   </View>
-                  <AppText style={s.gastoMonto}>-{fmt(g.monto)}</AppText>
-                </View>
-              ))}
+                ))}
 
-              {gastos.length > 3 && (
-                <AppText
-                  style={{
-                    fontSize: 13,
-                    color: colors.primary,
-                    fontWeight: "600",
-                    textAlign: "center",
-                    marginTop: 4,
-                  }}
-                >
-                  +{gastos.length - 3} gastos más — ver en Gastos
-                </AppText>
-              )}
+                {gastos.length > 3 && (
+                  <AppText
+                    style={{
+                      fontSize: 13,
+                      color: colors.primary,
+                      fontWeight: "600",
+                      textAlign: "center",
+                      marginTop: 4,
+                    }}
+                  >
+                    +{gastos.length - 3} gastos más — ver en Gastos
+                  </AppText>
+                )}
+              </View>
             </View>
-          </View>
-        )}
+          )}
 
         {/* ══ CRÉDITO PENDIENTE HISTÓRICO ═══════════════════════════════ */}
         {/* {deudores.length > 0 && (

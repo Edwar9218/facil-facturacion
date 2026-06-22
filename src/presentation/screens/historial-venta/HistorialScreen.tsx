@@ -1104,14 +1104,21 @@ export const HistorialScreen = () => {
       .reduce((a, g) => a + g.monto, 0);
     const totalGastos = gastosEfectivo + gastosTransferencia;
 
-    const totalDebe = activas
-      .filter((v) => !evaluarFacturaPagada(v))
-      .reduce((a, v) => {
-        const abonado = abonos
-          .filter((ab) => ab.ventaId === v.id && ab.estado !== "anulado")
-          .reduce((s, ab) => s + ab.monto, 0);
-        return a + Math.max(0, v.total - abonado);
-      }, 0);
+    const facturasEnMora = activas.filter((v) => !evaluarFacturaPagada(v));
+
+    const totalDebe = facturasEnMora.reduce((a, v) => {
+      const abonado = abonos
+        .filter((ab) => ab.ventaId === v.id && ab.estado !== "anulado")
+        .reduce((s, ab) => s + ab.monto, 0);
+      return a + Math.max(0, v.total - abonado);
+    }, 0);
+
+    // Tarjeta "En mora": saldo pendiente por cobrar (total - abonado)
+    const montoEnMora = totalDebe;
+    const cantEnMora = facturasEnMora.length;
+
+    // Tarjeta "Anuladas": total de las facturas anuladas
+    const montoAnuladas = anuladas.reduce((a, v) => a + v.total, 0);
 
     return {
       cantVentas,
@@ -1124,6 +1131,9 @@ export const HistorialScreen = () => {
       gastosTransferencia,
       totalGastos,
       totalDebe,
+      montoEnMora,
+      cantEnMora,
+      montoAnuladas,
     };
   }, [
     ventasFiltradas,
@@ -1343,183 +1353,239 @@ export const HistorialScreen = () => {
 
         {/* ══ MÉTRICAS ══════════════════════════════════════════════════ */}
         <View style={s.recuadroMétricasContenedor}>
-          {/* Tarjeta EFECTIVO */}
-          <View style={s.metricaCard}>
-            <AppText style={s.metricaEncabezado}>EFECTIVO</AppText>
-            <View style={s.metricaFila}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <MaterialCommunityIcons
-                  name="cart-outline"
-                  size={16}
-                  color="#6B7280"
-                />
-                <AppText style={s.metricaLabel}>+ Ventas</AppText>
-              </View>
-              <AppText style={s.metricaValorVerde}>
-                {fmt(stats.efectivoVenta)}
-              </AppText>
-            </View>
-            <View style={s.metricaFila}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <MaterialCommunityIcons
-                  name="cash-multiple"
-                  size={16}
-                  color="#6B7280"
-                />
-                <AppText style={s.metricaLabel}>+ Abonos</AppText>
-              </View>
-              <AppText style={s.metricaValorVerde}>
-                {fmt(stats.efectivoAbono)}
-              </AppText>
-            </View>
-            {stats.gastosEfectivo > 0 && (
+          {/* Tarjeta EFECTIVO — visible en "todas" y "pazysalvo" (Al día) */}
+          {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
+            <View style={s.metricaCard}>
+              <AppText style={s.metricaEncabezado}>EFECTIVO</AppText>
               <View style={s.metricaFila}>
                 <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
                 >
                   <MaterialCommunityIcons
-                    name="receipt-text-outline"
+                    name="cart-outline"
                     size={16}
                     color="#6B7280"
                   />
-                  <AppText style={s.metricaLabel}>- Gastos</AppText>
+                  <AppText style={s.metricaLabel}>+ Ventas</AppText>
                 </View>
-                <AppText style={s.metricaValorRojo}>
-                  -{fmt(stats.gastosEfectivo)}
+                <AppText style={s.metricaValorVerde}>
+                  {fmt(stats.efectivoVenta)}
                 </AppText>
               </View>
-            )}
-            <View style={s.metricaDivisor} />
-            <View style={s.metricaFilaTotal}>
-              <AppText style={s.metricaTotalLabel}>Total efectivo</AppText>
-              <AppText style={s.metricaTotalValorVerde}>
-                {fmt(
-                  stats.efectivoVenta +
-                    stats.efectivoAbono -
-                    stats.gastosEfectivo,
-                )}
-              </AppText>
-            </View>
-          </View>
-
-          {/* Tarjeta TRANSFERENCIA */}
-          <View style={s.metricaCard}>
-            <AppText style={[s.metricaEncabezado, { color: "#7C3AED" }]}>
-              TRANSFERENCIA
-            </AppText>
-            <View style={s.metricaFila}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <MaterialCommunityIcons
-                  name="cart-outline"
-                  size={16}
-                  color="#6B7280"
-                />
-                <AppText style={s.metricaLabel}>+ Ventas</AppText>
-              </View>
-              <AppText style={[s.metricaValorVerde, { color: "#7C3AED" }]}>
-                {fmt(stats.transferenciaVenta)}
-              </AppText>
-            </View>
-            <View style={s.metricaFila}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <MaterialCommunityIcons
-                  name="cash-multiple"
-                  size={16}
-                  color="#6B7280"
-                />
-                <AppText style={s.metricaLabel}>+ Abonos</AppText>
-              </View>
-              <AppText style={[s.metricaValorVerde, { color: "#7C3AED" }]}>
-                {fmt(stats.transferenciaAbono)}
-              </AppText>
-            </View>
-            {stats.gastosTransferencia > 0 && (
               <View style={s.metricaFila}>
                 <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
                 >
                   <MaterialCommunityIcons
-                    name="receipt-text-outline"
+                    name="cash-multiple"
                     size={16}
                     color="#6B7280"
                   />
-                  <AppText style={s.metricaLabel}>- Gastos</AppText>
+                  <AppText style={s.metricaLabel}>+ Abonos</AppText>
                 </View>
-                <AppText style={s.metricaValorRojo}>
-                  -{fmt(stats.gastosTransferencia)}
+                <AppText style={s.metricaValorVerde}>
+                  {fmt(stats.efectivoAbono)}
                 </AppText>
               </View>
-            )}
-            <View style={s.metricaDivisor} />
-            <View style={s.metricaFilaTotal}>
-              <AppText style={s.metricaTotalLabel}>Neto transferencia</AppText>
-              <AppText style={[s.metricaTotalValorVerde, { color: "#7C3AED" }]}>
-                {fmt(
-                  stats.transferenciaVenta +
-                    stats.transferenciaAbono -
-                    stats.gastosTransferencia,
-                )}
-              </AppText>
-            </View>
-          </View>
-
-          {/* Saldos pendientes */}
-          {stats.totalDebe > 0 && (
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-                backgroundColor: "#FFFBEB",
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: "#FDE68A",
-                paddingHorizontal: 16,
-                paddingVertical: 14,
-              }}
-            >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-              >
-                <MaterialCommunityIcons
-                  name="clock-alert-outline"
-                  size={22}
-                  color="#D97706"
-                />
-                <View>
-                  <AppText
+              {stats.gastosEfectivo > 0 && (
+                <View style={s.metricaFila}>
+                  <View
                     style={{
-                      fontSize: 16,
-                      color: "#92400E",
-                      fontWeight: "700",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
                     }}
                   >
-                    Saldos pendientes
-                  </AppText>
-                  <AppText
-                    style={{
-                      fontSize: 12,
-                      color: "#B45309",
-                      fontWeight: "500",
-                    }}
-                  >
-                    Créditos sin saldar en el periodo
+                    <MaterialCommunityIcons
+                      name="receipt-text-outline"
+                      size={16}
+                      color="#6B7280"
+                    />
+                    <AppText style={s.metricaLabel}>- Gastos</AppText>
+                  </View>
+                  <AppText style={s.metricaValorRojo}>
+                    -{fmt(stats.gastosEfectivo)}
                   </AppText>
                 </View>
+              )}
+              <View style={s.metricaDivisor} />
+              <View style={s.metricaFilaTotal}>
+                <AppText style={s.metricaTotalLabel}>Total efectivo</AppText>
+                <AppText style={s.metricaTotalValorVerde}>
+                  {fmt(
+                    stats.efectivoVenta +
+                      stats.efectivoAbono -
+                      stats.gastosEfectivo,
+                  )}
+                </AppText>
               </View>
-              <AppText
-                style={{ fontSize: 18, color: "#D97706", fontWeight: "800" }}
-              >
-                {fmt(stats.totalDebe)}
+            </View>
+          )}
+
+          {/* Tarjeta TRANSFERENCIA — visible en "todas" y "pazysalvo" (Al día) */}
+          {(filtroEstado === "todas" || filtroEstado === "pazysalvo") && (
+            <View style={s.metricaCard}>
+              <AppText style={[s.metricaEncabezado, { color: "#7C3AED" }]}>
+                TRANSFERENCIA
               </AppText>
+              <View style={s.metricaFila}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="cart-outline"
+                    size={16}
+                    color="#6B7280"
+                  />
+                  <AppText style={s.metricaLabel}>+ Ventas</AppText>
+                </View>
+                <AppText style={[s.metricaValorVerde, { color: "#7C3AED" }]}>
+                  {fmt(stats.transferenciaVenta)}
+                </AppText>
+              </View>
+              <View style={s.metricaFila}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="cash-multiple"
+                    size={16}
+                    color="#6B7280"
+                  />
+                  <AppText style={s.metricaLabel}>+ Abonos</AppText>
+                </View>
+                <AppText style={[s.metricaValorVerde, { color: "#7C3AED" }]}>
+                  {fmt(stats.transferenciaAbono)}
+                </AppText>
+              </View>
+              {stats.gastosTransferencia > 0 && (
+                <View style={s.metricaFila}>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <MaterialCommunityIcons
+                      name="receipt-text-outline"
+                      size={16}
+                      color="#6B7280"
+                    />
+                    <AppText style={s.metricaLabel}>- Gastos</AppText>
+                  </View>
+                  <AppText style={s.metricaValorRojo}>
+                    -{fmt(stats.gastosTransferencia)}
+                  </AppText>
+                </View>
+              )}
+              <View style={s.metricaDivisor} />
+              <View style={s.metricaFilaTotal}>
+                <AppText style={s.metricaTotalLabel}>
+                  Neto transferencia
+                </AppText>
+                <AppText
+                  style={[s.metricaTotalValorVerde, { color: "#7C3AED" }]}
+                >
+                  {fmt(
+                    stats.transferenciaVenta +
+                      stats.transferenciaAbono -
+                      stats.gastosTransferencia,
+                  )}
+                </AppText>
+              </View>
+            </View>
+          )}
+
+          {/* Tarjeta EN MORA — visible en "todas" y "debe" (En Mora) */}
+          {(filtroEstado === "todas" || filtroEstado === "debe") && (
+            <View style={s.metricaCard}>
+              <AppText style={[s.metricaEncabezado, { color: "#D97706" }]}>
+                EN MORA
+              </AppText>
+              <View style={s.metricaFila}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="clock-alert-outline"
+                    size={16}
+                    color="#6B7280"
+                  />
+                  <AppText style={s.metricaLabel}>Facturas en mora</AppText>
+                </View>
+                <AppText style={[s.metricaValorVerde, { color: "#D97706" }]}>
+                  {stats.cantEnMora}
+                </AppText>
+              </View>
+              <View style={s.metricaDivisor} />
+              <View style={s.metricaFilaTotal}>
+                <AppText style={s.metricaTotalLabel}>
+                  Saldo pendiente por cobrar
+                </AppText>
+                <AppText
+                  style={[s.metricaTotalValorVerde, { color: "#D97706" }]}
+                >
+                  {fmt(stats.montoEnMora)}
+                </AppText>
+              </View>
+            </View>
+          )}
+
+          {/* Tarjeta ANULADAS — visible en "todas" y "anulada" */}
+          {(filtroEstado === "todas" || filtroEstado === "anulada") && (
+            <View style={s.metricaCard}>
+              <AppText style={[s.metricaEncabezado, { color: "#DC2626" }]}>
+                ANULADAS
+              </AppText>
+              <View style={s.metricaFila}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="cancel"
+                    size={16}
+                    color="#6B7280"
+                  />
+                  <AppText style={s.metricaLabel}>Facturas anuladas</AppText>
+                </View>
+                <AppText style={[s.metricaValorVerde, { color: "#DC2626" }]}>
+                  {stats.cantAnuladas}
+                </AppText>
+              </View>
+              <View style={s.metricaDivisor} />
+              <View style={s.metricaFilaTotal}>
+                <AppText style={s.metricaTotalLabel}>Total anulado</AppText>
+                <AppText
+                  style={[s.metricaTotalValorVerde, { color: "#DC2626" }]}
+                >
+                  {fmt(stats.montoAnuladas)}
+                </AppText>
+              </View>
             </View>
           )}
         </View>
@@ -1537,109 +1603,75 @@ export const HistorialScreen = () => {
           )}
         </View>
 
-        {/* ══ GASTOS DEL PERIODO ════════════════════════════════════════ */}
-        {gastosFiltrados.length > 0 && (
-          <View style={{ marginBottom: 20 }}>
-            <View style={s.seccionGastosHeader}>
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-              >
-                <MaterialCommunityIcons
-                  name="receipt-text-outline"
-                  size={20}
-                  color="#E03E3E"
-                />
-                <AppText style={s.seccionGastosTitulo}>
-                  Gastos del periodo
-                </AppText>
-              </View>
-              {/* <AppText style={s.seccionGastosMonto}>
-                -{fmt(stats.totalGastos)}
-              </AppText> */}
-            </View>
-
-            <View style={s.gastoCard}>
-              {/* Desglose por método */}
-              {stats.gastosEfectivo > 0 && (
-                <View style={s.gastoFila}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="cash"
-                      size={16}
-                      color="#2EAA6E"
-                    />
-                    <AppText style={s.gastoMetodoLabel}>Efectivo</AppText>
-                  </View>
-                  <AppText style={s.gastoMonto}>
-                    -{fmt(stats.gastosEfectivo)}
-                  </AppText>
-                </View>
-              )}
-              {stats.gastosTransferencia > 0 && (
-                <View style={s.gastoFila}>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                    }}
-                  >
-                    <MaterialCommunityIcons
-                      name="bank-transfer"
-                      size={16}
-                      color="#7C3AED"
-                    />
-                    <AppText style={s.gastoMetodoLabel}>Transferencia</AppText>
-                  </View>
-                  <AppText style={s.gastoMonto}>
-                    -{fmt(stats.gastosTransferencia)}
-                  </AppText>
-                </View>
-              )}
-
-              <View style={s.gastoDivisor} />
-
-              {/* Lista de gastos individuales (máx 5) */}
-              {gastosFiltrados.slice(0, 5).map((g) => (
-                <View key={g.id} style={s.gastoFila}>
-                  <View style={{ flex: 1 }}>
-                    <AppText style={s.gastoNombre} numberOfLines={1}>
-                      {g.descripcion}
-                    </AppText>
-                    <AppText style={s.gastoSub}>
-                      {g.categoria} ·{" "}
-                      {g.metodoPago === "efectivo"
-                        ? "Efectivo"
-                        : "Transferencia"}{" "}
-                      · {g.fecha.substring(0, 10)}
-                    </AppText>
-                  </View>
-                  <AppText style={s.gastoMonto}>-{fmt(g.monto)}</AppText>
-                </View>
-              ))}
-
-              {gastosFiltrados.length > 5 && (
-                <AppText
-                  style={{
-                    fontSize: 13,
-                    color: colors.primary,
-                    fontWeight: "600",
-                    textAlign: "center",
-                    marginTop: 4,
-                  }}
+        {/* ══ GASTOS DEL PERIODO ══════════════════════════════════════════
+            Solo visible cuando el Estado del pago es "Todas" o "Al Día".
+            Se oculta por completo en "En Mora" y "Anuladas". ──────────── */}
+        {(filtroEstado === "todas" || filtroEstado === "pazysalvo") &&
+          gastosFiltrados.length > 0 && (
+            <View style={{ marginBottom: 20 }}>
+              <View style={s.seccionGastosHeader}>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
                 >
-                  +{gastosFiltrados.length - 5} gastos más — ver en Gastos
-                </AppText>
-              )}
+                  <MaterialCommunityIcons
+                    name="receipt-text-outline"
+                    size={20}
+                    color="#E03E3E"
+                  />
+                  <AppText style={s.seccionGastosTitulo}>
+                    Gastos del periodo
+                  </AppText>
+                </View>
+              </View>
+
+              <View style={s.gastoCard}>
+                {/* Total de gastos del periodo filtrado */}
+                <View style={s.metricaFilaTotal}>
+                  <AppText style={s.metricaTotalLabel}>Total</AppText>
+                  <AppText
+                    style={[s.metricaTotalValorVerde, { color: "#DC2626" }]}
+                  >
+                    -{fmt(stats.totalGastos)}
+                  </AppText>
+                </View>
+
+                <View style={s.gastoDivisor} />
+
+                {/* Lista de gastos individuales (máx 5) */}
+                {gastosFiltrados.slice(0, 5).map((g) => (
+                  <View key={g.id} style={s.gastoFila}>
+                    <View style={{ flex: 1 }}>
+                      <AppText style={s.gastoNombre} numberOfLines={1}>
+                        {g.descripcion}
+                      </AppText>
+                      <AppText style={s.gastoSub}>
+                        {g.categoria} ·{" "}
+                        {g.metodoPago === "efectivo"
+                          ? "Efectivo"
+                          : "Transferencia"}{" "}
+                        · {g.fecha.substring(0, 10)}
+                      </AppText>
+                    </View>
+                    <AppText style={s.gastoMonto}>-{fmt(g.monto)}</AppText>
+                  </View>
+                ))}
+
+                {gastosFiltrados.length > 5 && (
+                  <AppText
+                    style={{
+                      fontSize: 13,
+                      color: colors.primary,
+                      fontWeight: "600",
+                      textAlign: "center",
+                      marginTop: 4,
+                    }}
+                  >
+                    +{gastosFiltrados.length - 5} gastos más — ver en Gastos
+                  </AppText>
+                )}
+              </View>
             </View>
-          </View>
-        )}
+          )}
 
         {/* ══ LISTADO AGRUPADO DE VENTAS ════════════════════════════════ */}
         {Object.keys(salesAgrupadas).length === 0 ? (
