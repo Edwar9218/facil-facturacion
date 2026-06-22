@@ -1177,6 +1177,75 @@ export const VentaDelDiaScreen = () => {
           </View>
         )}
 
+        {/* ══ GASTOS DEL DÍA ══════════════════════════════════════════════
+            Se oculta por completo cuando el Estado del pago es
+            "En mora" o "Anuladas". ──────────────────────────────────── */}
+        {filtroEstado !== "debe" &&
+          filtroEstado !== "anulada" &&
+          gastos.length > 0 && (
+            <View style={{ marginBottom: 16 }}>
+              <View style={s.seccionHeader}>
+                <AppText style={s.seccionTitulo}>Gastos de hoy</AppText>
+              </View>
+
+              <View style={s.metricaCard}>
+                <View style={s.metricaFila}>
+                  <AppText
+                    style={{
+                      fontSize: 16,
+                      fontWeight: "700",
+                      color: "#111827",
+                    }}
+                  >
+                    Total
+                  </AppText>
+                  <AppText
+                    style={{
+                      fontSize: 18,
+                      fontWeight: "800",
+                      color: "#DC2626",
+                    }}
+                  >
+                    -{fmt(stats.totalGastos)}
+                  </AppText>
+                </View>
+
+                <View style={s.metricaDivisor} />
+
+                {gastos.slice(0, 3).map((g) => (
+                  <View key={g.id} style={s.metricaFila}>
+                    <View style={{ flex: 1 }}>
+                      <AppText style={s.gastoNombre} numberOfLines={1}>
+                        {g.descripcion}
+                      </AppText>
+                      <AppText style={s.gastoSub}>
+                        {g.categoria} ·{" "}
+                        {g.metodoPago === "efectivo"
+                          ? "Efectivo"
+                          : "Transferencia"}
+                      </AppText>
+                    </View>
+                    <AppText style={s.gastoMonto}>-{fmt(g.monto)}</AppText>
+                  </View>
+                ))}
+
+                {gastos.length > 3 && (
+                  <AppText
+                    style={{
+                      fontSize: 13,
+                      color: colors.primary,
+                      fontWeight: "600",
+                      textAlign: "center",
+                      marginTop: 4,
+                    }}
+                  >
+                    +{gastos.length - 3} gastos más — ver en Gastos
+                  </AppText>
+                )}
+              </View>
+            </View>
+          )}
+
         {/* ══ LISTA VENTAS DEL DÍA ══════════════════════════════════════ */}
         {hayVentasHistoricasHoy ? (
           ventasFiltradas.length > 0 ? (
@@ -1380,75 +1449,6 @@ export const VentaDelDiaScreen = () => {
             </AppText>
           </View>
         )}
-
-        {/* ══ GASTOS DEL DÍA ══════════════════════════════════════════════
-            Se oculta por completo cuando el Estado del pago es
-            "En mora" o "Anuladas". ──────────────────────────────────── */}
-        {filtroEstado !== "debe" &&
-          filtroEstado !== "anulada" &&
-          gastos.length > 0 && (
-            <View style={{ marginBottom: 16 }}>
-              <View style={s.seccionHeader}>
-                <AppText style={s.seccionTitulo}>Gastos de hoy</AppText>
-              </View>
-
-              <View style={s.metricaCard}>
-                <View style={s.metricaFila}>
-                  <AppText
-                    style={{
-                      fontSize: 16,
-                      fontWeight: "700",
-                      color: "#111827",
-                    }}
-                  >
-                    Total
-                  </AppText>
-                  <AppText
-                    style={{
-                      fontSize: 18,
-                      fontWeight: "800",
-                      color: "#DC2626",
-                    }}
-                  >
-                    -{fmt(stats.totalGastos)}
-                  </AppText>
-                </View>
-
-                <View style={s.metricaDivisor} />
-
-                {gastos.slice(0, 3).map((g) => (
-                  <View key={g.id} style={s.metricaFila}>
-                    <View style={{ flex: 1 }}>
-                      <AppText style={s.gastoNombre} numberOfLines={1}>
-                        {g.descripcion}
-                      </AppText>
-                      <AppText style={s.gastoSub}>
-                        {g.categoria} ·{" "}
-                        {g.metodoPago === "efectivo"
-                          ? "Efectivo"
-                          : "Transferencia"}
-                      </AppText>
-                    </View>
-                    <AppText style={s.gastoMonto}>-{fmt(g.monto)}</AppText>
-                  </View>
-                ))}
-
-                {gastos.length > 3 && (
-                  <AppText
-                    style={{
-                      fontSize: 13,
-                      color: colors.primary,
-                      fontWeight: "600",
-                      textAlign: "center",
-                      marginTop: 4,
-                    }}
-                  >
-                    +{gastos.length - 3} gastos más — ver en Gastos
-                  </AppText>
-                )}
-              </View>
-            </View>
-          )}
 
         {/* ══ CRÉDITO PENDIENTE HISTÓRICO ═══════════════════════════════ */}
         {/* {deudores.length > 0 && (
