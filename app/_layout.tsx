@@ -1,3 +1,11 @@
+import {
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+  Inter_900Black,
+} from "@expo-google-fonts/inter";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { Stack } from "expo-router";
@@ -13,8 +21,16 @@ initDatabase();
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = useFonts({
+    // ── Íconos ──────────────────────────────────────────────────────────────
     ...MaterialCommunityIcons.font,
     ...Feather.font,
+    // ── Inter (fuente global de la app) ─────────────────────────────────────
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
+    Inter_900Black,
   });
 
   const onLayoutRootView = useCallback(async () => {

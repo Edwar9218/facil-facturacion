@@ -1,6 +1,28 @@
+/**
+ * AppText.tsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Componente de texto global.
+ * • Aplica la fuente Inter automáticamente en TODAS las variantes.
+ * • Respeta la escala de accesibilidad del usuario (FontScale).
+ * • El fontFamily varía según el fontWeight para usar la variante correcta.
+ *
+ * VARIANTES disponibles:
+ *   hero        → 50px / black    (cifras muy grandes)
+ *   display     → 38px / black    (totales, cantidades hero)
+ *   h1          → 28px / bold     (títulos de pantalla)
+ *   h2          → 24px / bold     (títulos de sección)
+ *   h3          → 20px / bold     (subtítulos)
+ *   body        → 17px / regular  (texto base)
+ *   bodyBold    → 17px / bold     (texto base resaltado)
+ *   label       → 15px / semiBold (etiquetas, meta-info)
+ *   caption     → 13px / regular  (texto secundario pequeño)
+ *   captionBold → 13px / bold     (etiqueta pequeña resaltada)
+ * ─────────────────────────────────────────────────────────────────────────────
+ */
 import React from "react";
 import { Text, TextStyle } from "react-native";
 import { useTheme } from "../../../theme";
+import { FONT } from "../../../theme/typescale";
 
 type Variant =
   | "hero"
@@ -43,53 +65,63 @@ export const AppText = ({
     hero: {
       fontSize: typography.size.hero,
       fontWeight: typography.weight.black,
+      fontFamily: FONT.black,
       color: colors.primary,
       letterSpacing: typography.letterSpacing.tight,
     },
     display: {
       fontSize: typography.size.display,
       fontWeight: typography.weight.black,
+      fontFamily: FONT.black,
       color: colors.primary,
       letterSpacing: typography.letterSpacing.tight,
     },
     h1: {
       fontSize: typography.size.xxxl,
       fontWeight: typography.weight.bold,
+      fontFamily: FONT.bold,
       color: colors.ink,
     },
     h2: {
       fontSize: typography.size.xxl,
       fontWeight: typography.weight.bold,
+      fontFamily: FONT.bold,
       color: colors.ink,
     },
     h3: {
       fontSize: typography.size.xl,
       fontWeight: typography.weight.bold,
+      fontFamily: FONT.bold,
       color: colors.ink,
     },
     body: {
       fontSize: typography.size.md,
       fontWeight: typography.weight.regular,
+      fontFamily: FONT.regular,
       color: colors.inkSoft,
     },
     bodyBold: {
       fontSize: typography.size.md,
       fontWeight: typography.weight.bold,
+      fontFamily: FONT.bold,
       color: colors.ink,
     },
     label: {
       fontSize: typography.size.sm,
-      fontWeight: typography.weight.bold,
+      fontWeight: typography.weight.medium,
+      fontFamily: FONT.semiBold,
       color: colors.grayText,
     },
     caption: {
-      fontSize: typography.size.sm,
+      fontSize: typography.size.xs,
       fontWeight: typography.weight.regular,
+      fontFamily: FONT.regular,
       color: colors.grayText,
     },
     captionBold: {
-      fontSize: typography.size.sm,
+      fontSize: typography.size.xs,
       fontWeight: typography.weight.bold,
+      fontFamily: FONT.bold,
       color: colors.grayText,
     },
   };
