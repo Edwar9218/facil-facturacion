@@ -7,8 +7,7 @@ import {
   Pressable,
   StyleSheet,
   Switch,
-  TouchableOpacity,
-  View,
+  View
 } from "react-native";
 
 import { ConfiguracionRepositoryImpl } from "../../../data/repositories/ConfiguracionRepositoryImpl";
@@ -76,6 +75,7 @@ export const AjustesScreen = () => {
         ]}
       >
         {/* ── TAMAÑO DE LETRA ─────────────────────────────────────────────── */}
+        {/* 
         <View
           style={[
             s.section,
@@ -124,6 +124,7 @@ export const AjustesScreen = () => {
           </View>
 
           {/* Selector de escala */}
+        {/*
           <View
             style={[
               s.escalaRow,
@@ -179,6 +180,7 @@ export const AjustesScreen = () => {
           </View>
 
           {/* Vista previa */}
+        {/*
           <View
             style={[
               s.preview,
@@ -225,7 +227,8 @@ export const AjustesScreen = () => {
               Factura N° 2026-001
             </AppText>
           </View>
-        </View>
+        </View> 
+        */}
 
         {/* ── TOGGLE INVENTARIO ───────────────────────────────────────────── */}
         <View
