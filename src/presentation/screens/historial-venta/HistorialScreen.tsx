@@ -1714,14 +1714,22 @@ export const HistorialScreen = () => {
                     ? "Al día"
                     : "En mora";
 
-                const metodoRaw = String(
-                  venta.metodoPago ||
-                    (venta as any).metodoCuotaInicial ||
-                    "Efectivo",
-                ).toLowerCase();
-                const esTransferencia =
-                  metodoRaw.includes("transferencia") ||
-                  metodoRaw.includes("banco");
+                // Solo mostrar método si hay un pago real registrado:
+                // contado siempre tiene método, crédito solo si tiene cuota inicial
+                const metodoRegistrado =
+                  venta.tipo === "contado"
+                    ? venta.metodoPago || "efectivo"
+                    : (venta as any).metodoCuotaInicial &&
+                        (venta as any).cuotaInicial > 0
+                      ? (venta as any).metodoCuotaInicial
+                      : null;
+                const metodoRaw = metodoRegistrado
+                  ? String(metodoRegistrado).toLowerCase()
+                  : null;
+                const esTransferencia = metodoRaw
+                  ? metodoRaw.includes("transferencia") ||
+                    metodoRaw.includes("banco")
+                  : false;
                 const metodoTexto = esTransferencia
                   ? "Transferencia"
                   : "Efectivo";
@@ -1769,7 +1777,7 @@ export const HistorialScreen = () => {
                               #{venta.numeroFactura || venta.id.substring(0, 6)}
                             </AppText>
                           </View>
-                          {!esAnulada && (
+                          {!esAnulada && metodoRaw && (
                             <View
                               style={[
                                 s.metodoPill,

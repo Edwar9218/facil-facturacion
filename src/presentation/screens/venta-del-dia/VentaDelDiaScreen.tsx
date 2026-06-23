@@ -1298,12 +1298,19 @@ export const VentaDelDiaScreen = () => {
                       ? "Al día"
                       : "En mora";
 
-                  const metodoRaw = String(
-                    venta.metodoPago ||
-                      (venta as any).metodoCuotaInicial ||
-                      "efectivo",
-                  ).toLowerCase();
-                  const esTransferencia = metodoRaw.includes("transferencia");
+                  const metodoRegistrado =
+                    venta.tipo === "contado"
+                      ? venta.metodoPago || "efectivo"
+                      : (venta as any).metodoCuotaInicial &&
+                          (venta as any).cuotaInicial > 0
+                        ? (venta as any).metodoCuotaInicial
+                        : null;
+                  const metodoRaw = metodoRegistrado
+                    ? String(metodoRegistrado).toLowerCase()
+                    : null;
+                  const esTransferencia = metodoRaw
+                    ? metodoRaw.includes("transferencia")
+                    : false;
                   const metodoTexto = esTransferencia
                     ? "Transferencia"
                     : "Efectivo";
@@ -1355,7 +1362,7 @@ export const VentaDelDiaScreen = () => {
                               )}
                             </View>
 
-                            {!esAnulada && (
+                            {!esAnulada && metodoRaw && (
                               <View
                                 style={[
                                   s.metodoPill,
