@@ -1014,7 +1014,7 @@ const s = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 10,
+    paddingVertical: 5,
   },
   filaLeft: {
     flexDirection: "row",
@@ -1024,12 +1024,12 @@ const s = StyleSheet.create({
     marginRight: 10,
   },
   filaLabel: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "500",
-    color: "#4B5563",
+    color: "#6B7280",
   },
   filaMonto: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
   },
   divider: {

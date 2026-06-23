@@ -88,6 +88,7 @@ export default function NuevaVentaScreen() {
     cargandoGlobal,
     modoModal,
     productosFiltrados,
+    productoExistenteSinStockControl,
     idsEnCarrito,
     abrirModal,
     cerrarModal,
@@ -595,6 +596,7 @@ export default function NuevaVentaScreen() {
             setPrecioModal={setPrecioModal}
             modoModal={modoModal}
             productosFiltrados={productosFiltrados}
+            productoExistenteSinStockControl={productoExistenteSinStockControl}
             idsEnCarrito={idsEnCarrito}
             abrirModal={abrirModal}
             cerrarModal={cerrarModal}

@@ -1185,7 +1185,16 @@ export const VentaDelDiaScreen = () => {
           gastos.length > 0 && (
             <View style={{ marginBottom: 16 }}>
               <View style={s.seccionHeader}>
-                <AppText style={s.seccionTitulo}>Gastos de hoy</AppText>
+                <View
+                  style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+                >
+                  <MaterialCommunityIcons
+                    name="receipt-text-outline"
+                    size={20}
+                    color="#E03E3E"
+                  />
+                  <AppText style={s.seccionTitulo}>Gastos de hoy</AppText>
+                </View>
               </View>
 
               <View style={s.metricaCard}>
@@ -1201,8 +1210,8 @@ export const VentaDelDiaScreen = () => {
                   </AppText>
                   <AppText
                     style={{
-                      fontSize: 18,
-                      fontWeight: "800",
+                      fontSize: 20,
+                      fontWeight: "900",
                       color: "#DC2626",
                     }}
                   >

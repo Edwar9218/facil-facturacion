@@ -32,6 +32,7 @@ interface Props {
   setPrecioModal: (v: string) => void;
   modoModal: "agregar" | "editar";
   productosFiltrados: any[];
+  productoExistenteSinStockControl: any | null;
   idsEnCarrito: string[];
   abrirModal: (p: any) => void;
   cerrarModal: () => void;
@@ -67,6 +68,7 @@ export function PasoProductos({
   setPrecioModal,
   modoModal,
   productosFiltrados,
+  productoExistenteSinStockControl,
   idsEnCarrito,
   abrirModal,
   cerrarModal,
@@ -416,27 +418,30 @@ export function PasoProductos({
                               marginBottom: spacing.sm,
                             }}
                           >
-                            No se encontró ese producto
+                            {productoExistenteSinStockControl
+                              ? `"${productoExistenteSinStockControl.nombre}" ya existe, pero está sin stock. Edítalo desde Productos para activarlo.`
+                              : "No se encontró ese producto"}
                           </AppText>
-                          {renderCrearCard({
-                            iconName: "add-shopping-cart",
-                            label: (
-                              <>
-                                Crear{" "}
-                                <AppText style={{ color: BLUE }}>
-                                  "{filtroProducto.trim()}"
-                                </AppText>
-                              </>
-                            ),
-                            onPress: () => {
-                              setValoresNuevoProducto((prev: any) => ({
-                                ...prev,
-                                nombre: filtroProducto.trim(),
-                                imagen: prev.imagen ?? "",
-                              }));
-                              modalNuevoProducto.abrir();
-                            },
-                          })}
+                          {!productoExistenteSinStockControl &&
+                            renderCrearCard({
+                              iconName: "add-shopping-cart",
+                              label: (
+                                <>
+                                  Crear{" "}
+                                  <AppText style={{ color: BLUE }}>
+                                    "{filtroProducto.trim()}"
+                                  </AppText>
+                                </>
+                              ),
+                              onPress: () => {
+                                setValoresNuevoProducto((prev: any) => ({
+                                  ...prev,
+                                  nombre: filtroProducto.trim(),
+                                  imagen: prev.imagen ?? "",
+                                }));
+                                modalNuevoProducto.abrir();
+                              },
+                            })}
                         </View>
                       ) : (
                         (() => {

@@ -295,6 +295,21 @@ export const useNuevaVenta = () => {
     return true;
   });
 
+  // Productos que coinciden con la búsqueda pero quedaron ocultos porque
+  // el inventario global está activo y el producto no tiene controlStock
+  // (p. ej. fue creado por el atajo rápido sin pasar por el catálogo).
+  // Sirve para avisar "ya existe, pero está sin stock" en vez de dejar
+  // crear un duplicado con el mismo nombre.
+  const productoExistenteSinStockControl =
+    filtroProducto.trim() !== ""
+      ? (productos.find(
+          (p) =>
+            norm(p.nombre) === norm(filtroProducto) &&
+            inventarioActivo &&
+            !p.controlStock,
+        ) ?? null)
+      : null;
+
   const idsEnCarrito = carrito.map((i) => i.id);
 
   const abrirModal = (producto: Producto) => {
@@ -413,12 +428,36 @@ export const useNuevaVenta = () => {
       !valoresNuevoProducto.precio.trim()
     )
       return;
+
+    // Bloquear duplicados por nombre, igual que en la pantalla Productos.
+    // Sin esto, el atajo rápido de Nueva Venta podía crear un producto
+    // con el mismo nombre de uno ya existente (p. ej. uno oculto por no
+    // tener control de stock activo), generando "fantasmas" repetidos.
+    const nombreNuevo = norm(valoresNuevoProducto.nombre);
+    const yaExiste = productos.some((p) => norm(p.nombre) === nombreNuevo);
+    if (yaExiste) {
+      Alert.alert(
+        "Producto duplicado",
+        `"${valoresNuevoProducto.nombre.trim()}" ya existe. Usa un nombre diferente.`,
+        [{ text: "Entendido", style: "cancel" }],
+      );
+      return;
+    }
+
+    const disponibleNum = Number(valoresNuevoProducto.disponible) || 0;
     const nuevo = await productoRepo.create({
       nombre: valoresNuevoProducto.nombre.trim(),
       precio: Number(valoresNuevoProducto.precio.replace(/\./g, "")),
       unidad: valoresNuevoProducto.unidad || "Kg",
-      disponible: Number(valoresNuevoProducto.disponible) || 0,
+      disponible: disponibleNum,
       imagen: valoresNuevoProducto.imagen || undefined,
+      // Si el inventario global está activo, el producto debe quedar con
+      // control de stock encendido desde el inicio (aunque empiece en 0),
+      // para que sea visible en las búsquedas y no quede "invisible"
+      // permitiendo crear duplicados con el mismo nombre.
+      controlStock: inventarioActivo,
+      stock: inventarioActivo ? disponibleNum : undefined,
+      stockMinimo: inventarioActivo ? 0 : undefined,
     });
     setProductos((prev) => [nuevo, ...prev]);
     setValoresNuevoProducto({
@@ -552,6 +591,7 @@ export const useNuevaVenta = () => {
     cargandoGlobal,
     modoModal,
     productosFiltrados,
+    productoExistenteSinStockControl,
     idsEnCarrito,
     abrirModal,
     cerrarModal,
