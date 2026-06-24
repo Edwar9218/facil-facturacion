@@ -148,7 +148,7 @@ export const FormularioModal = ({
       <KeyboardAwareScrollView
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
-        bottomOffset={10}
+        bottomOffset={80}
       >
         {/* Header */}
         <View

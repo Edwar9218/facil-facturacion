@@ -1,12 +1,5 @@
 import React from "react";
-import {
-  Animated,
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { Animated, Modal, TouchableOpacity, View } from "react-native";
 import { useTheme } from "../../../theme";
 import { SlideModalType } from "../../hooks/useSlideModal";
 
@@ -38,10 +31,7 @@ export const SlideModal = ({
       animationType="none"
       onRequestClose={handleClose}
     >
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-      >
+      <View style={{ flex: 1 }}>
         <TouchableOpacity
           style={{
             flex: 1,
@@ -61,7 +51,7 @@ export const SlideModal = ({
                   paddingBottom: spacing.xxxl,
                   maxHeight: "100%",
                 },
-                modal?.animatedStyle, // Encadenamiento opcional para seguridad
+                modal?.animatedStyle,
               ]}
             >
               {/* Handle */}
@@ -80,7 +70,7 @@ export const SlideModal = ({
             </Animated.View>
           </TouchableOpacity>
         </TouchableOpacity>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 };

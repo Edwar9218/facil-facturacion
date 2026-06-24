@@ -138,7 +138,7 @@ export default function HomeScreen() {
           paddingTop: insets.top + 10,
         }}
       >
-        <Text
+        {/* <Text
           style={{
             textAlign: "center",
             fontSize: typography.size.xs,
@@ -149,7 +149,7 @@ export default function HomeScreen() {
           }}
         >
           lun 20 oct | 10:10 am
-        </Text>
+        </Text> */}
 
         <View
           style={{

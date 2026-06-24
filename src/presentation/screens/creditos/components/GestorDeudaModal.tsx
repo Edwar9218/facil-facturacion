@@ -21,6 +21,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Abono } from "../../../../domain/entities/Abono";
 import { DetalleCredito } from "../../../../domain/entities/Credito";
 import { useTheme } from "../../../../theme";
@@ -65,6 +66,7 @@ export const GestorDeudaModal = ({
   onAbrirModalAnulacion,
 }: Props) => {
   const { colors, spacing, radius, sizes, typography } = useTheme();
+  const insets = useSafeAreaInsets();
 
   // ── Filtros historial ────────────────────────────────────────────────────
   const [filtroMetodo, setFiltroMetodo] = useState<MetodoPagoFiltro>("Todos");
@@ -1150,24 +1152,39 @@ export const GestorDeudaModal = ({
                       backgroundColor: colors.dangerLight,
                       borderRadius: radius.lg,
                       marginBottom: spacing.lg,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "space-between",
                     },
                   ]}
                 >
-                  <AppText
+                  <View
                     style={{
-                      fontSize: 15,
-                      color: colors.danger,
-                      fontWeight: "600",
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 8,
                     }}
                   >
-                    Saldo pendiente
-                  </AppText>
+                    <Feather
+                      name="alert-circle"
+                      size={16}
+                      color={colors.danger}
+                    />
+                    <AppText
+                      style={{
+                        fontSize: 14,
+                        color: colors.danger,
+                        fontWeight: "600",
+                      }}
+                    >
+                      Saldo pendiente
+                    </AppText>
+                  </View>
                   <AppText
                     style={{
-                      fontSize: 28,
+                      fontSize: 18,
                       fontWeight: "800",
                       color: colors.danger,
-                      marginTop: 4,
                     }}
                   >
                     {fmt(detalle.saldoActual)}
@@ -1329,7 +1346,7 @@ export const GestorDeudaModal = ({
       transparent
       onRequestClose={closeModal}
     >
-      <View style={s.overlay}>
+      <View style={[s.overlay, { paddingTop: insets.top }]}>
         <Pressable style={s.backdrop} onPress={closeModal} />
         {Platform.OS === "ios" ? (
           <KeyboardAvoidingView
@@ -1583,7 +1600,7 @@ export const GestorDeudaModal = ({
 };
 
 const s = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: "flex-end", paddingTop: 50 },
+  overlay: { flex: 1, justifyContent: "flex-end" },
   backdrop: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.45)",

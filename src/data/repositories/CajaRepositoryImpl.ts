@@ -51,11 +51,13 @@ export class CajaRepositoryImpl implements CajaRepository {
     ]);
 
     // ── Ventas ───────────────────────────────────────────────────────────
+    // Se excluyen las facturas anuladas para que no inflen el resumen de caja.
     const ventasEfectivo =
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(total), 0) as total
        FROM ventas
-       WHERE cajaId = ? AND tipo = 'contado' AND metodoPago = 'efectivo';`,
+       WHERE cajaId = ? AND tipo = 'contado' AND metodoPago = 'efectivo'
+         AND estado != 'anulada';`,
         [cajaId],
       )?.total ?? 0;
 
@@ -63,7 +65,8 @@ export class CajaRepositoryImpl implements CajaRepository {
       db.getFirstSync<{ total: number }>(
         `SELECT COALESCE(SUM(total), 0) as total
        FROM ventas
-       WHERE cajaId = ? AND tipo = 'contado' AND metodoPago = 'transferencia';`,
+       WHERE cajaId = ? AND tipo = 'contado' AND metodoPago = 'transferencia'
+         AND estado != 'anulada';`,
         [cajaId],
       )?.total ?? 0;
 
