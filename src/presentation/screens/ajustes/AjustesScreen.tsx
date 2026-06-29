@@ -1,14 +1,9 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system/legacy";
+import { useRouter } from "expo-router";
 import * as Sharing from "expo-sharing";
 import React from "react";
-import {
-  Alert,
-  Pressable,
-  StyleSheet,
-  Switch,
-  View
-} from "react-native";
+import { Alert, Pressable, StyleSheet, Switch, View } from "react-native";
 
 import { ConfiguracionRepositoryImpl } from "../../../data/repositories/ConfiguracionRepositoryImpl";
 import { CONFIG_KEYS } from "../../../domain/entities/Configuracion";
@@ -27,6 +22,7 @@ const ESCALAS: { key: FontScale; label: string; desc: string }[] = [
 ];
 
 export const AjustesScreen = () => {
+  const router = useRouter();
   const { spacing, colors, radius, typography, fontScale, setFontScale } =
     useTheme();
 
@@ -328,7 +324,7 @@ export const AjustesScreen = () => {
 
         {/* ── AYUDA ───────────────────────────────────────────────────────── */}
         <Pressable
-          onPress={() => {}}
+          onPress={() => router.push("/ayuda")}
           style={({ pressed }) => [
             s.card,
             {
