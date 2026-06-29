@@ -620,21 +620,52 @@ export const CATEGORIAS: Categoria[] = [
       },
       {
         id: "aj-2",
-        titulo: "Exportar base de datos",
-        resumen: "Cómo hacer una copia de seguridad de tus datos.",
+        titulo: "Cómo respaldar tus datos",
+        resumen: "Crea una copia cifrada y segura de tu información.",
         pasos: [
-          { texto: "Ve a Ajustes." },
-          { texto: "Toca Descargar base de datos." },
+          { texto: "Ve a Ajustes desde el menú principal." },
+          { texto: "Toca Respaldar datos." },
           {
             texto:
-              "Se abrirá el menú para compartir el archivo. Guárdalo en Google Drive, WhatsApp o donde prefieras.",
+              "Ingresa el nombre de tu negocio (opcional) y una contraseña que solo tú conozcas — puede ser tu NIT, un PIN o cualquier clave que recuerdes.",
           },
           {
             texto:
-              "Este archivo contiene todos tus productos, clientes, ventas y configuraciones.",
+              "Toca Exportar. La aplicación cifrará todos tus datos con esa contraseña.",
+          },
+          {
+            texto:
+              "Se abrirá el menú para compartir el archivo respaldo_FECHA.backup. Guárdalo en Google Drive, WhatsApp, correo o donde prefieras.",
           },
         ],
-        tip: "Haz una copia de seguridad periódicamente para no perder tu información.",
+        tip: "¡No olvides la contraseña! Sin ella no será posible restaurar el respaldo. El archivo cifrado es incomprensible para cualquier persona que lo abra sin la clave.",
+      },
+      {
+        id: "aj-3",
+        titulo: "Cómo restaurar un respaldo",
+        resumen:
+          "Recupera tus datos en un teléfono nuevo o tras reinstalar la app.",
+        pasos: [
+          { texto: "Ve a Ajustes desde el menú principal." },
+          { texto: "Toca Restaurar respaldo." },
+          {
+            texto:
+              "Selecciona el archivo .backup desde el almacenamiento del teléfono, Google Drive u otra ubicación.",
+          },
+          {
+            texto:
+              "La aplicación mostrará el nombre del negocio y la fecha del respaldo para que confirmes que es el correcto.",
+          },
+          {
+            texto:
+              "Ingresa la contraseña que usaste al crear el respaldo y toca Restaurar.",
+          },
+          {
+            texto:
+              "Si la contraseña es correcta, los datos se restaurarán. Reinicia la aplicación para ver los cambios.",
+          },
+        ],
+        tip: "Si instalaste la app en un teléfono nuevo, primero abre la app y ve directamente a Ajustes → Restaurar respaldo. No necesitas configurar nada antes.",
       },
     ],
   },
