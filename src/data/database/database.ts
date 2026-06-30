@@ -305,4 +305,29 @@ export const initDatabase = (): void => {
   `);
 };
 
+// ── RESTABLECIMIENTO DE FÁBRICA ──────────────────────────────────────────────
+// Borra todos los datos de la base de datos y recrea las tablas vacías.
+export const resetDatabase = (): void => {
+  db.execSync(`PRAGMA foreign_keys = OFF;`);
+
+  db.execSync(`
+    DROP TABLE IF EXISTS anulaciones_gastos;
+    DROP TABLE IF EXISTS gastos;
+    DROP TABLE IF EXISTS anulaciones_abonos;
+    DROP TABLE IF EXISTS abonos;
+    DROP TABLE IF EXISTS anulaciones_venta;
+    DROP TABLE IF EXISTS venta_items;
+    DROP TABLE IF EXISTS ventas;
+    DROP TABLE IF EXISTS clientes;
+    DROP TABLE IF EXISTS productos;
+    DROP TABLE IF EXISTS caja;
+    DROP TABLE IF EXISTS configuracion;
+  `);
+
+  db.execSync(`PRAGMA foreign_keys = ON;`);
+
+  // Recrea todas las tablas limpias
+  initDatabase();
+};
+
 export default db;
